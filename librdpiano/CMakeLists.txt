@@ -32,7 +32,8 @@ target_include_directories(rdpiano_e2e PRIVATE test)
 # Lista explicita de fuentes, sin glob (REFACTORIZACION §17.2).
 add_executable(rdpiano_tests
     test/unit/main.cpp
-    test/unit/test_board.cpp)
+    test/unit/test_board.cpp
+    test/unit/test_patches.cpp)
 target_link_libraries(rdpiano_tests librdpiano)
 target_include_directories(rdpiano_tests PRIVATE test test/unit)
 

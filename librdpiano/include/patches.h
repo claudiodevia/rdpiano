@@ -97,4 +97,70 @@ inline constexpr const char *PROG_ROM_FILE = "RD200_B.bin";
 inline constexpr size_t WAVE_ROM_SIZE = 0x20000;
 inline constexpr size_t PROG_ROM_SIZE = 0x2000;
 
+// Coherencia de las tablas paralelas, en compilación. Lo que no cabe aquí
+// —que los ficheros existan y midan lo que deben— está en
+// librdpiano/test/unit/test_patches.cpp.
+namespace patches_detail
+{
+
+template <typename T, size_t N> constexpr size_t count(const T (&)[N])
+{
+    return N;
+}
+
+constexpr bool offsets_in_range()
+{
+    for (int i = 0; i < NUM_PATCHES; i++)
+        if (patchToOffset[i] >= WAVE_ROM_SIZE)
+            return false;
+    return true;
+}
+
+constexpr bool rom_sets_in_range()
+{
+    for (int i = 0; i < NUM_PATCHES; i++)
+        if (patchToRomSetId[i] < 0 || patchToRomSetId[i] >= ROMSET_COUNT)
+            return false;
+    return true;
+}
+
+constexpr bool sample_rates_known()
+{
+    for (int i = 0; i < NUM_PATCHES; i++)
+        if (patchSampleRates[i] != 20000 && patchSampleRates[i] != 32000)
+            return false;
+    return true;
+}
+
+constexpr bool names_present()
+{
+    for (int i = 0; i < NUM_PATCHES; i++)
+        if (patchNames[i] == nullptr || patchNames[i][0] == '\0')
+            return false;
+    return true;
+}
+
+constexpr bool rom_files_present()
+{
+    for (int s = 0; s < ROMSET_COUNT; s++)
+        for (int c = 0; c < ROM_CHIP_COUNT; c++)
+            if (romSetFiles[s][c] == nullptr || romSetFiles[s][c][0] == '\0')
+                return false;
+    return true;
+}
+
+} // namespace patches_detail
+
+static_assert(patches_detail::count(patchNames) == NUM_PATCHES);
+static_assert(patches_detail::count(patchToRomSetId) == NUM_PATCHES);
+static_assert(patches_detail::count(patchToOffset) == NUM_PATCHES);
+static_assert(patches_detail::count(patchSampleRates) == NUM_PATCHES);
+static_assert(patches_detail::count(romSetFiles) == ROMSET_COUNT);
+
+static_assert(patches_detail::offsets_in_range());
+static_assert(patches_detail::rom_sets_in_range());
+static_assert(patches_detail::sample_rates_known());
+static_assert(patches_detail::names_present());
+static_assert(patches_detail::rom_files_present());
+
 #endif
