@@ -20,6 +20,7 @@
 #include <string>
 #include <vector>
 
+#include "check.h"
 #include "mame_utils.h"
 #include "mcu.h"
 #include "patches.h"
@@ -307,44 +308,32 @@ static const double MAX_SILENCE_RMS = 50.0; // antes de tocar, casi nada
 static const double MAX_TAIL_RMS = 200.0;   // la cola tiene que extinguirse
 static const s32 MAX_PEAK = 1 << 24;        // cordura de rango
 
-struct Check
+static void check_patch(const PatchResult &r, CheckRun &checks)
 {
-  const char *name;
-  bool ok;
-  std::string detail;
-};
+  checks.add("boot-silence", r.silenceRms < MAX_SILENCE_RMS,
+             check_fmt("silence rms %.1f < %.1f", r.silenceRms,
+                       MAX_SILENCE_RMS));
 
-static std::vector<Check> check_patch(const PatchResult &r)
-{
-  std::vector<Check> checks;
-  char buf[256];
+  checks.add("note-sounds", r.noteRms > MIN_NOTE_RMS,
+             check_fmt("note rms %.1f > %.1f", r.noteRms, MIN_NOTE_RMS));
 
-  snprintf(buf, sizeof buf, "silence rms %.1f < %.1f", r.silenceRms,
-           MAX_SILENCE_RMS);
-  checks.push_back({"boot-silence", r.silenceRms < MAX_SILENCE_RMS, buf});
+  checks.add("chord-sounds", r.chordRms > r.noteRms / 2,
+             check_fmt("chord rms %.1f > note rms/2 %.1f", r.chordRms,
+                       r.noteRms / 2));
 
-  snprintf(buf, sizeof buf, "note rms %.1f > %.1f", r.noteRms, MIN_NOTE_RMS);
-  checks.push_back({"note-sounds", r.noteRms > MIN_NOTE_RMS, buf});
+  checks.add("release-decays", r.releaseTailRms < MAX_TAIL_RMS,
+             check_fmt("release tail rms %.1f < %.1f", r.releaseTailRms,
+                       MAX_TAIL_RMS));
 
-  snprintf(buf, sizeof buf, "chord rms %.1f > note rms/2 %.1f", r.chordRms,
-           r.noteRms / 2);
-  checks.push_back({"chord-sounds", r.chordRms > r.noteRms / 2, buf});
+  checks.add("poly-sounds", r.polyRms > MIN_NOTE_RMS,
+             check_fmt("poly rms %.1f > %.1f", r.polyRms, MIN_NOTE_RMS));
 
-  snprintf(buf, sizeof buf, "release tail rms %.1f < %.1f", r.releaseTailRms,
-           MAX_TAIL_RMS);
-  checks.push_back({"release-decays", r.releaseTailRms < MAX_TAIL_RMS, buf});
+  checks.add("poly-decays", r.polyTailRms < MAX_TAIL_RMS,
+             check_fmt("poly tail rms %.1f < %.1f", r.polyTailRms,
+                       MAX_TAIL_RMS));
 
-  snprintf(buf, sizeof buf, "poly rms %.1f > %.1f", r.polyRms, MIN_NOTE_RMS);
-  checks.push_back({"poly-sounds", r.polyRms > MIN_NOTE_RMS, buf});
-
-  snprintf(buf, sizeof buf, "poly tail rms %.1f < %.1f", r.polyTailRms,
-           MAX_TAIL_RMS);
-  checks.push_back({"poly-decays", r.polyTailRms < MAX_TAIL_RMS, buf});
-
-  snprintf(buf, sizeof buf, "peak %d < %d", r.peak, MAX_PEAK);
-  checks.push_back({"peak-sane", r.peak > 0 && r.peak < MAX_PEAK, buf});
-
-  return checks;
+  checks.add("peak-sane", r.peak > 0 && r.peak < MAX_PEAK,
+             check_fmt("peak %d < %d", r.peak, MAX_PEAK));
 }
 
 // ---------------------------------------------------------------- golden
@@ -459,14 +448,10 @@ int main(int argc, char **argv)
            r.chordRms, r.releaseTailRms, r.polyRms, r.peak,
            (unsigned long long)r.hash);
 
-    for (const Check &c : check_patch(r))
-    {
-      if (!c.ok)
-      {
-        printf("    FAIL %-16s %s\n", c.name, c.detail.c_str());
-        failed++;
-      }
-    }
+    CheckRun checks;
+    check_patch(r, checks);
+    checks.print_failures();
+    failed += checks.failed();
 
     if (!golden.empty())
     {
