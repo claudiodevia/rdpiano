@@ -133,3 +133,9 @@ y la comparten plugin y harness — si se toca, ambos cambian a la vez.
 - El núcleo NO conoce JUCE: `librdpiano` solo incluye `<stdio.h>`, `<queue>`, `<cmath>`. Mantenerlo así.
 - Tipos cortos de MAME (`u8/s16/u32`) en el núcleo; tipos JUCE en el plugin.
 - Los comentarios `HACK:` / `TODO:` marcan comportamiento conocido-incorrecto: son contexto, no ruido.
+
+## Git: no commitear
+
+Nunca hacer `git commit`, `git push`, `git add` ni crear ramas o tags. Al terminar un cambio,
+dejar los archivos modificados en el árbol de trabajo y decir qué se tocó — el usuario revisa y
+commitea a mano. Vale usar git en modo lectura (`status`, `diff`, `log`, `show`).
