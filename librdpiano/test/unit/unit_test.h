@@ -45,4 +45,7 @@ struct TestRegistrar
 // Directorio pasado con --roms; las suites que no leen ROMs lo ignoran.
 extern std::string g_roms_dir;
 
+// Directorio pasado con --vectors: los casos capturados de test/vectors/.
+extern std::string g_vectors_dir;
+
 #endif

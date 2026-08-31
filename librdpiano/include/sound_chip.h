@@ -1,8 +1,9 @@
 #ifndef SOUND_CHIP_H
 #define SOUND_CHIP_H
 
-#include <stdio.h>
 #include "mame_utils.h"
+#include "sa_blocks.h"
+#include "sa_tables.h"
 
 class SoundChip {
 public:
@@ -34,22 +35,8 @@ private:
   uint16_t samples_delta[0x20000];
   bool samples_delta_sign[0x20000];
 
-  uint32_t phase_exp_table[0x10000];
-  uint16_t samples_exp_table[0x8000];
-
-  struct SA_Part {
-    uint32_t sub_phase = 0;
-    uint32_t env_value = 0;
-
-    uint16_t pitch_lut_i;
-    uint8_t wave_addr_loop;
-    uint8_t wave_addr_high;
-    uint8_t env_dest;
-    uint8_t env_speed;
-    bool flags_0;
-    bool flags_1;
-    uint8_t env_offset;
-  };
+  // LUT deterministas, compartidas por todas las instancias (§4).
+  const SaTables &tables;
 
   SA_Part m_parts[NUM_VOICES][PARTS_PER_VOICE_MEM];    // channel memory
   uint8_t m_irq_id = 0;						                     // voice/part that triggered the IRQ

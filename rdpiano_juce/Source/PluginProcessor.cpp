@@ -175,15 +175,18 @@ void RdPiano_juceAudioProcessor::setCurrentProgram(int index)
     return;
 
   mcuLock.enter();
-  // if (patchToRomSet[index] != patchToRomSet[currentPatch]) {
-  mcu->loadSounds(romSetForPatch(index)->ic5, romSetForPatch(index)->ic6,
-                  romSetForPatch(index)->ic7, romSetForPatch(index)->ic18,
-                  patchToOffset[index]);
-  // }
+  // Solo se recarga el ROM set cuando cambia de verdad: dentro del mismo set,
+  // cambiar de parche es remapear una página (REFACTORIZACION §6). Esto es lo
+  // que hace que arrastrar el dial deje de costar ~2,9 ms por evento
+  // (FIABILIDAD §6).
+  if (patchToRomSetId[index] != patchToRomSetId[currentPatch])
+    mcu->loadRomSet(romSetForPatch(index)->ic5, romSetForPatch(index)->ic6,
+                    romSetForPatch(index)->ic7, romSetForPatch(index)->ic18);
+
+  mcu->selectPatch(patchToOffset[index]);
 
   currentPatch = index;
-  mcu->commands_queue.push(0x31);
-  mcu->commands_queue.push(0x30);
+  mcu->reloadPatch();
   mcuLock.exit();
   sourceSampleRate = patchSampleRates[currentPatch];
 
@@ -205,31 +208,11 @@ void RdPiano_juceAudioProcessor::setMasterTune(int16_t tune)
 {
   masterTune = tune;
 
+  // El switcharoo y la codificación viven en el núcleo (REFACTORIZACION §3).
+  // Lo que sigue siendo del plugin es serializarlo con el hilo de audio: esto
+  // corre el emulador desde el hilo de UI (trampa 4 de CLAUDE.md).
   mcuLock.enter();
-
-  u8 tuneMsb = masterTune < 0 ? 0x7f : 0x00;
-  u8 tuneLsb = (int8_t)(floor(abs(masterTune) / 32767.0 * 16.0) * 4) & 0xff;
-  if (tuneLsb > 0x3c)
-    tuneLsb = 0x3c;
-  if (masterTune < 0)
-    tuneLsb = 0x48 + tuneLsb;
-
-  // TODO: we need to do this horrible switcharoo since changing
-  // the tuning on patches different than 0 doesn't work...
-  mcu->commands_queue.push(0x30);
-  for (size_t cycle = 0; cycle < 100; cycle++)
-  {
-    mcu->generate_next_sample();
-  }
-  mcu->commands_queue.push(0xE0);
-  mcu->commands_queue.push(tuneMsb);
-  mcu->commands_queue.push(tuneLsb);
-  for (size_t cycle = 0; cycle < 100; cycle++)
-  {
-    mcu->generate_next_sample();
-  }
-  mcu->commands_queue.push(0x30);
-
+  mcu->setMasterTune(tune);
   mcuLock.exit();
 
   sendChangeMessage();
@@ -238,28 +221,10 @@ void RdPiano_juceAudioProcessor::setMasterTune(int16_t tune)
 void RdPiano_juceAudioProcessor::mcuReset()
 {
   mcuLock.enter();
-
-  mcu->reset();
-
-  u8 tuneMsb = masterTune < 0 ? 0x7f : 0x00;
-  u8 tuneLsb = (int8_t)(floor(abs(masterTune) / 32767.0 * 16.0) * 4) & 0xff;
-  if (tuneLsb > 0x3c)
-    tuneLsb = 0x3c;
-  if (masterTune < 0)
-    tuneLsb = 0x48 + tuneLsb;
-
-  // MCU handshake
-  mcu->commands_queue.push(0x30);
-  mcu->commands_queue.push(0xE0);
-  mcu->commands_queue.push(tuneMsb);
-  mcu->commands_queue.push(tuneLsb);
-  for (size_t cycle = 0; cycle < 1024; cycle++)
-  {
-    mcu->generate_next_sample();
-  }
-  mcu->commands_queue.push(0x31);
-  mcu->commands_queue.push(0x30);
-
+  // El plugin calienta siempre a 20 kHz, también en los parches de 32 kHz.
+  // TODO: el harness calienta al ritmo del parche; hay que decidir cuál es el
+  // arranque bueno y dejar uno solo (REFACTORIZACION §3).
+  mcu->boot((int16_t)masterTune, false);
   mcuLock.exit();
 }
 
@@ -579,13 +544,14 @@ void RdPiano_juceAudioProcessor::setStateInformation(const void *data,
   setMasterTune(masterTune);
 
   mcuLock.enter();
-  mcu->loadSounds(
+  // Aquí sí se recarga el set entero: al restaurar un preset no se sabe qué
+  // ROM tiene cargada el Mcu.
+  mcu->loadRomSet(
       romSetForPatch(currentPatch)->ic5, romSetForPatch(currentPatch)->ic6,
-      romSetForPatch(currentPatch)->ic7, romSetForPatch(currentPatch)->ic18,
-      patchToOffset[currentPatch]);
+      romSetForPatch(currentPatch)->ic7, romSetForPatch(currentPatch)->ic18);
+  mcu->selectPatch(patchToOffset[currentPatch]);
 
-  mcu->commands_queue.push(0x31);
-  mcu->commands_queue.push(0x30);
+  mcu->reloadPatch();
   mcuLock.exit();
 
   sourceSampleRate = patchSampleRates[currentPatch];

@@ -25,6 +25,24 @@ jobs:
       run: ctest --test-dir librdpiano/build --output-on-failure
       shell: bash
 
+  test-core-asan:
+    name: "Núcleo: pruebas con ASan"
+    runs-on: macos-15
+    steps:
+    - uses: actions/checkout@v3.3.0
+    # La misma red, con AddressSanitizer. El harness tarda ~40 s en vez de ~3,
+    # pero es lo que caza los desbordes que un hash idéntico no ve
+    # (REFACTORIZACION §16.2).
+    - name: "Configurar librdpiano con ASan"
+      run: cmake -S librdpiano -B librdpiano/build-asan -DRDPIANO_SANITIZE=ON -DCMAKE_BUILD_TYPE=RelWithDebInfo
+      shell: bash
+    - name: "Compilar las pruebas"
+      run: cmake --build librdpiano/build-asan --target rdpiano_tests rdpiano_e2e
+      shell: bash
+    - name: "ctest"
+      run: ctest --test-dir librdpiano/build-asan --output-on-failure
+      shell: bash
+
   build-osx:
     runs-on: macos-15
     steps:
@@ -57,7 +75,7 @@ jobs:
 
   release:
     name: "Release"
-    needs: [test-core, build-osx]
+    needs: [test-core, test-core-asan, build-osx]
     if: github.ref == 'refs/heads/master'
     runs-on: "ubuntu-latest"
     steps:

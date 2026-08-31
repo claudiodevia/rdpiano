@@ -18,7 +18,10 @@ HNZVC
 */
 
 #define OP_HANDLER(_name) void Mcu::_name()
-#define logerror printf
+// El cuerpo de los opcodes es codigo derivado de MAME y no se toca (§20); lo
+// que cambia es a donde va su traza: RD_TRACE en vez de stdout (§15).
+#include "rd_trace.h"
+#define logerror RD_TRACE
 
 // OP_HANDLER( illegl1 )
 OP_HANDLER(illegl1)

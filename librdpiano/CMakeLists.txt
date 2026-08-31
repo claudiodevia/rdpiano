@@ -20,7 +20,8 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-constant-logical-operand")
 include_directories("include")
 
 # library target
-add_library(librdpiano src/mcu.cpp src/sound_chip.cpp)
+add_library(librdpiano src/mcu.cpp src/sound_chip.cpp src/sa_tables.cpp
+    src/rom_loader.cpp src/command_port.cpp src/rd_trace.cpp)
 target_include_directories(librdpiano PRIVATE src)
 
 # end-to-end test harness: sin dependencias externas, siempre se compila
@@ -33,12 +34,17 @@ target_include_directories(rdpiano_e2e PRIVATE test)
 add_executable(rdpiano_tests
     test/unit/main.cpp
     test/unit/test_board.cpp
-    test/unit/test_patches.cpp)
+    test/unit/test_command_port.cpp
+    test/unit/test_patches.cpp
+    test/unit/test_rom_loader.cpp
+    test/unit/test_sa_tables.cpp
+    test/unit/test_sound_chip_blocks.cpp)
 target_link_libraries(rdpiano_tests librdpiano)
 target_include_directories(rdpiano_tests PRIVATE test test/unit)
 
 enable_testing()
-add_test(NAME unit COMMAND rdpiano_tests --roms ${CMAKE_CURRENT_SOURCE_DIR}/../roms)
+add_test(NAME unit COMMAND rdpiano_tests --roms ${CMAKE_CURRENT_SOURCE_DIR}/../roms
+                                       --vectors ${CMAKE_CURRENT_SOURCE_DIR}/test/vectors)
 add_test(NAME e2e COMMAND rdpiano_e2e --roms ${CMAKE_CURRENT_SOURCE_DIR}/../roms
                                       --golden ${CMAKE_CURRENT_SOURCE_DIR}/test/golden.txt)
 

@@ -52,10 +52,20 @@
           <FILE id="sJyALN" name="mcu.h" compile="0" resource="0" file="../librdpiano/include/mcu.h"/>
           <FILE id="rHYnaa" name="mcu_ops.h" compile="0" resource="0" file="../librdpiano/include/mcu_ops.h"/>
           <FILE id="HRZ8GO" name="sound_chip.h" compile="0" resource="0" file="../librdpiano/include/sound_chip.h"/>
+          <FILE id="Rd1Blk" name="sa_blocks.h" compile="0" resource="0" file="../librdpiano/include/sa_blocks.h"/>
+          <FILE id="Rd1Tbl" name="sa_tables.h" compile="0" resource="0" file="../librdpiano/include/sa_tables.h"/>
+          <FILE id="Rd1Rom" name="rom_loader.h" compile="0" resource="0" file="../librdpiano/include/rom_loader.h"/>
+          <FILE id="Rd1Cmd" name="command_port.h" compile="0" resource="0" file="../librdpiano/include/command_port.h"/>
+          <FILE id="Rd1Trc" name="rd_trace.h" compile="0" resource="0" file="../librdpiano/include/rd_trace.h"/>
+          <FILE id="Rd1Pat" name="patches.h" compile="0" resource="0" file="../librdpiano/include/patches.h"/>
         </GROUP>
         <GROUP id="{4841733A-2FA6-3B64-6697-19A463ECA7EC}" name="src">
           <FILE id="PJENE4" name="mcu.cpp" compile="1" resource="0" file="../librdpiano/src/mcu.cpp"/>
           <FILE id="KW8xd0" name="sound_chip.cpp" compile="1" resource="0" file="../librdpiano/src/sound_chip.cpp"/>
+          <FILE id="Rd2Tbl" name="sa_tables.cpp" compile="1" resource="0" file="../librdpiano/src/sa_tables.cpp"/>
+          <FILE id="Rd2Rom" name="rom_loader.cpp" compile="1" resource="0" file="../librdpiano/src/rom_loader.cpp"/>
+          <FILE id="Rd2Cmd" name="command_port.cpp" compile="1" resource="0" file="../librdpiano/src/command_port.cpp"/>
+          <FILE id="Rd2Trc" name="rd_trace.cpp" compile="1" resource="0" file="../librdpiano/src/rd_trace.cpp"/>
         </GROUP>
       </GROUP>
       <GROUP id="{5F344C4D-8974-0F43-24EF-59E1852B1A44}" name="resample">

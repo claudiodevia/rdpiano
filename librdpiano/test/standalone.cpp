@@ -177,7 +177,7 @@ int main()
 
   // It's important to send a program change after boot to init the parameters
   mcu = new Mcu(temp_ic5, temp_ic6, temp_ic7, temp_progrom, temp_paramsrom);
-  mcu->commands_queue.push(0x30);
+  mcu->sendMidiCmd(0xC0, 0, 0); // program change a parche 0: emite el mismo 0x30
 
   if (SDL_Init(SDL_INIT_AUDIO | SDL_INIT_VIDEO | SDL_INIT_TIMER) < 0)
   {

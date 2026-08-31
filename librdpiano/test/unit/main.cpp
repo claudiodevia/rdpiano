@@ -5,7 +5,7 @@
 // un fallo diga qué se rompió y no solo que algo cambió.
 //
 // Uso:
-//   rdpiano_tests [--roms DIR] [--filter SUBCADENA] [--list]
+//   rdpiano_tests [--roms DIR] [--vectors DIR] [--filter SUBCADENA] [--list]
 
 #include <stdio.h>
 #include <string.h>
@@ -13,6 +13,7 @@
 #include "unit_test.h"
 
 std::string g_roms_dir = "roms";
+std::string g_vectors_dir = "test/vectors";
 
 std::vector<TestSuite> &test_registry()
 {
@@ -32,13 +33,16 @@ int main(int argc, char **argv)
 
     if (arg == "--roms" && next)
       g_roms_dir = argv[++i];
+    else if (arg == "--vectors" && next)
+      g_vectors_dir = argv[++i];
     else if (arg == "--filter" && next)
       filter = argv[++i];
     else if (arg == "--list")
       listOnly = true;
     else
     {
-      fprintf(stderr, "uso: %s [--roms DIR] [--filter SUBCADENA] [--list]\n",
+      fprintf(stderr, "uso: %s [--roms DIR] [--vectors DIR] [--filter SUBCADENA] "
+                      "[--list]\n",
               argv[0]);
       return 2;
     }

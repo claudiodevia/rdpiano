@@ -198,15 +198,14 @@ static PatchResult run_patch(int patch, RomBank &roms,
   Mcu *mcu = new Mcu(ic5, ic6, ic7, prog, ic18);
   mcu->loadSounds(ic5, ic6, ic7, ic18, patchToOffset[patch]);
 
-  // Mismo handshake de arranque que RdPiano_juceAudioProcessor::mcuReset()
-  mcu->reset();
-  mcu->commands_queue.push(0x30);
-  mcu->commands_queue.push(0xE0);
-  mcu->commands_queue.push(0x00); // master tune = 0
-  mcu->commands_queue.push(0x00);
-  render(mcu, rate32, 1024, NULL, NULL, NULL);
-  mcu->commands_queue.push(0x31);
-  mcu->commands_queue.push(0x30);
+  // El arranque de verdad, no una copia: hasta la fase 1 estas ocho líneas
+  // reimplementaban mcuReset() a mano, así que un arreglo del arranque en el
+  // plugin dejaba el golden verde sin que se enterase nadie
+  // (REFACTORIZACION §3). Ahora las dos capas llaman a lo mismo.
+  //
+  // El harness calienta al ritmo del parche y el plugin siempre a 20 kHz: esa
+  // divergencia sigue ahí, y por eso boot() obliga a decir cuál se usa.
+  mcu->boot(0, rate32);
 
   PatchResult r;
   Accum total;

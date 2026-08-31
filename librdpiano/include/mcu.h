@@ -1,108 +1,148 @@
 #ifndef MCU_H
 #define MCU_H
 
-#include <stdio.h>
-#include <queue>
-
+#include "command_port.h"
 #include "mame_utils.h"
+#include "rom_loader.h"
 #include "sound_chip.h"
 
 enum
-  {
-    M6800_IRQ_LINE = 0, // IRQ line number
+{
+	M6800_IRQ_LINE = 0, // IRQ line number
 
-    M6800_LINE_MAX
-  };
-  enum
-  {
-    M6801_TIN_LINE = M6800_LINE_MAX, // P20/TIN Input Capture line (edge sense). Active edge is selectable by internal reg.
-    M6801_IS3_LINE, // SC1/IOS/IS3 (P54/IS on HD6301Y)
-    M6801_STBY_LINE, // STBY pin, or internal standby
+	M6800_LINE_MAX
+};
+enum
+{
+	M6801_TIN_LINE = M6800_LINE_MAX, // P20/TIN Input Capture line (edge sense). Active edge is selectable by internal reg.
+	M6801_IS3_LINE,					 // SC1/IOS/IS3 (P54/IS on HD6301Y)
+	M6801_STBY_LINE,				 // STBY pin, or internal standby
 
-    M6801_LINE_MAX
-  };
+	M6801_LINE_MAX
+};
 
-class Mcu {
+class Mcu
+{
 public:
-  Mcu(const u8 *temp_ic5, const u8 *temp_ic6, const u8 *temp_ic7, const u8 *temp_progrom, const u8 *temp_paramsrom);
-  ~Mcu();
+	Mcu(const u8 *temp_ic5, const u8 *temp_ic6, const u8 *temp_ic7, const u8 *temp_progrom, const u8 *temp_paramsrom);
+	~Mcu();
 
-  // 1,2 MB de estado: una copia accidental daría un emulador divergente en
-  // silencio. Nadie las copia hoy y nadie debería.
-  Mcu(const Mcu &) = delete;
-  Mcu &operator=(const Mcu &) = delete;
-  Mcu(Mcu &&) = delete;
-  Mcu &operator=(Mcu &&) = delete;
-  
-  typedef void (Mcu::*op_func)();
+	// 1,2 MB de estado: una copia accidental daría un emulador divergente en
+	// silencio. Nadie las copia hoy y nadie debería.
+	Mcu(const Mcu &) = delete;
+	Mcu &operator=(const Mcu &) = delete;
+	Mcu(Mcu &&) = delete;
+	Mcu &operator=(Mcu &&) = delete;
 
-  void execute_one();
-  void execute_set_input(int irqline, int state);
-  void execute_run();
+	typedef void (Mcu::*op_func)();
 
-  std::queue<u8> commands_queue;
+	void execute_one();
+	void execute_set_input(int irqline, int state);
+	void execute_run();
 
 	s32 generate_next_sample(bool sampleRate32 = false);
 
+	// Protocolo del firmware. La cola de bytes es privada: lo que se expone es
+	// la intención (REFACTORIZACION §3). `boot` y `setMasterTune` corren la CPU
+	// entre mensajes, por eso viven aquí y no en CommandPort.
+
+	// Handshake de arranque completo: reset, parche 0, master tune, 1024
+	// muestras de margen y recarga del parche.
+	//
+	// `warmupRate32` dice a qué ritmo corre la CPU durante esas 1024 muestras.
+	// No tiene valor por defecto a propósito: el plugin arranca siempre a 20 kHz
+	// y el harness al ritmo del parche, así que para los parches de 32 kHz los
+	// dos arrancan con distinto trabajo de firmware por delante. Es una
+	// divergencia real, hoy sin resolver; obligar a decirlo en cada llamada la
+	// deja a la vista en vez de escondida en un valor por defecto.
+	void boot(int16_t masterTune, bool warmupRate32);
+
+	// 0x31 → 0x30: que el firmware relea la página recién mapeada.
+	void reloadPatch();
+
+	// El "switcharoo" 0x30 → tuning → 0x30, con su TODO: afinar parches
+	// distintos del 0 no funciona sin él. Corre el emulador ~200 muestras.
+	void setMasterTune(int16_t tune);
+
+	// Pánico: pedal arriba y las 128 notas apagadas.
+	void allNotesOff();
+
 	void sendMidiCmd(u8 cmd, u8 data1, u8 data2);
+
+	// Carga de ROM, partida en dos por coste (REFACTORIZACION §6):
+	//
+	//   loadRomSet()  ~2,9 ms  depende del ROM SET (tres en total)
+	//   selectPatch() ~0,03 ms depende del PARCHE  (dieciseis)
+	//
+	// Cambiar de "Piano 1" a "Piano 2" es lo segundo, no lo primero. Las ROM
+	// que se pasan a loadRomSet tienen que sobrevivir al Mcu: se guarda el
+	// puntero de la params para poder remapear la pagina en selectPatch().
+	void loadRomSet(const u8 *temp_ic5, const u8 *temp_ic6, const u8 *temp_ic7, const u8 *temp_paramsrom);
+	void selectPatch(size_t from_addr);
+
+	// Equivalente a loadRomSet() + selectPatch(). Se mantiene porque es lo que
+	// llaman hoy el plugin y el harness; hace el trabajo caro siempre.
 	void loadSounds(const u8 *temp_ic5, const u8 *temp_ic6, const u8 *temp_ic7, const u8 *temp_paramsrom, size_t from_addr);
 	void reset();
 
 private:
-  // Board specific
-  u8 read_byte(u16 addr);
-  void write_byte(u16 addr, u8 data);
+	// Board specific
+	u8 read_byte(u16 addr);
+	void write_byte(u16 addr, u8 data);
 
-  SoundChip sound_chip;
+	SoundChip sound_chip;
+	CommandPort command_port;
 
-  u8 latch_val = 0x00;
-  u8 program_rom[0x2000];
-  u8 params_rom[0x20000];
-  u8 ram[0x1000] = {0};   // el mapa solo direcciona 0x0000-0x0FFF
+	u8 latch_val = 0x00;
+	u8 program_rom[PROG_ROM_BYTES];
+	u8 params_rom[PARAMS_ROM_BYTES];
+	// ROM de params sin descifrar, propiedad del llamante de loadRomSet().
+	const u8 *params_rom_src = nullptr;
+	u8 ram[0x1000] = {0}; // el mapa solo direcciona 0x0000-0x0FFF
 
-  // Generic CPU
-  void take_trap();
-  void check_irq_lines();
-  void eat_cycles();
-  u32 RM16(u32 Addr);
+	// Generic CPU
+	void take_trap();
+	void check_irq_lines();
+	void eat_cycles();
+	u32 RM16(u32 Addr);
 	void WM16(u32 Addr, PAIR *p);
-  void enter_interrupt(const char *message, u16 irq_vector);
-  void increment_counter(int amount);
+	void enter_interrupt(const char *message, u16 irq_vector);
+	void increment_counter(int amount);
 
-  PAIR m_ppc = {0,0};         // Previous program counter
-	PAIR m_pc = {0,0};          // Program counter
-	PAIR m_s = {0,0};           // Stack pointer
-	PAIR m_x = {0,0};           // Index register
-	PAIR m_d = {0,0};           // Accumulators
-	PAIR m_ea = {0,0};          // effective address (temporary variable)
-	u8 m_cc = 0;            // Condition codes
-	u8 m_wai_state = 0;     // WAI opcode state (or sleep opcode state)
-	u8 m_nmi_state = 0;     // NMI line state
-	u8 m_nmi_pending = 0;   // NMI pending
-	u8 m_irq_state[5] = {0};  // IRQ line state [IRQ1,TIN,IS3,..]
+	PAIR m_ppc = {0, 0};	 // Previous program counter
+	PAIR m_pc = {0, 0};		 // Program counter
+	PAIR m_s = {0, 0};		 // Stack pointer
+	PAIR m_x = {0, 0};		 // Index register
+	PAIR m_d = {0, 0};		 // Accumulators
+	PAIR m_ea = {0, 0};		 // effective address (temporary variable)
+	u8 m_cc = 0;			 // Condition codes
+	u8 m_wai_state = 0;		 // WAI opcode state (or sleep opcode state)
+	u8 m_nmi_state = 0;		 // NMI line state
+	u8 m_nmi_pending = 0;	 // NMI pending
+	u8 m_irq_state[5] = {0}; // IRQ line state [IRQ1,TIN,IS3,..]
 
-  u8 m_tcsr = 0;            // Timer Control and Status Register
-  PAIR m_counter = {0,0};       // free running counter
-  u8 m_pending_tcsr = 0;    // pending IRQ flag for clear IRQflag process
-  u16 m_input_capture = 0;  // input capture
+	u8 m_tcsr = 0;			 // Timer Control and Status Register
+	PAIR m_counter = {0, 0}; // free running counter
+	u8 m_pending_tcsr = 0;	 // pending IRQ flag for clear IRQflag process
+	u16 m_input_capture = 0; // input capture
 
-  u8 tcsr_r();
-  void tcsr_w(u8 data);
+	u8 tcsr_r();
+	void tcsr_w(u8 data);
 
-  int m_icount = 0;
+	int m_icount = 0;
 
-  static const u8 flags8i[256];
+	static const u8 flags8i[256];
 	static const u8 flags8d[256];
-  enum
+	enum
 	{
-		M6800_WAI = 8,    // set when WAI is waiting for an interrupt
-		M6800_SLP = 0x10  // HD63701 only
+		M6800_WAI = 8,	 // set when WAI is waiting for an interrupt
+		M6800_SLP = 0x10 // HD63701 only
 	};
 
-  static const u8 cycles_63701[256];
-  
-  static const op_func hd63701_insn[256];
-  void aba();
+	static const u8 cycles_63701[256];
+
+	static const op_func hd63701_insn[256];
+	void aba();
 	void abx();
 	void adca_di();
 	void adca_ex();
