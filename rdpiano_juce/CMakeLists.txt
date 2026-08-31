@@ -11,13 +11,22 @@
 # `librdpiano` que construye `librdpiano/CMakeLists.txt`. Añadir un `.cpp` al
 # núcleo ya no obliga a tocar nada de este directorio.
 
-# El mismo objetivo de despliegue que ponía el Projucer (`-target
-# arm64-apple-macos10.13`). No es cosmético: JUCE 8.0.1 llama a
-# `CGWindowListCreateImage`, que el SDK de macOS 15+ marca como no disponible,
-# así que con el objetivo por defecto —el del anfitrión— `juce_gui_basics` ni
-# compila.
+# Objetivo de despliegue: macOS 11 (Big Sur).
+#
+# Hasta JUCE 8.0.1 estaba clavado en 10.13 —el que ponía el Projucer— y no era
+# cosmético: aquel JUCE llamaba a `CGWindowListCreateImage` sin más, y el SDK
+# de macOS 15+ lo marca como no disponible, así que con el objetivo del
+# anfitrión `juce_gui_basics` ni compilaba. JUCE 9 lo arregla: usa
+# ScreenCaptureKit cuando el objetivo es >= 14.4 y, por debajo, envuelve la
+# llamada vieja en `JUCE_BEGIN_IGNORE_DEPRECATION_WARNINGS`
+# (`juce_Windowing_mac.mm`). Ya no hay nada que forzar hacia abajo.
+#
+# 11.0 es el suelo del binario universal: la primera versión que corre en
+# Apple Silicon, y por encima del mínimo que declara JUCE 9 (10.11). Subir a
+# 14.4 o más metería ScreenCaptureKit en el bundle y dejaría fuera a medio
+# mundo, que en un plugin de audio no compensa.
 if(NOT CMAKE_OSX_DEPLOYMENT_TARGET)
-  set(CMAKE_OSX_DEPLOYMENT_TARGET "10.13" CACHE STRING "" FORCE)
+  set(CMAKE_OSX_DEPLOYMENT_TARGET "11.0" CACHE STRING "" FORCE)
 endif()
 
 # `juceaide` (el generador de BinaryData, plists e iconos) se compila en una
@@ -103,7 +112,7 @@ target_link_libraries(rdpiano_juce
     juce::juce_gui_extra
     juce::juce_recommended_config_flags)
 
-target_compile_features(rdpiano_juce PRIVATE cxx_std_20)
+target_compile_features(rdpiano_juce PRIVATE cxx_std_23)
 
 # Dead-stripping en el enlazado de los cinco formatos. El Projucer lo ponía
 # (`DEAD_CODE_STRIPPING = YES`) y ni Xcode ni CMake lo activan por su cuenta:
@@ -137,6 +146,6 @@ target_include_directories(rdpiano_plugin_tests PRIVATE
 
 target_link_libraries(rdpiano_plugin_tests PRIVATE rdpiano_juce)
 
-target_compile_features(rdpiano_plugin_tests PRIVATE cxx_std_20)
+target_compile_features(rdpiano_plugin_tests PRIVATE cxx_std_23)
 
 add_test(NAME plugin_state COMMAND rdpiano_plugin_tests)

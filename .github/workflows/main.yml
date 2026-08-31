@@ -9,9 +9,9 @@ on:
 jobs:
   test-core:
     name: "Núcleo: pruebas (ctest)"
-    runs-on: macos-15
+    runs-on: macos-26
     steps:
-    - uses: actions/checkout@v3.3.0
+    - uses: actions/checkout@v7.0.1
     - name: "Configurar librdpiano"
       run: cmake -S librdpiano -B build/core -DRDPIANO_SANITIZE=OFF -DCMAKE_BUILD_TYPE=Release
       shell: bash
@@ -27,9 +27,9 @@ jobs:
 
   test-core-asan:
     name: "Núcleo: pruebas con ASan"
-    runs-on: macos-15
+    runs-on: macos-26
     steps:
-    - uses: actions/checkout@v3.3.0
+    - uses: actions/checkout@v7.0.1
     # La misma red, con AddressSanitizer. El harness tarda ~40 s en vez de ~3,
     # pero es lo que caza los desbordes que un hash idéntico no ve
     # (REFACTORIZACION §16.2).
@@ -44,9 +44,9 @@ jobs:
       shell: bash
 
   build-osx:
-    runs-on: macos-15
+    runs-on: macos-26
     steps:
-    - uses: actions/checkout@v3.3.0
+    - uses: actions/checkout@v7.0.1
       with:
         fetch-depth: 0
         submodules: recursive
@@ -77,7 +77,7 @@ jobs:
            (cd "$OUT/Standalone" && zip -r "$OUT/rdpiano_juce.app.macOS.zip" rdpiano_juce.app)
       shell: bash
     - name: Upload Artifact
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v7.0.1
       with:
         name: RdPiano-osx
         path: |
@@ -91,14 +91,20 @@ jobs:
     if: github.ref == 'refs/heads/master'
     runs-on: "ubuntu-latest"
     steps:
-      - uses: actions/checkout@v3.3.0
+      - uses: actions/checkout@v7.0.1
       - name: Retrieve artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8.0.1
         with:
           path: ./build/release
           pattern: "*"
           merge-multiple: true
-      - uses: "marvinpinto/action-automatic-releases@latest"
+      # Archivada desde 2024 y con runtime node12: no hay versión más alta a
+      # la que subir. Se fija a la última etiqueta en vez de `@latest`, que
+      # era la única dependencia sin pinear del workflow. Migrar a
+      # `softprops/action-gh-release` es lo que toca, pero cambia la semántica
+      # del release rodante: ésta reescribe el tag `latest` en cada ejecución
+      # y aquélla no lo mueve si ya existe.
+      - uses: "marvinpinto/action-automatic-releases@v1.2.1"
         with:
           repo_token: "${{ secrets.GITHUB_TOKEN }}"
           prerelease: true

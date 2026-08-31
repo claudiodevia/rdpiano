@@ -36,7 +36,7 @@ option(RDPIANO_BUILD_PLUGIN "Compilar el plugin JUCE (necesita build/juce)" ON)
 # de lo generado bajo `build/` (ver `scripts/download-juce.sh`). La ruta es una
 # variable de caché para poder apuntar a un JUCE ya instalado en la máquina.
 set(RDPIANO_JUCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/build/juce" CACHE PATH
-    "Árbol de fuentes de JUCE 8.0.1")
+    "Árbol de fuentes de JUCE 9.0.1")
 
 if(RDPIANO_BUILD_PLUGIN AND EXISTS "${RDPIANO_JUCE_DIR}/CMakeLists.txt")
   add_subdirectory(rdpiano_juce)

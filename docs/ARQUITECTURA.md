@@ -599,8 +599,10 @@ terceros: `resample_defs.h` incluye `config.h` salvo en `WIN32`/`__CYGWIN__`
 ([resample_defs.h:17](/librdpiano/src/resample/resample_defs.h#L17)).
 
 **Toolchain.** Hasta la fase 3, los exportadores salían del `.jucer` vía Projucer 8.0.1
-(`--resave`); desde entonces, de `juce_add_plugin`. Los mismos módulos JUCE, el mismo C++20 y el
-mismo `librdpiano/include`, ahora como usage requirement del target del núcleo.
+(`--resave`); desde entonces, de `juce_add_plugin`. Los mismos módulos JUCE —hoy los de JUCE
+9.0.1— y el mismo `librdpiano/include`, ahora como usage requirement del target del núcleo. El
+estándar subió de C++20 a **C++23** en todo el árbol, con el núcleo además en **C23** para las
+fuentes C de `resample/`.
 
 **Recursos.** Las ROMs y los PNGs se empotran como `BinaryData` en el binario: no hay archivos
 externos que instalar ni rutas que resolver en tiempo de ejecución. El plugin es autocontenido.
@@ -642,9 +644,10 @@ para que las sesiones guardadas se sigan abriendo.
 > ```
 >
 > El generador es Xcode porque `juce_add_plugin` sólo crea el objetivo AUv3 con ese generador, y el
-> objetivo de despliegue se fija en 10.13 —el mismo que ponía el Projucer— porque JUCE 8.0.1 llama a
-> `CGWindowListCreateImage`, no disponible en el SDK de macOS 15+. El CI corre en `macos-15` y el
-> binario es universal arm64+x86_64.
+> objetivo de despliegue se fija en 11.0. Con JUCE 8.0.1 estaba en 10.13 —el que ponía el
+> Projucer— porque aquel JUCE llamaba a `CGWindowListCreateImage`, no disponible en el SDK de
+> macOS 15+; JUCE 9 lo resolvió y el suelo pasa a ser el del binario universal. El CI corre en
+> `macos-26` y el binario es universal arm64+x86_64.
 
 El proyecto compila **solo para macOS**. Los exportadores de Windows (`VS2022`) y Linux
 (`LINUX_MAKE`), sus scripts de build y sus jobs de CI se eliminaron del `.jucer`, de

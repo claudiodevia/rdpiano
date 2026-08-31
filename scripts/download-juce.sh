@@ -5,7 +5,7 @@
 # `build/juce` (esto), `build/plugin` (el build de la raíz, con los artefactos
 # del plugin) y `build/core`, `build/core-asan` (los del núcleo suelto). Así
 # `rm -rf build` deja el árbol como recién clonado, y borrar sólo los binary
-# dirs (`rm -rf build/plugin build/core*`) no obliga a volver a bajar 134 MB.
+# dirs (`rm -rf build/plugin build/core*`) no obliga a volver a bajar 162 MB.
 #
 # Desde la fase 3 el plugin se construye con la API CMake de JUCE
 # (juce_add_plugin), asi que lo que hace falta del zip es el arbol de fuentes
@@ -13,7 +13,7 @@
 # juceaide. El Projucer que trae el zip ya no se usa.
 set -e
 
-VERSION=8.0.1
+VERSION=9.0.1
 ROOT=$(cd "$(dirname "$0")/.."; pwd)
 DEST="$ROOT/build"
 JUCE_DIR="$DEST/juce"

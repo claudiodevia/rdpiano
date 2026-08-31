@@ -36,7 +36,7 @@ macOS only, Xcode required.
 
 ```bash
 git clone <this repo> && cd rdpiano
-bash scripts/download-juce.sh   # fetches JUCE 8.0.1 into build/juce
+bash scripts/download-juce.sh   # fetches JUCE 9.0.1 into build/juce
 bash scripts/build-osx.sh ALL # VST3, AU, AUv3, LV2 and Standalone
                               # or one format: AU, AUv3, LV2, Standalone, VST3
 ```

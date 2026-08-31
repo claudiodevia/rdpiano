@@ -2,14 +2,14 @@
 
 Emulador a nivel de hardware de pianos Roland SA-synthesis (MKS-20 / RD-1000 / Rhodes MK-80).
 Ejecuta el **firmware original** sobre una CPU HD63701 emulada + reimplementación gate-level de
-los chips custom de síntesis. C++17.
+los chips custom de síntesis. C++23 (el núcleo también en C23 para `resample/`).
 
 ## Layout
 
 | Ruta | Qué es |
 |---|---|
 | `librdpiano/` | Núcleo, **sin dependencias**: emulador + `RdPianoEngine` (cadena de audio completa, incluidos `lsp/` y `resample/`). Aquí vive la lógica real. |
-| `rdpiano_juce/` | Plugin JUCE 8.0.1 (VST3/AU/AUv3/LV2/Standalone), **solo macOS**: UI, parámetros, presets. |
+| `rdpiano_juce/` | Plugin JUCE 9.0.1 (VST3/AU/AUv3/LV2/Standalone), **solo macOS**: UI, parámetros, presets. |
 | `roms/` | Dumps de ROM, empotrados como `BinaryData` vía `juce_add_binary_data`. |
 | `re_stuff/` | Artefactos de ingeniería inversa (Verilog, disasm, silicon tooling). **No se compila.** |
 | `scripts/` | Los dos scripts de build: `download-juce.sh` y `build-osx.sh`. Los mismos que corre la CI. |
@@ -132,14 +132,15 @@ en vez de recompilar sus fuentes. Añadir un `.cpp` al núcleo es una línea en
 
 **Plugin** (el producto):
 ```bash
-bash scripts/download-juce.sh   # JUCE 8.0.1 en build/juce
+bash scripts/download-juce.sh   # JUCE 9.0.1 en build/juce
 bash scripts/build-osx.sh ALL   # configura y compila los cinco formatos
 ```
 Los productos salen en `build/plugin/rdpiano_juce/rdpiano_juce_artefacts/Release/<FORMATO>/`. El script
 usa el **generador Xcode** a propósito: `juce_add_plugin` sólo crea el objetivo AUv3 con ese
 generador. Dos detalles que no son cosméticos y están comentados en `rdpiano_juce/CMakeLists.txt`:
-el objetivo de despliegue es 10.13 (con el del anfitrión, JUCE 8.0.1 no compila contra el SDK de
-macOS 15+), y hay que pasárselo a `juceaide` por la variable de entorno `MACOSX_DEPLOYMENT_TARGET`
+el objetivo de despliegue es 11.0 —el suelo del binario universal; el 10.13 que obligaba a poner
+JUCE 8.0.1 dejó de hacer falta al pasar a JUCE 9, que ya no rompe contra el SDK de macOS 15+—, y
+hay que pasárselo a `juceaide` por la variable de entorno `MACOSX_DEPLOYMENT_TARGET`
 porque se construye en una invocación anidada de CMake que no hereda la caché. JUCE no es fuente
 del proyecto sino una descarga, así que vive en `build/juce` con el resto de lo generado; la ruta
 es la variable de caché `RDPIANO_JUCE_DIR`, por si se quiere apuntar a otro árbol de JUCE.
