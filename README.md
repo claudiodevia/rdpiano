@@ -27,6 +27,7 @@ More info on this guide: https://www.osirisguitar.com/2020/04/01/how-to-make-uns
 - **rdpiano_juce**: a plugin (VSTi/AU) version of the emulator, to be used with DAWs
 - **librdpiano**: a dependency-free version of the emulator, to be used as a library in other software, also builds a test standalone app with SDL
 - **re_stuff**: tooling used during the reverse engineering process, mostly for educational purposes
+- **scripts**: the two build scripts — `download-juce.sh` (fetch the JUCE tree) and `build-osx.sh` (configure and build one plugin format, or `ALL` for the five); CI runs these same two
 
 ## Building
 
@@ -35,17 +36,22 @@ macOS only, Xcode required.
 
 ```bash
 git clone <this repo> && cd rdpiano
-bash rdpiano_juce/download-juce.sh      # fetches JUCE 8.0.1 into rdpiano_juce/JUCE
-bash rdpiano_juce/build/build-osx.sh    # VST3, AU, AUv3, LV2 and Standalone
+bash scripts/download-juce.sh   # fetches JUCE 8.0.1 into build/juce
+bash scripts/build-osx.sh ALL # VST3, AU, AUv3, LV2 and Standalone
+                              # or one format: AU, AUv3, LV2, Standalone, VST3
 ```
 
-The plugins end up in `build/rdpiano_juce/rdpiano_juce_artefacts/Release/`.
+The plugins end up in `build/plugin/rdpiano_juce/rdpiano_juce_artefacts/Release/`.
+
+Everything generated — the JUCE download included — lives under `build/`: `build/juce` (the
+download), `build/plugin` (the top-level build) and `build/core`, `build/core-asan` (the core-only
+ones). `rm -rf build` is a full clean; `rm -rf build/plugin build/core*` keeps the JUCE tree.
 
 To work on the emulator alone (no JUCE needed):
 
 ```bash
-cd librdpiano && cmake -B build && cmake --build build
-ctest --test-dir build --output-on-failure
+cmake -S librdpiano -B build/core && cmake --build build/core
+ctest --test-dir build/core --output-on-failure
 ```
 
 ## Acknowledgements

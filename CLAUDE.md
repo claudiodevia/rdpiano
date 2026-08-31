@@ -12,7 +12,9 @@ los chips custom de síntesis. C++17.
 | `rdpiano_juce/` | Plugin JUCE 8.0.1 (VST3/AU/AUv3/LV2/Standalone), **solo macOS**: UI, parámetros, presets. |
 | `roms/` | Dumps de ROM, empotrados como `BinaryData` vía `juce_add_binary_data`. |
 | `re_stuff/` | Artefactos de ingeniería inversa (Verilog, disasm, silicon tooling). **No se compila.** |
+| `scripts/` | Los dos scripts de build: `download-juce.sh` y `build-osx.sh`. Los mismos que corre la CI. |
 | `ui/`, `docs/` | Assets del panel; capturas. |
+| `build/` | **Todo lo generado**, y nada más: `juce/` (la descarga), `plugin/` (binary dir de la raíz, con los artefactos), `core/` y `core-asan/` (los del núcleo suelto). Ignorado por git: `rm -rf build` deja el árbol como recién clonado, y `rm -rf build/plugin build/core*` limpia sólo lo compilado sin volver a bajar JUCE. |
 
 ## Modelo mental
 
@@ -130,19 +132,21 @@ en vez de recompilar sus fuentes. Añadir un `.cpp` al núcleo es una línea en
 
 **Plugin** (el producto):
 ```bash
-bash rdpiano_juce/download-juce.sh          # JUCE 8.0.1 en rdpiano_juce/JUCE
-bash rdpiano_juce/build/build-osx.sh        # configura y compila los cinco formatos
+bash scripts/download-juce.sh   # JUCE 8.0.1 en build/juce
+bash scripts/build-osx.sh ALL   # configura y compila los cinco formatos
 ```
-Los productos salen en `build/rdpiano_juce/rdpiano_juce_artefacts/Release/<FORMATO>/`. El script
+Los productos salen en `build/plugin/rdpiano_juce/rdpiano_juce_artefacts/Release/<FORMATO>/`. El script
 usa el **generador Xcode** a propósito: `juce_add_plugin` sólo crea el objetivo AUv3 con ese
 generador. Dos detalles que no son cosméticos y están comentados en `rdpiano_juce/CMakeLists.txt`:
 el objetivo de despliegue es 10.13 (con el del anfitrión, JUCE 8.0.1 no compila contra el SDK de
 macOS 15+), y hay que pasárselo a `juceaide` por la variable de entorno `MACOSX_DEPLOYMENT_TARGET`
-porque se construye en una invocación anidada de CMake que no hereda la caché.
+porque se construye en una invocación anidada de CMake que no hereda la caché. JUCE no es fuente
+del proyecto sino una descarga, así que vive en `build/juce` con el resto de lo generado; la ruta
+es la variable de caché `RDPIANO_JUCE_DIR`, por si se quiere apuntar a otro árbol de JUCE.
 
 **Núcleo + standalone SDL** (para iterar sobre el emulador, sin necesidad de JUCE):
 ```bash
-cd librdpiano && cmake -B build && cmake --build build   # requiere SDL2 + portmidi
+cmake -S librdpiano -B build/core && cmake --build build/core   # requiere SDL2 + portmidi
 ```
 Configurar `librdpiano/` por su cuenta fuerza `-fsanitize=address` — es intencional para
 desarrollo. Desde la raíz el defecto es OFF: ese build produce el plugin.
@@ -158,9 +162,9 @@ externas (no necesita SDL, portmidi ni JUCE) y ~40x tiempo real: arranca el firm
 16 parches, inyecta MIDI fijo y mide el audio.
 
 ```bash
-cd librdpiano && cmake -B build -DRDPIANO_SANITIZE=OFF -DCMAKE_BUILD_TYPE=Release
-cmake --build build --target rdpiano_tests rdpiano_e2e
-ctest --test-dir build --output-on-failure     # suite unitaria + harness
+cmake -S librdpiano -B build/core -DRDPIANO_SANITIZE=OFF -DCMAKE_BUILD_TYPE=Release
+cmake --build build/core --target rdpiano_tests rdpiano_e2e
+ctest --test-dir build/core --output-on-failure     # suite unitaria + harness
 ```
 
 `ctest` corre dos ejecutables: `rdpiano_tests` (unitario, ~2,6 s desde que el motor entró en él) y
@@ -221,9 +225,9 @@ y la comparten plugin y harness — si se toca, ambos cambian a la vez.
 de presets, los valores de fábrica, los programas y qué pasa con un preset corrupto. Está en el
 `ctest` de la raíz —no en el de `librdpiano/`, que no conoce JUCE—:
 ```bash
-cmake -B build -G Xcode -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64"
-cmake --build build --config Release --target rdpiano_tests rdpiano_e2e rdpiano_plugin_tests
-ctest --test-dir build -C Release --output-on-failure     # las tres suites
+cmake -B build/plugin -G Xcode -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64"
+cmake --build build/plugin --config Release --target rdpiano_tests rdpiano_e2e rdpiano_plugin_tests
+ctest --test-dir build/plugin -C Release --output-on-failure     # las tres suites
 ```
 Lo que sigue sin cubrir es la UI: `PluginEditor` no lo toca ninguna prueba.
 

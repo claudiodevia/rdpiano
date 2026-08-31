@@ -26,8 +26,10 @@ endif()
 # inicializa CMAKE_OSX_DEPLOYMENT_TARGET.
 set(ENV{MACOSX_DEPLOYMENT_TARGET} "${CMAKE_OSX_DEPLOYMENT_TARGET}")
 
-# JUCE trae su propio árbol CMake; `download-juce.sh` lo deja en ./JUCE.
-add_subdirectory(JUCE juce EXCLUDE_FROM_ALL)
+# JUCE trae su propio árbol CMake; `download-juce.sh` lo deja en build/juce
+# (RDPIANO_JUCE_DIR, definido en el CMakeLists de la raíz). Como está fuera de
+# este directorio, hay que darle binary dir explícito.
+add_subdirectory(${RDPIANO_JUCE_DIR} juce EXCLUDE_FROM_ALL)
 
 juce_add_plugin(rdpiano_juce
   # El binario se llama rdpiano_juce (era `targetName` en el .jucer) y el

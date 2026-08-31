@@ -1353,21 +1353,21 @@ mano y tenía que seguir valiendo, sin editarla, contra el APVTS.
 redes se lanzan juntas y es lo único que hay que recordar:
 
 ```bash
-cd librdpiano && cmake -B build -DRDPIANO_SANITIZE=OFF -DCMAKE_BUILD_TYPE=Release
-cmake --build build --target rdpiano_tests rdpiano_e2e
-ctest --test-dir build --output-on-failure    # unit (~2,6 s) + e2e (~2,2 s)
+cmake -S librdpiano -B build/core -DRDPIANO_SANITIZE=OFF -DCMAKE_BUILD_TYPE=Release
+cmake --build build/core --target rdpiano_tests rdpiano_e2e
+ctest --test-dir build/core --output-on-failure    # unit (~2,6 s) + e2e (~2,2 s)
 ```
 
 Desde la fase 3, la red completa —con el plugin dentro— sale del build de la raíz:
 
 ```bash
-cmake -B build -G Xcode -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64"
-cmake --build build --config Release --target rdpiano_tests rdpiano_e2e rdpiano_plugin_tests
-ctest --test-dir build -C Release --output-on-failure   # las tres, ~5,3 s
+cmake -B build/plugin -G Xcode -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64"
+cmake --build build/plugin --config Release --target rdpiano_tests rdpiano_e2e rdpiano_plugin_tests
+ctest --test-dir build/plugin -C Release --output-on-failure   # las tres, ~5,3 s
 ```
 
 ```bash
-./build/rdpiano_tests --roms ../roms --filter board     # una sola suite, al iterar
+./build/core/rdpiano_tests --roms roms --filter board     # una sola suite, al iterar
 ./build/rdpiano_e2e --roms ../roms --golden test/golden.txt --patch 0   # un parche, ~0,2 s
 ```
 
@@ -1399,7 +1399,7 @@ clang++ -std=c++17 -O2 -Wno-constant-logical-operand -Ilibrdpiano/include \
 ```bash
 grep -rn "commands_queue" rdpiano_juce/Source librdpiano | grep -v Builds   # 0 desde la fase 1 (eran 22)
 grep -n "tuneLsb" rdpiano_juce/Source/PluginProcessor.cpp                   # 0 desde la fase 1 (eran dos copias)
-./librdpiano/build/rdpiano_tests --roms roms --filter lsp_tables   # las dos tablas de rate,
+./build/core/rdpiano_tests --roms roms --filter lsp_tables   # las dos tablas de rate,
                                                                   # comprobadas en vez de diffeadas
 ```
 

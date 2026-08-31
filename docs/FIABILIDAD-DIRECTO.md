@@ -494,9 +494,9 @@ build esté bien» en «el build está verificado o no se publica».
       - uses: actions/checkout@v4
       - name: Build & run e2e
         run: |
-          cmake -S librdpiano -B build -DRDPIANO_SANITIZE=OFF -DCMAKE_BUILD_TYPE=Release
-          cmake --build build --target rdpiano_e2e
-          ./build/rdpiano_e2e --roms roms --golden librdpiano/test/golden.txt
+          cmake -S librdpiano -B build/core -DRDPIANO_SANITIZE=OFF -DCMAKE_BUILD_TYPE=Release
+          cmake --build build/core --target rdpiano_e2e
+          ./build/core/rdpiano_e2e --roms roms --golden librdpiano/test/golden.txt
 ```
 
 y añadir `needs: [build-osx, test-core]` al job `release`.

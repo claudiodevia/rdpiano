@@ -615,7 +615,7 @@ fase 3, el árbol del `AudioProcessorValueTreeState` con los diez parámetros, m
 para que las sesiones guardadas se sigan abriendo.
 
 **CI.** El job de [`.github/workflows/main.yml`](.github/workflows/main.yml) sigue la receta
-[`download-juce.sh`](/rdpiano_juce/download-juce.sh) → `build-osx.sh` → subir artefactos. En
+[`download-juce.sh`](/scripts/download-juce.sh) → `build-osx.sh` → subir artefactos. En
 `master`, un segundo job publica una release rodante con tag `latest`.
 
 ---
@@ -632,10 +632,10 @@ para que las sesiones guardadas se sigan abriendo.
 >
 > ```
 > build-osx.sh
->   └─ cmake -S . -B build -G Xcode -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64"
->   └─ cmake --build build --config Release --target rdpiano_juce_All
+>   └─ cmake -S . -B build/plugin -G Xcode -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64"
+>   └─ cmake --build build/plugin --config Release --target rdpiano_juce_All
 >
-> Artefactos → build/rdpiano_juce/rdpiano_juce_artefacts/Release/
+> Artefactos → build/plugin/rdpiano_juce/rdpiano_juce_artefacts/Release/
 >   AU/rdpiano_juce.component      VST3/rdpiano_juce.vst3
 >   Standalone/rdpiano_juce.app    AUv3/rdpiano_juce.appex
 >   LV2/rdpiano_juce.lv2           (antes RdPiano.lv2; el URI no cambia)
@@ -684,11 +684,17 @@ Artefactos → Builds/MacOSX/build/Release/
 - El exportador `XCODE_IPHONE` (`Builds/iOS`) existe en el `.jucer` pero **no está en el CI**: es
   para AUv3 en iOS/iPadOS, sin soporte activo.
 
-**Local y CI usan el mismo script.** [`download-juce.sh`](/rdpiano_juce/download-juce.sh) descarga
+**Local y CI usan el mismo script.** [`download-juce.sh`](/scripts/download-juce.sh) descarga
 el ZIP de release de macOS —que ya trae módulos *y* Projucer precompilado— y lo descomprime en
-`rdpiano_juce/JUCE`, que es justo donde el `.jucer` busca los módulos
-(`MODULEPATH path="./JUCE/modules"`) y donde `build-osx.sh` busca el Projucer. Antes había dos pasos (`git clone` del repo + `download-projucer.sh` para bajar además el
+`build/juce`. Antes había dos pasos (`git clone` del repo + `download-projucer.sh` para bajar además el
 ZIP): descargaban lo mismo dos veces, porque el ZIP de release es un superconjunto del repo.
+
+> **Actualizado.** El árbol descargado vivía en `rdpiano_juce/JUCE` —donde el `.jucer` buscaba los
+> módulos (`MODULEPATH path="./JUCE/modules"`) y `build-osx.sh` el Projucer—. Sin `.jucer`, esa
+> ruta ya no la exige nadie: JUCE es una descarga, no fuente del proyecto, y se guarda con el resto
+> de lo generado bajo `build/` (`build/juce`, `build/plugin`, `build/core`, `build/core-asan`), de
+> modo que `rm -rf build` sea la limpieza completa. La ruta es la variable de caché
+> `RDPIANO_JUCE_DIR` del [`CMakeLists.txt`](/CMakeLists.txt) de la raíz.
 
 ---
 
