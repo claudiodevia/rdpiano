@@ -7,6 +7,23 @@ on:
       - '**'
 
 jobs:
+  test-core:
+    name: "Núcleo: harness e2e"
+    runs-on: macos-15
+    steps:
+    - uses: actions/checkout@v3.3.0
+    - name: "Configurar librdpiano"
+      run: cmake -S librdpiano -B librdpiano/build -DRDPIANO_SANITIZE=OFF -DCMAKE_BUILD_TYPE=Release
+      shell: bash
+    - name: "Compilar el harness"
+      run: cmake --build librdpiano/build --target rdpiano_e2e
+      shell: bash
+    # Hash bit-exacto por parche contra el golden versionado: si el audio cambia
+    # sin querer, este paso lo para antes de que llegue a un release.
+    - name: "Ejecutar rdpiano_e2e"
+      run: ./librdpiano/build/rdpiano_e2e --roms roms --golden librdpiano/test/golden.txt
+      shell: bash
+
   build-osx:
     runs-on: macos-15
     steps:
@@ -39,7 +56,7 @@ jobs:
 
   release:
     name: "Release"
-    needs: [build-osx]
+    needs: [test-core, build-osx]
     if: github.ref == 'refs/heads/master'
     runs-on: "ubuntu-latest"
     steps:
