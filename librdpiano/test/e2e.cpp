@@ -26,31 +26,9 @@
 #include "patches.h"
 
 // ---------------------------------------------------------------- ROMs
-
-static const size_t WAVE_ROM_SIZE = 0x20000;
-static const size_t PROG_ROM_SIZE = 0x2000;
-
-struct RomSetFiles
-{
-  const char *ic5;
-  const char *ic6;
-  const char *ic7;
-  const char *ic18;
-};
-
-static const RomSetFiles romSetFiles[ROMSET_COUNT] = {
-    // ROMSET_MKS20_A
-    {"mks20_15179738.BIN", "mks20_15179737.BIN", "mks20_15179736.BIN",
-     "mks20_15179757.BIN"},
-    // ROMSET_MKS20_B
-    {"mks20_15179741.BIN", "mks20_15179740.BIN", "mks20_15179739.BIN",
-     "mks20_15179757.BIN"},
-    // ROMSET_MK80
-    {"MK80_IC5.bin", "MK80_IC6.bin", "MK80_IC7.bin", "MK80_IC18.bin"},
-};
-
-// Ojo: el handshake del bus depende de direcciones fijas de este firmware.
-static const char *PROG_ROM_FILE = "RD200_B.bin";
+//
+// Los nombres de fichero, los tamaños y la tabla de juegos viven en patches.h:
+// son los mismos que empotra el plugin.
 
 static std::vector<u8> load_rom(const std::string &dir, const char *name,
                                 size_t len)
@@ -207,11 +185,11 @@ struct PatchResult
 static PatchResult run_patch(int patch, RomBank &roms,
                              std::vector<float> *wav)
 {
-  const RomSetFiles &set = romSetFiles[patchToRomSetId[patch]];
-  const u8 *ic5 = roms.get(set.ic5, WAVE_ROM_SIZE);
-  const u8 *ic6 = roms.get(set.ic6, WAVE_ROM_SIZE);
-  const u8 *ic7 = roms.get(set.ic7, WAVE_ROM_SIZE);
-  const u8 *ic18 = roms.get(set.ic18, WAVE_ROM_SIZE);
+  const char *const *set = romSetFiles[patchToRomSetId[patch]];
+  const u8 *ic5 = roms.get(set[ROM_IC5], WAVE_ROM_SIZE);
+  const u8 *ic6 = roms.get(set[ROM_IC6], WAVE_ROM_SIZE);
+  const u8 *ic7 = roms.get(set[ROM_IC7], WAVE_ROM_SIZE);
+  const u8 *ic18 = roms.get(set[ROM_IC18], WAVE_ROM_SIZE);
   const u8 *prog = roms.get(PROG_ROM_FILE, PROG_ROM_SIZE);
 
   const int rate = patchSampleRates[patch];
