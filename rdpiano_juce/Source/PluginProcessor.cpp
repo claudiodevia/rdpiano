@@ -8,11 +8,11 @@
 
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
-#include "../../librdpiano/include/patches.h"
+#include "patches.h"
 
 // Las ROMs empotradas, en el orden de RomSetId. Los nombres canónicos están en
-// patches.h y test_patches.cpp comprueba que el .jucer empotra exactamente
-// esos ficheros.
+// patches.h y test_patches.cpp comprueba que rdpiano_juce/CMakeLists.txt empotra
+// exactamente esos ficheros.
 static const RdRomSet romSets[ROMSET_COUNT] = {
     // ROMSET_MKS20_A
     {(const uint8_t *)BinaryData::mks20_15179738_BIN,
@@ -36,86 +36,56 @@ RdPiano_juceAudioProcessor::RdPiano_juceAudioProcessor()
     : AudioProcessor(
           BusesProperties()
               .withInput("Input", juce::AudioChannelSet::stereo(), true)
-              .withOutput("Output", juce::AudioChannelSet::stereo(), true))
+              .withOutput("Output", juce::AudioChannelSet::stereo(), true)),
+      apvts(*this, nullptr, "RdPiano", createRdParameterLayout())
 {
   engine = std::make_unique<RdPianoEngine>(
       romSets, (const uint8_t *)BinaryData::RD200_B_bin);
 
-  // DAW parameters
-  addParameter(volume = new juce::AudioParameterFloat(
-                   juce::ParameterID{"volume", 1}, // parameterID
-                   "Volume",                       // parameter name
-                   0.0f,                           // minimum value
-                   1.0f,                           // maximum value
-                   1.0));                          // default value
-  addParameter(chorusEnabled = new juce::AudioParameterBool(
-                   juce::ParameterID{"chorusEnabled", 1}, // parameterID
-                   "Chorus Enabled",                      // parameter name
-                   true));                                // default value
-  addParameter(chorusRate = new juce::AudioParameterInt(
-                   juce::ParameterID{"chorusRate", 1}, // parameterID
-                   "Chorus Rate",                      // parameter name
-                   0,                                  // minimum value
-                   14,                                 // maximum value
-                   5));                                // default value
-  addParameter(chorusDepth = new juce::AudioParameterInt(
-                   juce::ParameterID{"chorusDepth", 1}, // parameterID
-                   "Chorus Depth",                      // parameter name
-                   0,                                   // minimum value
-                   14,                                  // maximum value
-                   14));                                // default value
-  addParameter(tremoloEnabled = new juce::AudioParameterBool(
-                   juce::ParameterID{"tremoloEnabled", 1}, // parameterID
-                   "Tremolo Enabled",                      // parameter name
-                   false));                                // default value
-  addParameter(tremoloRate = new juce::AudioParameterInt(
-                   juce::ParameterID{"tremoloRate", 1}, // parameterID
-                   "Tremolo Rate",                      // parameter name
-                   0,                                   // minimum value
-                   14,                                  // maximum value
-                   6));                                 // default value
-  addParameter(tremoloDepth = new juce::AudioParameterInt(
-                   juce::ParameterID{"tremoloDepth", 1}, // parameterID
-                   "Tremolo Depth",                      // parameter name
-                   0,                                    // minimum value
-                   14,                                   // maximum value
-                   6));                                  // default value
-  addParameter(efxEnabled = new juce::AudioParameterBool(
-                   juce::ParameterID{"efxEnabled", 1}, "EFX Enabled", false));
-  // addParameter(
-  //     efxPhaserOnOff = new juce::AudioParameterBool(
-  //         juce::ParameterID{"efxPhaserOnOff", 1}, "Phaser Enabled", false));
-  addParameter(
-      efxPhaserRate = new juce::AudioParameterFloat(
-          juce::ParameterID{"efxPhaserRate", 1}, "Phaser Rate", 0, 1, 0.4));
-  addParameter(
-      efxPhaserDepth = new juce::AudioParameterFloat(
-          juce::ParameterID{"efxPhaserDepth", 1}, "Phaser Depth", 0, 1, 0.8));
-
-  volume->addListener(this);
-  chorusEnabled->addListener(this);
-  chorusRate->addListener(this);
-  chorusDepth->addListener(this);
-  tremoloEnabled->addListener(this);
-  tremoloRate->addListener(this);
-  tremoloDepth->addListener(this);
-  efxEnabled->addListener(this);
-  // efxPhaserOnOff->addListener(this);
-  efxPhaserRate->addListener(this);
-  efxPhaserDepth->addListener(this);
+  // Los diez parámetros salen de la tabla de PluginParams.h; aquí sólo se
+  // cachean sus valores crudos —para no buscar por id desde el hilo de audio—
+  // y se escucha su cambio para repintar el panel.
+  for (int i = 0; i < kNumRdParams; i++)
+  {
+    paramValues[i] = apvts.getRawParameterValue(rdParamSpecs[i].id);
+    jassert(paramValues[i] != nullptr);
+    apvts.addParameterListener(rdParamSpecs[i].id, this);
+  }
 }
 
-RdPiano_juceAudioProcessor::~RdPiano_juceAudioProcessor() {}
+RdPiano_juceAudioProcessor::~RdPiano_juceAudioProcessor()
+{
+  for (int i = 0; i < kNumRdParams; i++)
+    apvts.removeParameterListener(rdParamSpecs[i].id, this);
+}
 
 //==============================================================================
-void RdPiano_juceAudioProcessor::parameterValueChanged(int parameterIndex,
-                                                       float newValue)
+void RdPiano_juceAudioProcessor::parameterChanged(const juce::String &, float)
 {
   sendChangeMessage();
 }
 
-void RdPiano_juceAudioProcessor::parameterGestureChanged(
-    int parameterIndex, bool gestureIsStarting) {}
+//==============================================================================
+// Acceso por índice de tabla. El editor lo usa para recorrer descriptores en
+// vez de repetir un bloque por control (REFACTORIZACION §10).
+juce::RangedAudioParameter &RdPiano_juceAudioProcessor::param(
+    RdParamId id) const
+{
+  juce::RangedAudioParameter *p = apvts.getParameter(rdParamSpecs[id].id);
+  jassert(p != nullptr);
+  return *p;
+}
+
+float RdPiano_juceAudioProcessor::paramValue(RdParamId id) const
+{
+  return paramValues[id]->load();
+}
+
+void RdPiano_juceAudioProcessor::setParamValue(RdParamId id, float value)
+{
+  juce::RangedAudioParameter &p = param(id);
+  p.setValueNotifyingHost(p.convertTo0to1(value));
+}
 
 //==============================================================================
 const juce::String RdPiano_juceAudioProcessor::getName() const
@@ -159,8 +129,10 @@ const juce::String RdPiano_juceAudioProcessor::getProgramName(int index)
   return juce::String(patchNames[index]);
 }
 
-void RdPiano_juceAudioProcessor::changeProgramName(
-    int index, const juce::String &newName) {}
+void RdPiano_juceAudioProcessor::changeProgramName(int index,
+                                                   const juce::String &newName)
+{
+}
 
 void RdPiano_juceAudioProcessor::setMasterTune(int16_t tune)
 {
@@ -178,19 +150,23 @@ void RdPiano_juceAudioProcessor::setMasterTune(int16_t tune)
 
 // Vuelca los parámetros de JUCE al POD que lee render(). Se llama una vez por
 // bloque, antes de renderizar: el motor no conoce juce::AudioParameter.
+//
+// Se lee de los `std::atomic<float>` cacheados en el constructor, no del
+// AudioProcessorValueTreeState: buscar por id es una búsqueda de cadena, y
+// esto corre en el hilo de audio.
 void RdPiano_juceAudioProcessor::syncParamsToEngine()
 {
   RdEngineParams &p = engine->params;
-  p.volume = *volume;
-  p.chorusEnabled = *chorusEnabled;
-  p.chorusRate = *chorusRate;
-  p.chorusDepth = *chorusDepth;
-  p.tremoloEnabled = *tremoloEnabled;
-  p.tremoloRate = *tremoloRate;
-  p.tremoloDepth = *tremoloDepth;
-  p.efxEnabled = *efxEnabled;
-  p.efxPhaserRate = *efxPhaserRate;
-  p.efxPhaserDepth = *efxPhaserDepth;
+  p.volume = paramValue(kVolume);
+  p.chorusEnabled = paramValue(kChorusEnabled) >= 0.5f;
+  p.chorusRate = (int)paramValue(kChorusRate);
+  p.chorusDepth = (int)paramValue(kChorusDepth);
+  p.tremoloEnabled = paramValue(kTremoloEnabled) >= 0.5f;
+  p.tremoloRate = (int)paramValue(kTremoloRate);
+  p.tremoloDepth = (int)paramValue(kTremoloDepth);
+  p.efxEnabled = paramValue(kEfxEnabled) >= 0.5f;
+  p.efxPhaserRate = paramValue(kEfxPhaserRate);
+  p.efxPhaserDepth = paramValue(kEfxPhaserDepth);
 }
 
 //==============================================================================
@@ -271,75 +247,54 @@ juce::AudioProcessorEditor *RdPiano_juceAudioProcessor::createEditor()
 }
 
 //==============================================================================
+// El preset es el árbol del AudioProcessorValueTreeState más las dos cosas que
+// no son parámetros: el parche (que es el programa) y la afinación maestra.
+//
+// La etiqueta raíz sigue siendo <RdPiano>, la misma que escribía el XML a mano
+// de la fase 2, y los dos atributos conservan su nombre: una sesión guardada
+// por una versión anterior se sigue abriendo y recupera parche y afinación.
+// Lo que aquella versión guardaba como atributos de la raíz —los diez
+// parámetros— ya no se lee, y por eso vuelven a fábrica, que es justo lo que
+// aquel código hacía mal (REFACTORIZACION §9).
 void RdPiano_juceAudioProcessor::getStateInformation(
     juce::MemoryBlock &destData)
 {
-  std::unique_ptr<juce::XmlElement> xml(new juce::XmlElement("RdPiano"));
-  xml->setAttribute("masterTune", masterTune);
-  xml->setAttribute("currentPatch", currentPatch);
-  xml->setAttribute("volume", (double)*volume);
-  xml->setAttribute("chorusEnabled", (bool)*chorusEnabled);
-  xml->setAttribute("chorusRate", (int)*chorusRate);
-  xml->setAttribute("chorusDepth", (int)*chorusDepth);
-  xml->setAttribute("tremoloEnabled", (bool)*tremoloEnabled);
-  xml->setAttribute("tremoloRate", (int)*tremoloRate);
-  xml->setAttribute("tremoloDepth", (int)*tremoloDepth);
-  xml->setAttribute("efxEnabled", (bool)*efxEnabled);
-  xml->setAttribute("efxPhaserRate", (float)*efxPhaserRate);
-  xml->setAttribute("efxPhaserDepth", (float)*efxPhaserDepth);
+  juce::ValueTree state = apvts.copyState();
+  state.setProperty("currentPatch", currentPatch, nullptr);
+  state.setProperty("masterTune", masterTune, nullptr);
+
+  std::unique_ptr<juce::XmlElement> xml(state.createXml());
   copyXmlToBinary(*xml, destData);
 }
 
 void RdPiano_juceAudioProcessor::setStateInformation(const void *data,
                                                      int sizeInBytes)
 {
-  std::unique_ptr<juce::XmlElement> xmlState(
-      getXmlFromBinary(data, sizeInBytes));
+  std::unique_ptr<juce::XmlElement> xml(getXmlFromBinary(data, sizeInBytes));
 
-  if (xmlState.get() != nullptr)
+  // Un bloque que no es un preset nuestro se ignora entero: el plugin se queda
+  // como estaba, no a medio cargar.
+  if (xml == nullptr || !xml->hasTagName(apvts.state.getType()))
+    return;
+
+  // Lo que el preset no traiga vuelve a fábrica, no al valor que el usuario
+  // tuviera puesto. `replaceState` sólo toca los parámetros que encuentra en
+  // el árbol, así que el punto de partida tiene que ser el valor por defecto.
+  for (int i = 0; i < kNumRdParams; i++)
   {
-    if (xmlState->hasTagName("RdPiano"))
-    {
-      masterTune = xmlState->getIntAttribute("masterTune", 0);
-      currentPatch = xmlState->getIntAttribute("currentPatch", 0);
-      *volume = (float)xmlState->getDoubleAttribute("volume", 1.0);
-      *chorusEnabled = (bool)xmlState->getBoolAttribute("chorusEnabled", true);
-      *chorusRate = (int)xmlState->getIntAttribute("chorusRate", 1);
-      *chorusDepth = (int)xmlState->getIntAttribute("chorusDepth", 3);
-      *tremoloEnabled =
-          (bool)xmlState->getBoolAttribute("tremoloEnabled", false);
-      *tremoloRate = (int)xmlState->getIntAttribute("tremoloRate", 6);
-      *tremoloDepth = (int)xmlState->getIntAttribute("tremoloDepth", 6);
-      *efxEnabled = (bool)xmlState->getBoolAttribute("efxEnabled", false);
-      *efxPhaserRate =
-          (float)xmlState->getDoubleAttribute("efxPhaserRate", 0.4);
-      *efxPhaserDepth =
-          (float)xmlState->getDoubleAttribute("efxPhaserDepth", 0.8);
-    }
+    juce::RangedAudioParameter &p = param((RdParamId)i);
+    p.setValueNotifyingHost(p.getDefaultValue());
   }
 
-  if (currentPatch < 0 || currentPatch >= getNumPrograms())
-    currentPatch = 0;
-  if (*volume < 0 || *volume > 1)
-    *volume = 1;
-  if (*chorusRate > 14)
-    *chorusRate = 1;
-  if (*chorusDepth > 14)
-    *chorusDepth = 3;
-  if (*tremoloRate > 14)
-    *tremoloRate = 6;
-  if (*tremoloDepth > 14)
-    *tremoloDepth = 6;
-  if (*efxPhaserRate > 1)
-    *efxPhaserRate = 0.4;
-  if (*efxPhaserDepth > 1)
-    *efxPhaserDepth = 0.8;
+  juce::ValueTree state = juce::ValueTree::fromXml(*xml);
+  apvts.replaceState(state);
 
-  setMasterTune(masterTune);
+  setMasterTune((int16_t)(int)state.getProperty("masterTune", 0));
 
-  mcuLock.enter();
-  engine->setPatch(currentPatch);
-  mcuLock.exit();
+  int patch = state.getProperty("currentPatch", 0);
+  if (patch < 0 || patch >= getNumPrograms())
+    patch = 0;
+  setCurrentProgram(patch);
 }
 
 //==============================================================================

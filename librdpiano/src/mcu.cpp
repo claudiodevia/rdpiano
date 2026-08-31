@@ -320,11 +320,9 @@ const u8 Mcu::cycles_63701[256] =
 // Las permutaciones de pines de las ROM viven en rom_loader.h.
 
 Mcu::Mcu(const u8 *temp_ic5, const u8 *temp_ic6, const u8 *temp_ic7, const u8 *temp_progrom, const u8 *temp_paramsrom)
-    : sound_chip(temp_ic5, temp_ic6, temp_ic7)
+    : board(temp_ic5, temp_ic6, temp_ic7, temp_progrom, temp_paramsrom)
 {
-  decode_program_rom(program_rom, temp_progrom);
-
-  loadSounds(temp_ic5, temp_ic6, temp_ic7, temp_paramsrom, 0x00);
+  board.attach(this);
 }
 
 void Mcu::reset()
@@ -473,10 +471,10 @@ void Mcu::execute_set_input(int irqline, int state)
 
 void Mcu::execute_run()
 {
-  if (!command_port.queue().empty())
+  if (!board.commandPort().queue().empty())
     execute_set_input(M6801_TIN_LINE, ASSERT_LINE);
 
-  if (sound_chip.m_irq_triggered)
+  if (board.soundChip().m_irq_triggered)
     execute_set_input(0, ASSERT_LINE);
   check_irq_lines();
 
@@ -510,141 +508,44 @@ void Mcu::tcsr_w(u8 data)
   check_irq_lines();
 }
 
-u8 Mcu::read_byte(u16 addr)
+// Los registros internos del chip que caen dentro de 0x0000-0x001F. La placa
+// se queda con los dos puertos del bus de comandos y le pasa el resto a esto;
+// lo que la CPU no reconoce vale 0xFF, igual que antes de partir el mapa.
+u8 Mcu::readCpuRegister(u16 addr)
 {
-  // program rom
-  if (addr >= 0xc000)
-    return program_rom[(addr - 0xc000) & 0x1fff];
-
-  // port 1 DATA
-  else if (addr == 0x0002)
-  {
-    u8 data_comm_bus = 0xff;
-
-    // HACK: only works with the RD200 ROM (docs/FIRMWARE.md §2)
-    CommandQueue &queue = command_port.queue();
-    if (!queue.empty() && (PCD == 0xE12B || PCD == 0xE15E || PCD == 0xE168))
-    {
-      data_comm_bus = queue.front();
-      queue.pop();
-    }
-
-    RD_TRACE("%04x: read port1 %02x\n", PCD, data_comm_bus);
-    return data_comm_bus;
-  }
-
-  // port 2 CONTROL
-  else if (addr == 0x0003)
-  {
-    RD_TRACE("%04x: read port2\n", PCD);
-
-    // HACK: only works with the RD200 ROM (docs/FIRMWARE.md §2)
-    if (PCD == 0xE15A)
-      return 0xFF;
-    return 0x00;
-  }
-
   // tcsr
-  else if (addr == 0x0008)
+  if (addr == 0x0008)
     return tcsr_r();
-  else if (addr == 0x000d)
+
+  // captura de entrada
+  if (addr == 0x000d)
   {
     if (!(m_pending_tcsr & TCSR_ICF))
       m_tcsr &= ~TCSR_ICF;
     return (m_input_capture >> 0) & 0xff;
   }
-  else if (addr == 0x000e)
+  if (addr == 0x000e)
     return (m_input_capture >> 8) & 0xff;
 
-  else if (addr < 0x20)
-  {
-    RD_TRACE("%04x: unk device read %04x\n", addr, PCD);
-    return 0xFF;
-  }
-
-  // ram
-  else if (addr < 0x1000)
-    return ram[addr];
-
-  // sound chip
-  else if (addr < 0x2000)
-    return sound_chip.read(addr - 0x1000);
-
-  // params rom
-  else if (addr >= 0x4000 && addr <= 0xbfff)
-    return params_rom[(addr - 0x4000) | ((latch_val & 0b11) << 15)];
-
-  RD_TRACE("%04x: unk read %04x\n", PCD, addr);
+  RD_TRACE("%04x: unk device read %04x\n", addr, PCD);
   return 0xFF;
 }
 
-void Mcu::write_byte(u16 addr, u8 data)
+void Mcu::writeCpuRegister(u16 addr, u8 data)
 {
-  // port dir
-  if (addr == 0x0000 || addr == 0x0001)
-  {
-    // noop
-  }
-
-  // port 1 DATA
-  else if (addr == 0x0002)
-  {
-    RD_TRACE("%04x: port1 write %04x=%02x\n", PCD, addr, data);
-  }
-
-  // port 2 CONTROL
-  else if (addr == 0x0003)
-  {
-    RD_TRACE("%04x: port2 write %04x=%02x\n", PCD, addr, data);
-
-    // El bit 2 selecciona la tasa de muestreo en la máquina real, pero aquí
-    // nunca llegó a funcionar: la tasa sale de patchSampleRates[].
-    // Ver docs/FIRMWARE.md §3.
-
-    execute_set_input(M6801_TIN_LINE, CLEAR_LINE);
-  }
-
   // tcsr
-  else if (addr == 0x0008)
+  if (addr == 0x0008)
   {
     tcsr_w(data);
+    return;
   }
 
-  else if (addr < 0x20)
-  {
-    RD_TRACE("%04x unk device write %04x=%02x\n", PCD, addr, data);
-  }
-
-  // ram
-  else if (addr < 0x1000)
-  {
-    ram[addr] = data;
-  }
-
-  // sound chip
-  else if (addr >= 0x1000 && addr < 0x2000)
-  {
-    sound_chip.write(addr - 0x1000, data);
-    RD_TRACE("%04x: SA write %04x=%02x\n", PCD, addr, data);
-
-    if (sound_chip.m_irq_triggered)
-    {
-      sound_chip.m_irq_triggered = false;
-      execute_set_input(0, CLEAR_LINE);
-    }
-  }
-
-  // latch
-  else
-  {
-    latch_val = data;
-    RD_TRACE("latch write %04x=%02x\n", addr, data);
-  }
+  RD_TRACE("%04x unk device write %04x=%02x\n", PCD, addr, data);
 }
 
 s32 Mcu::generate_next_sample(bool sampleRate32)
 {
-  s32 sample = sound_chip.update();
+  s32 sample = board.soundChip().update();
 
   // 20kHz sample rate, 2000kHz CPU clock
   for (size_t cycle = 0; cycle < (sampleRate32 ? 62 : 100); cycle++)
@@ -662,25 +563,25 @@ void Mcu::sendMidiCmd(u8 data1, u8 data2, u8 data3)
   // program change
   if (command == 0xC)
   {
-    command_port.programChange(data2 & 0xF);
+    board.commandPort().programChange(data2 & 0xF);
   }
 
   // note off
   else if (command == 0x8 || (command == 0x9 && data3 == 0))
   {
-    command_port.noteOff(data2);
+    board.commandPort().noteOff(data2);
   }
 
   // note on
   else if (command == 0x9)
   {
-    command_port.noteOn(data2, data3);
+    board.commandPort().noteOn(data2, data3);
   }
 
   // sustain
   else if (command == 0xB && data2 == 64)
   {
-    command_port.sustain(data3 >= 64);
+    board.commandPort().sustain(data3 >= 64);
   }
 }
 
@@ -688,18 +589,18 @@ void Mcu::boot(int16_t masterTune, bool warmupRate32)
 {
   reset();
 
-  command_port.programChange(0);
-  command_port.masterTune(masterTune);
+  board.commandPort().programChange(0);
+  board.commandPort().masterTune(masterTune);
 
   for (size_t sample = 0; sample < 1024; sample++)
     generate_next_sample(warmupRate32);
 
-  command_port.reloadPatch();
+  board.commandPort().reloadPatch();
 }
 
 void Mcu::reloadPatch()
 {
-  command_port.reloadPatch();
+  board.commandPort().reloadPatch();
 }
 
 void Mcu::setMasterTune(int16_t tune)
@@ -707,31 +608,30 @@ void Mcu::setMasterTune(int16_t tune)
   // TODO: hace falta este switcharoo horrible porque cambiar la afinación en
   // parches distintos del 0 no funciona. Corre el emulador, así que el
   // llamante tiene que serializarlo con el hilo de audio.
-  command_port.programChange(0);
+  board.commandPort().programChange(0);
   for (size_t cycle = 0; cycle < 100; cycle++)
     generate_next_sample();
 
-  command_port.masterTune(tune);
+  board.commandPort().masterTune(tune);
   for (size_t cycle = 0; cycle < 100; cycle++)
     generate_next_sample();
 
-  command_port.programChange(0);
+  board.commandPort().programChange(0);
 }
 
 void Mcu::allNotesOff()
 {
-  command_port.allNotesOff();
+  board.commandPort().allNotesOff();
 }
 
 void Mcu::loadRomSet(const u8 *temp_ic5, const u8 *temp_ic6, const u8 *temp_ic7, const u8 *temp_paramsrom)
 {
-  sound_chip.load_samples(temp_ic5, temp_ic6, temp_ic7);
-  params_rom_src = temp_paramsrom;
+  board.loadRomSet(temp_ic5, temp_ic6, temp_ic7, temp_paramsrom);
 }
 
 void Mcu::selectPatch(size_t from_addr)
 {
-  decode_params_page(params_rom, params_rom_src, from_addr);
+  board.selectPatch(from_addr);
 }
 
 void Mcu::loadSounds(const u8 *temp_ic5, const u8 *temp_ic6, const u8 *temp_ic7, const u8 *temp_paramsrom, size_t from_addr)

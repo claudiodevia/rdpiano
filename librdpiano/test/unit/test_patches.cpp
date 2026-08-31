@@ -70,35 +70,38 @@ TEST_SUITE(patches_table)
   CHECK_EQ(names.size(), NUM_PATCHES);
 }
 
-// El plugin no lee de disco: empotra las ROMs como recursos del .jucer. Si una
-// de las dos listas cambia sin la otra, el plugin y las pruebas dejan de estar
-// probando lo mismo.
-TEST_SUITE(patches_jucer_resources)
+// El plugin no lee de disco: empotra las ROMs con `juce_add_binary_data`. Si
+// una de las dos listas cambia sin la otra, el plugin y las pruebas dejan de
+// estar probando lo mismo.
+//
+// Hasta la fase 3 la lista del plugin estaba en `rdpiano_juce.jucer`; desde que
+// no hay Projucer está en su CMakeLists (REFACTORIZACION §16.3).
+TEST_SUITE(patches_plugin_resources)
 {
-  std::string jucerPath = g_roms_dir + "/../rdpiano_juce/rdpiano_juce.jucer";
-  FILE *f = fopen(jucerPath.c_str(), "rb");
+  std::string cmakePath = g_roms_dir + "/../rdpiano_juce/CMakeLists.txt";
+  FILE *f = fopen(cmakePath.c_str(), "rb");
   if (!f)
   {
-    printf("    (nota: %s no encontrado, se omite)\n", jucerPath.c_str());
+    printf("    (nota: %s no encontrado, se omite)\n", cmakePath.c_str());
     return;
   }
 
-  std::string jucer;
+  std::string cmakeText;
   char buf[4096];
   size_t read;
   while ((read = fread(buf, 1, sizeof buf, f)) > 0)
-    jucer.append(buf, read);
+    cmakeText.append(buf, read);
   fclose(f);
 
   for (int set = 0; set < ROMSET_COUNT; set++)
     for (int chip = 0; chip < ROM_CHIP_COUNT; chip++)
       checks.add(std::string("empotrada ") + romSetFiles[set][chip],
-                 jucer.find(std::string("\"../roms/") + romSetFiles[set][chip] +
-                            "\"") != std::string::npos,
-                 "no aparece como recurso del .jucer");
+                 cmakeText.find(std::string("../roms/") +
+                                romSetFiles[set][chip]) != std::string::npos,
+                 "no aparece en juce_add_binary_data");
 
   checks.add(std::string("empotrada ") + PROG_ROM_FILE,
-             jucer.find(std::string("\"../roms/") + PROG_ROM_FILE + "\"") !=
+             cmakeText.find(std::string("../roms/") + PROG_ROM_FILE) !=
                  std::string::npos,
-             "no aparece como recurso del .jucer");
+             "no aparece en juce_add_binary_data");
 }

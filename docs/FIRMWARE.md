@@ -3,7 +3,8 @@
 **Alcance:** qué firmware ejecuta el emulador, por qué solo ese, y qué se sabe de los otros.
 
 Esta nota recoge conocimiento que hasta ahora vivía en forma de código comentado dentro de
-[mcu.cpp](../librdpiano/src/mcu.cpp) y del [.jucer](../rdpiano_juce/rdpiano_juce.jucer). El código
+[mcu.cpp](../librdpiano/src/mcu.cpp) y del `.jucer` (retirado en la fase 3; la lista de ROMs
+empotradas vive ahora en [rdpiano_juce/CMakeLists.txt](../rdpiano_juce/CMakeLists.txt)). El código
 se retiró en la fase 0 del refactor ([REFACTORIZACION §13](REFACTORIZACION.md#13-código-muerto-y-campos-vestigiales));
 lo que sabía, está aquí.
 

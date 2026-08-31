@@ -7,9 +7,22 @@ project(RdPiano VERSION 1.0)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED True)
 
-# ASAN por defecto: es intencional para desarrollo. Apagarlo (-DRDPIANO_SANITIZE=OFF)
-# hace que el harness e2e corra bastante más rápido.
-option(RDPIANO_SANITIZE "Build with AddressSanitizer" ON)
+# ASAN por defecto cuando se configura `librdpiano/` por su cuenta: es
+# intencional para desarrollo. Apagarlo (-DRDPIANO_SANITIZE=OFF) hace que el
+# harness e2e corra bastante más rápido.
+#
+# Desde la raíz del repositorio el defecto es OFF: ese build compila también el
+# plugin, y un producto instrumentado con ASan no es lo que nadie quiere cargar
+# en un DAW. `add_compile_options` es de directorio hacia abajo, así que lo que
+# se enciende aquí no alcanza a `rdpiano_juce/` de todas formas; lo que cambia
+# es a qué se enlaza `librdpiano`.
+if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
+    set(RDPIANO_SANITIZE_DEFAULT ON)
+else()
+    set(RDPIANO_SANITIZE_DEFAULT OFF)
+endif()
+
+option(RDPIANO_SANITIZE "Build with AddressSanitizer" ${RDPIANO_SANITIZE_DEFAULT})
 if (RDPIANO_SANITIZE)
     add_compile_options(-fsanitize=address)
     add_link_options(-fsanitize=address)
@@ -24,11 +37,15 @@ include_directories("include")
 # Ademas del emulador, aqui viven los efectos (lsp/) y el resampler
 # (resample/): son C/C++ puro sin nada de JUCE, y desde la fase 2 el motor de
 # audio los usa (REFACTORIZACION §1). El plugin los compila desde aqui.
-add_library(librdpiano src/mcu.cpp src/sound_chip.cpp src/sa_tables.cpp
+add_library(librdpiano src/mcu.cpp src/rd_board.cpp src/sound_chip.cpp src/sa_tables.cpp
     src/rom_loader.cpp src/command_port.cpp src/rd_trace.cpp
     src/lsp/spaced.cpp src/lsp/phaser.cpp
     src/rd_engine.cpp
     src/resample/resample.c src/resample/filterkit.c src/resample/resamplesubs.c)
+# `include/` es PUBLIC: quien enlaza librdpiano —el plugin desde
+# `rdpiano_juce/`, sin ir más lejos— no tiene por qué saber dónde vive el
+# núcleo en el árbol.
+target_include_directories(librdpiano PUBLIC include)
 target_include_directories(librdpiano PRIVATE src src/resample)
 
 # end-to-end test harness: sin dependencias externas, siempre se compila

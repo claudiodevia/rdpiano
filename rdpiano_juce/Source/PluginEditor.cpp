@@ -9,6 +9,10 @@
 #include "PluginEditor.h"
 #include "PluginProcessor.h"
 
+#include <cmath>
+#include <cstdio>
+#include <cstring>
+
 static int bgWidth = 6140;
 static int bgHeight = 1503;
 static float scaleFactor = 5;
@@ -16,47 +20,184 @@ static int uiWidth = bgWidth / scaleFactor;
 static int uiHeight = bgHeight / scaleFactor;
 
 //==============================================================================
+// El panel entero, en coordenadas del fondo. Es la única copia: el constructor,
+// `resized()`, `buttonClicked()` y `updateValues()` recorren esta tabla.
+typedef RdPiano_juceAudioProcessorEditor Editor;
+
+const Editor::ButtonSpec Editor::buttonSpecs[Editor::kNumButtons] = {
+    // MKS-20 / MK-80: los dos bancos de ocho parches
+    {{2602, 806, 248, 248},
+     {2598, 800, 257, 258},
+     ButtonSpec::kSelectBank,
+     0,
+     kVolume,
+     kModePatch,
+     kModePatch},
+    {{2602, 1068, 248, 248},
+     {2598, 1058, 257, 260},
+     ButtonSpec::kSelectBank,
+     8,
+     kVolume,
+     kModePatch,
+     kModePatch},
+
+    // Los ocho botones de parche, dentro del banco que esté activo
+    {{1504, 806, 250, 248},
+     {1478, 800, 290, 260},
+     ButtonSpec::kSelectPatch,
+     0,
+     kVolume,
+     kModePatch,
+     kModePatch},
+    {{1764, 806, 248, 248},
+     {1759, 800, 262, 260},
+     ButtonSpec::kSelectPatch,
+     1,
+     kVolume,
+     kModePatch,
+     kModePatch},
+    {{2024, 806, 248, 248},
+     {2018, 800, 262, 260},
+     ButtonSpec::kSelectPatch,
+     2,
+     kVolume,
+     kModePatch,
+     kModePatch},
+    {{2284, 806, 248, 248},
+     {2279, 800, 262, 260},
+     ButtonSpec::kSelectPatch,
+     3,
+     kVolume,
+     kModePatch,
+     kModePatch},
+    {{1504, 1068, 250, 248},
+     {1478, 1058, 290, 260},
+     ButtonSpec::kSelectPatch,
+     4,
+     kVolume,
+     kModePatch,
+     kModePatch},
+    {{1764, 1068, 248, 248},
+     {1759, 1058, 262, 260},
+     ButtonSpec::kSelectPatch,
+     5,
+     kVolume,
+     kModePatch,
+     kModePatch},
+    {{2024, 1068, 248, 248},
+     {2018, 1058, 262, 260},
+     ButtonSpec::kSelectPatch,
+     6,
+     kVolume,
+     kModePatch,
+     kModePatch},
+    {{2284, 1068, 248, 248},
+     {2279, 1058, 262, 260},
+     ButtonSpec::kSelectPatch,
+     7,
+     kVolume,
+     kModePatch,
+     kModePatch},
+
+    // TUNE: un único modo, así que entra y sale del mismo (first == second)
+    {{669, 295, 273, 273},
+     {669, 295, 273, 273},
+     ButtonSpec::kCycleModes,
+     0,
+     kVolume,
+     kModeTune,
+     kModeTune},
+
+    // Chorus, trémolo y EFX: on/off arriba, rate/depth abajo
+    {{2917, 806, 248, 248},
+     {2917, 800, 262, 262},
+     ButtonSpec::kToggleParam,
+     0,
+     kChorusEnabled,
+     kModePatch,
+     kModePatch},
+    {{2917, 1068, 248, 248},
+     {2917, 1058, 262, 262},
+     ButtonSpec::kCycleModes,
+     0,
+     kVolume,
+     kModeChorusRate,
+     kModeChorusDepth},
+    {{3229, 806, 248, 248},
+     {3229, 800, 262, 262},
+     ButtonSpec::kToggleParam,
+     0,
+     kTremoloEnabled,
+     kModePatch,
+     kModePatch},
+    {{3229, 1068, 248, 248},
+     {3229, 1058, 262, 262},
+     ButtonSpec::kCycleModes,
+     0,
+     kVolume,
+     kModeTremoloRate,
+     kModeTremoloDepth},
+    {{3547, 806, 248, 248},
+     {3547, 800, 262, 262},
+     ButtonSpec::kToggleParam,
+     0,
+     kEfxEnabled,
+     kModePatch,
+     kModePatch},
+    {{3547, 1068, 248, 248},
+     {3547, 1058, 262, 262},
+     ButtonSpec::kCycleModes,
+     0,
+     kVolume,
+     kModePhaserRate,
+     kModePhaserDepth},
+};
+
+// Las etiquetas ocupan 15 columnas exactas: la fila de arriba es etiqueta más
+// el número del paso alineado a la derecha en dos columnas.
+const Editor::ModeSpec Editor::modeSpecs[Editor::kNumDisplayModes] = {
+    {nullptr, kVolume, false}, // kModePatch
+    {nullptr, kVolume, true},  // kModeTune
+    {"CHORUS RATE    ", kChorusRate, true},
+    {"CHORUS DEPTH   ", kChorusDepth, true},
+    {"TREMOLO RATE   ", kTremoloRate, true},
+    {"TREMOLO DEPTH  ", kTremoloDepth, true},
+    {"PHASER RATE    ", kEfxPhaserRate, false},
+    {"PHASER DEPTH   ", kEfxPhaserDepth, false},
+};
+
+// Los 16 parches como los enseña el display: dos filas de 17. No es
+// `patchNames` de patches.h, que usa el formato corto "MKS-20: Piano 1"
+// (REFACTORIZACION §11 propone unificarlos; no es un paso de esta fase).
+static const char *const displayPatchNames[NUM_PATCHES] = {
+    "MKS-20           Piano 1          ", "MKS-20           Piano 2          ",
+    "MKS-20           Piano 3          ", "MKS-20           Harpsichord      ",
+    "MKS-20           Clavi            ", "MKS-20           Vibraphone       ",
+    "MKS-20           E-Piano 1        ", "MKS-20           E-Piano 2        ",
+    "MK-80            Classic          ", "MK-80            Special          ",
+    "MK-80            Blend            ", "MK-80            Contemporary     ",
+    "MK-80            A. Piano 1       ", "MK-80            A. Piano 2       ",
+    "MK-80            Clavi            ", "MK-80            Vibraphone       "};
+
+// Copia `text` en `line` a partir de `at`, sin salirse de las 34 columnas.
+static void lcdPut(uint8_t (&line)[Lcd::kChars], int at, const char *text)
+{
+  for (int i = 0; text[i] != '\0' && at + i < Lcd::kChars; i++)
+    line[at + i] = (uint8_t)text[i];
+}
+
+//==============================================================================
 RdPiano_juceAudioProcessorEditor::RdPiano_juceAudioProcessorEditor(
     RdPiano_juceAudioProcessor &p)
     : AudioProcessorEditor(&p), audioProcessor(p)
-// , midiMessageTimer(*this)
 {
   addAndMakeVisible(lcd);
 
-  addAndMakeVisible(buttonMks20);
-  addAndMakeVisible(buttonMk80);
-  addAndMakeVisible(button1);
-  addAndMakeVisible(button2);
-  addAndMakeVisible(button3);
-  addAndMakeVisible(button4);
-  addAndMakeVisible(button5);
-  addAndMakeVisible(button6);
-  addAndMakeVisible(button7);
-  addAndMakeVisible(button8);
-  addAndMakeVisible(buttonTune);
-  addAndMakeVisible(buttonChorusOnOff);
-  addAndMakeVisible(buttonChorusParams);
-  addAndMakeVisible(buttonTremoloOnOff);
-  addAndMakeVisible(buttonTremoloParams);
-  addAndMakeVisible(buttonEfxOnOff);
-  addAndMakeVisible(buttonEfxParams);
-  buttonMks20.addListener(this);
-  buttonMk80.addListener(this);
-  button1.addListener(this);
-  button2.addListener(this);
-  button3.addListener(this);
-  button4.addListener(this);
-  button5.addListener(this);
-  button6.addListener(this);
-  button7.addListener(this);
-  button8.addListener(this);
-  buttonTune.addListener(this);
-  buttonChorusOnOff.addListener(this);
-  buttonChorusParams.addListener(this);
-  buttonTremoloOnOff.addListener(this);
-  buttonTremoloParams.addListener(this);
-  buttonEfxOnOff.addListener(this);
-  buttonEfxParams.addListener(this);
+  for (int i = 0; i < kNumButtons; i++)
+  {
+    addAndMakeVisible(buttons[i]);
+    buttons[i].addListener(this);
+  }
 
   addAndMakeVisible(alphaDial);
   alphaDial.setLookAndFeel(&knobLF);
@@ -93,41 +234,14 @@ void RdPiano_juceAudioProcessorEditor::resized()
   lcd.setBounds((1984 + 60) / sfC, (272 + 50) / sfC, (4 + 1394 - 60 * 2) / sfC,
                 (4 + 309 - 40 * 2) / sfC);
 
-  buttonMks20.setBounds(2602 / sfC, 806 / sfC, 248 / sfC, 248 / sfC);
-  buttonMk80.setBounds(2602 / sfC, 1068 / sfC, 248 / sfC, 248 / sfC);
-  button1.setBounds(1504 / sfC, 806 / sfC, 250 / sfC, 248 / sfC);
-  button2.setBounds(1764 / sfC, 806 / sfC, 248 / sfC, 248 / sfC);
-  button3.setBounds(2024 / sfC, 806 / sfC, 248 / sfC, 248 / sfC);
-  button4.setBounds(2284 / sfC, 806 / sfC, 248 / sfC, 248 / sfC);
-  button5.setBounds(1504 / sfC, 1068 / sfC, 250 / sfC, 248 / sfC);
-  button6.setBounds(1764 / sfC, 1068 / sfC, 248 / sfC, 248 / sfC);
-  button7.setBounds(2024 / sfC, 1068 / sfC, 248 / sfC, 248 / sfC);
-  button8.setBounds(2284 / sfC, 1068 / sfC, 248 / sfC, 248 / sfC);
-  buttonTune.setBounds(669 / sfC, 295 / sfC, 273 / sfC, 273 / sfC);
-  buttonChorusOnOff.setBounds(2917 / sfC, 806 / sfC, 248 / sfC, 248 / sfC);
-  buttonChorusParams.setBounds(2917 / sfC, 1068 / sfC, 248 / sfC, 248 / sfC);
-  buttonTremoloOnOff.setBounds(3229 / sfC, 806 / sfC, 248 / sfC, 248 / sfC);
-  buttonTremoloParams.setBounds(3229 / sfC, 1068 / sfC, 248 / sfC, 248 / sfC);
-  buttonEfxOnOff.setBounds(3547 / sfC, 806 / sfC, 248 / sfC, 248 / sfC);
-  buttonEfxParams.setBounds(3547 / sfC, 1068 / sfC, 248 / sfC, 248 / sfC);
-
-  buttonMks20.position(2598, 800, 257, 258, sfC);
-  buttonMk80.position(2598, 1058, 257, 260, sfC);
-  button1.position(1478, 800, 290, 260, sfC);
-  button2.position(1759, 800, 262, 260, sfC);
-  button3.position(2018, 800, 262, 260, sfC);
-  button4.position(2279, 800, 262, 260, sfC);
-  button5.position(1478, 1058, 290, 260, sfC);
-  button6.position(1759, 1058, 262, 260, sfC);
-  button7.position(2018, 1058, 262, 260, sfC);
-  button8.position(2279, 1058, 262, 260, sfC);
-  buttonTune.position(669, 295, 273, 273, sfC);
-  buttonChorusOnOff.position(2917, 800, 262, 262, sfC);
-  buttonChorusParams.position(2917, 1058, 262, 262, sfC);
-  buttonTremoloOnOff.position(3229, 800, 262, 262, sfC);
-  buttonTremoloParams.position(3229, 1058, 262, 262, sfC);
-  buttonEfxOnOff.position(3547, 800, 262, 262, sfC);
-  buttonEfxParams.position(3547, 1058, 262, 262, sfC);
+  for (int i = 0; i < kNumButtons; i++)
+  {
+    const ButtonSpec &spec = buttonSpecs[i];
+    buttons[i].setBounds(spec.bounds[0] / sfC, spec.bounds[1] / sfC,
+                         spec.bounds[2] / sfC, spec.bounds[3] / sfC);
+    buttons[i].position(spec.art[0], spec.art[1], spec.art[2], spec.art[3],
+                        sfC);
+  }
 
   alphaDial.setBounds(
       (204.564) * (6140 / 311.92) / sfC, (24.061) * (6140 / 311.92) / sfC,
@@ -144,7 +258,8 @@ void RdPiano_juceAudioProcessorEditor::paint(juce::Graphics &g)
               getLocalBounds().toFloat());
 
   // Volume
-  float volumeY = 660 / sfC + (1 - *audioProcessor.volume) * (656 - 131) / sfC;
+  float volumeY =
+      660 / sfC + (1 - audioProcessor.paramValue(kVolume)) * (656 - 131) / sfC;
   g.drawImage(juce::ImageCache::getFromMemory(BinaryData::interactable_png,
                                               BinaryData::interactable_pngSize),
               1188 / sfC, volumeY, 100 / sfC, 131 / sfC, 1188, 1179, 100, 131);
@@ -152,186 +267,124 @@ void RdPiano_juceAudioProcessorEditor::paint(juce::Graphics &g)
 
 void RdPiano_juceAudioProcessorEditor::buttonClicked(juce::Button *button)
 {
-  bool prevTuneMode = tuneMode;
-  bool prevChorusRateMode = chorusRateMode;
-  bool prevChorusDepthMode = chorusDepthMode;
-  bool prevTremoloRateMode = tremoloRateMode;
-  bool prevTremoloDepthMode = tremoloDepthMode;
-  // bool prevEfxPhaserOnOffMode = efxPhaserOnOffMode;
-  bool prevEfxPhaserDepthMode = efxPhaserDepthMode;
-  bool prevEfxPhaserRateMode = efxPhaserRateMode;
+  for (int i = 0; i < kNumButtons; i++)
+  {
+    if (button != &buttons[i])
+      continue;
 
-  tuneMode = false;
-  chorusRateMode = false;
-  chorusDepthMode = false;
-  tremoloRateMode = false;
-  tremoloDepthMode = false;
-  // efxPhaserOnOffMode = false;
-  efxPhaserRateMode = false;
-  efxPhaserDepthMode = false;
-  if (button == &buttonMks20)
-  {
-    audioProcessor.setCurrentProgram(0);
-  }
-  else if (button == &buttonMk80)
-  {
-    audioProcessor.setCurrentProgram(8);
-  }
-  else if (button == &button1)
-  {
-    audioProcessor.setCurrentProgram(
-        0 + (audioProcessor.currentPatch >= 8 ? 8 : 0));
-  }
-  else if (button == &button2)
-  {
-    audioProcessor.setCurrentProgram(
-        1 + (audioProcessor.currentPatch >= 8 ? 8 : 0));
-  }
-  else if (button == &button3)
-  {
-    audioProcessor.setCurrentProgram(
-        2 + (audioProcessor.currentPatch >= 8 ? 8 : 0));
-  }
-  else if (button == &button4)
-  {
-    audioProcessor.setCurrentProgram(
-        3 + (audioProcessor.currentPatch >= 8 ? 8 : 0));
-  }
-  else if (button == &button5)
-  {
-    audioProcessor.setCurrentProgram(
-        4 + (audioProcessor.currentPatch >= 8 ? 8 : 0));
-  }
-  else if (button == &button6)
-  {
-    audioProcessor.setCurrentProgram(
-        5 + (audioProcessor.currentPatch >= 8 ? 8 : 0));
-  }
-  else if (button == &button7)
-  {
-    audioProcessor.setCurrentProgram(
-        6 + (audioProcessor.currentPatch >= 8 ? 8 : 0));
-  }
-  else if (button == &button8)
-  {
-    audioProcessor.setCurrentProgram(
-        7 + (audioProcessor.currentPatch >= 8 ? 8 : 0));
-  }
-  else if (button == &buttonTune)
-  {
-    tuneMode = !prevTuneMode;
-    updateValues();
-  }
-  else if (button == &buttonChorusOnOff)
-  {
-    *audioProcessor.chorusEnabled = !*audioProcessor.chorusEnabled;
-    updateValues();
-  }
-  else if (button == &buttonChorusParams)
-  {
-    if (!prevChorusRateMode && !prevChorusDepthMode)
-      chorusRateMode = true;
-    else if (prevChorusRateMode)
-      chorusDepthMode = true;
-    else if (prevChorusDepthMode)
+    const ButtonSpec &spec = buttonSpecs[i];
+    const DisplayMode previous = mode;
+
+    // Cualquier pulsación saca del modo en el que estuviera el display; sólo
+    // kCycleModes vuelve a entrar en uno.
+    mode = kModePatch;
+
+    switch (spec.action)
     {
-      chorusRateMode = false;
-      chorusDepthMode = false;
+    case ButtonSpec::kSelectBank:
+      audioProcessor.setCurrentProgram(spec.value);
+      break;
+
+    case ButtonSpec::kSelectPatch:
+      audioProcessor.setCurrentProgram(
+          spec.value + (audioProcessor.currentPatch >= 8 ? 8 : 0));
+      break;
+
+    case ButtonSpec::kToggleParam:
+      audioProcessor.setParamValue(
+          spec.param,
+          audioProcessor.paramValue(spec.param) >= 0.5f ? 0.0f : 1.0f);
+      updateValues();
+      break;
+
+    case ButtonSpec::kCycleModes:
+      // ninguno -> first -> second -> ninguno. Con first == second (TUNE) la
+      // segunda posición no existe y el ciclo es de dos.
+      if (previous != spec.first && previous != spec.second)
+        mode = spec.first;
+      else if (previous == spec.first && spec.second != spec.first)
+        mode = spec.second;
+      updateValues();
+      break;
     }
-    updateValues();
-  }
-  else if (button == &buttonTremoloOnOff)
-  {
-    *audioProcessor.tremoloEnabled = !*audioProcessor.tremoloEnabled;
-    updateValues();
-  }
-  else if (button == &buttonTremoloParams)
-  {
-    if (!prevTremoloRateMode && !prevTremoloDepthMode)
-      tremoloRateMode = true;
-    else if (prevTremoloRateMode)
-      tremoloDepthMode = true;
-    else if (prevTremoloDepthMode)
-    {
-      tremoloRateMode = false;
-      tremoloDepthMode = false;
-    }
-    updateValues();
-  }
-  else if (button == &buttonEfxOnOff)
-  {
-    *audioProcessor.efxEnabled = !*audioProcessor.efxEnabled;
-    updateValues();
-  }
-  else if (button == &buttonEfxParams)
-  {
-    if (!prevEfxPhaserRateMode && !prevEfxPhaserDepthMode)
-      efxPhaserRateMode = true;
-    else if (prevEfxPhaserRateMode)
-      efxPhaserDepthMode = true;
-    else if (prevEfxPhaserDepthMode)
-    {
-      efxPhaserRateMode = false;
-      efxPhaserDepthMode = false;
-    }
-    updateValues();
+
+    return;
   }
 }
 
-void RdPiano_juceAudioProcessorEditor::sliderValueChanged(
-    juce::Slider *slider)
+// El paso 0..14 que enseña el display para el parámetro de este modo. Se
+// calcula sobre el valor normalizado, así que sirve igual para los rangos
+// enteros 0..14 del chorus y del trémolo y para los 0..1 continuos del phaser.
+int RdPiano_juceAudioProcessorEditor::paramStep(DisplayMode m) const
 {
-  if (slider == &alphaDial)
+  const RdParamId id = modeSpecs[m].param;
+  const float normalised =
+      audioProcessor.param(id).convertTo0to1(audioProcessor.paramValue(id));
+  return juce::jlimit(0, kParamSteps - 1,
+                      juce::roundToInt(normalised * (kParamSteps - 1)));
+}
+
+// "ETIQUETA        7" / " ______█________ ": la línea de parámetro que antes
+// se escribía seis veces, una por modo.
+void RdPiano_juceAudioProcessorEditor::renderParamLine(
+    uint8_t (&line)[Lcd::kChars], const ModeSpec &spec, int step) const
+{
+  memset(line, ' ', Lcd::kChars);
+  lcdPut(line, 0, spec.label);
+
+  char number[4];
+  snprintf(number, sizeof number, "%2d", step + 1);
+  lcdPut(line, Lcd::kColumns - 2, number);
+
+  for (int i = 0; i < kParamSteps; i++)
+    line[Lcd::kColumns + 1 + i] = '_';
+
+  // El marcador es el carácter 0xff del juego del display. Antes viajaba
+  // dentro de una `juce::String`, que lo codificaba como dos bytes de UTF-8 y
+  // lo rompía (AUDITORIA §13); aquí la línea es un búfer de bytes.
+  line[Lcd::kColumns + 1 + step] = 0xff;
+}
+
+void RdPiano_juceAudioProcessorEditor::sliderValueChanged(juce::Slider *slider)
+{
+  if (slider == &volumeSlider)
   {
-    if (tuneMode)
-    {
-      audioProcessor.setMasterTune(alphaDial.getValue() * 32767.0);
-    }
-    else if (chorusRateMode)
-    {
-      *audioProcessor.chorusRate =
-          floor((alphaDial.getValue() / 2.0 + 0.5) * 14.0);
-      updateValues();
-    }
-    else if (chorusDepthMode)
-    {
-      *audioProcessor.chorusDepth =
-          floor((alphaDial.getValue() / 2.0 + 0.5) * 14.0);
-      updateValues();
-    }
-    else if (tremoloRateMode)
-    {
-      *audioProcessor.tremoloRate =
-          floor((alphaDial.getValue() / 2.0 + 0.5) * 14.0);
-      updateValues();
-    }
-    else if (tremoloDepthMode)
-    {
-      *audioProcessor.tremoloDepth =
-          floor((alphaDial.getValue() / 2.0 + 0.5) * 14.0);
-      updateValues();
-    }
-    else if (efxPhaserRateMode)
-    {
-      *audioProcessor.efxPhaserRate =
-          juce::jmin(juce::jmax(alphaDial.getValue(), 0.0), 1.0);
-      updateValues();
-    }
-    else if (efxPhaserDepthMode)
-    {
-      *audioProcessor.efxPhaserDepth =
-          juce::jmin(juce::jmax(alphaDial.getValue(), 0.0), 1.0);
-      updateValues();
-    }
-    else
-    {
-      audioProcessor.setCurrentProgram((alphaDial.getValue() + 1) * 8);
-    }
+    audioProcessor.setParamValue(kVolume, (float)volumeSlider.getValue());
+    return;
   }
-  else if (slider == &volumeSlider)
+
+  if (slider != &alphaDial)
+    return;
+
+  const double value = alphaDial.getValue(); // -1..1
+
+  if (mode == kModePatch)
   {
-    *audioProcessor.volume = volumeSlider.getValue();
+    audioProcessor.setCurrentProgram((int)((value + 1) * 8));
+    return;
   }
+
+  if (mode == kModeTune)
+  {
+    audioProcessor.setMasterTune((int16_t)(value * 32767.0));
+    return;
+  }
+
+  // Los seis modos de parámetro comparten el mapeo del dial: -1..1 repartido
+  // en los 15 pasos que enseña el display.
+  //
+  // Antes no era así: los cuatro modos enteros usaban este reparto y los dos
+  // del phaser escribían `jlimit(dial, 0, 1)` mientras el display los volvía a
+  // leer como paso/14, de modo que la mitad izquierda del dial daba 0 y la
+  // aguja saltaba al soltar. Unificarlo es el objetivo del refactor y arregla
+  // esa asimetría.
+  const int step =
+      juce::jlimit(0, kParamSteps - 1,
+                   (int)std::floor((value / 2.0 + 0.5) * (kParamSteps - 1)));
+  const RdParamId id = modeSpecs[mode].param;
+  audioProcessor.setParamValue(id, audioProcessor.param(id).convertFrom0to1(
+                                       (float)step / (kParamSteps - 1)));
+  updateValues();
 }
 
 void RdPiano_juceAudioProcessorEditor::visibilityChanged() { updateValues(); }
@@ -342,134 +395,72 @@ void RdPiano_juceAudioProcessorEditor::changeListenerCallback(
   updateValues();
 }
 
-const char *displayPatchNames[] = {
-    "MKS-20           Piano 1          ", "MKS-20           Piano 2          ",
-    "MKS-20           Piano 3          ", "MKS-20           Harpsichord      ",
-    "MKS-20           Clavi            ", "MKS-20           Vibraphone       ",
-    "MKS-20           E-Piano 1        ", "MKS-20           E-Piano 2        ",
-    "MK-80            Classic          ", "MK-80            Special          ",
-    "MK-80            Blend            ", "MK-80            Contemporary     ",
-    "MK-80            A. Piano 1       ", "MK-80            A. Piano 2       ",
-    "MK-80            Clavi            ", "MK-80            Vibraphone       "};
-
 void RdPiano_juceAudioProcessorEditor::updateValues()
 {
-  bool alternativeMode = tuneMode || chorusRateMode || chorusDepthMode ||
-                         tremoloRateMode || tremoloDepthMode;
+  const int patch = audioProcessor.currentPatch;
+  const bool alternativeMode = modeSpecs[mode].countsAsAlternative;
 
-  buttonMks20.enabled = !alternativeMode && audioProcessor.currentPatch < 8;
-  buttonMk80.enabled = !alternativeMode && audioProcessor.currentPatch >= 8;
-  buttonMks20.enabled = !alternativeMode && audioProcessor.currentPatch < 8;
-  buttonMk80.enabled = !alternativeMode && audioProcessor.currentPatch >= 8;
+  for (int i = 0; i < kNumButtons; i++)
+  {
+    const ButtonSpec &spec = buttonSpecs[i];
+    bool lit = false;
 
-  button1.enabled = !alternativeMode && audioProcessor.currentPatch % 8 == 0;
-  button2.enabled = !alternativeMode && audioProcessor.currentPatch % 8 == 1;
-  button3.enabled = !alternativeMode && audioProcessor.currentPatch % 8 == 2;
-  button4.enabled = !alternativeMode && audioProcessor.currentPatch % 8 == 3;
-  button5.enabled = !alternativeMode && audioProcessor.currentPatch % 8 == 4;
-  button6.enabled = !alternativeMode && audioProcessor.currentPatch % 8 == 5;
-  button7.enabled = !alternativeMode && audioProcessor.currentPatch % 8 == 6;
-  button8.enabled = !alternativeMode && audioProcessor.currentPatch % 8 == 7;
+    switch (spec.action)
+    {
+    case ButtonSpec::kSelectBank:
+      lit = !alternativeMode && (spec.value == 0 ? patch < 8 : patch >= 8);
+      break;
 
-  buttonTune.enabled = tuneMode;
-  buttonChorusOnOff.enabled = *audioProcessor.chorusEnabled;
-  buttonChorusParams.enabled = chorusRateMode || chorusDepthMode;
-  buttonTremoloOnOff.enabled = *audioProcessor.tremoloEnabled;
-  buttonTremoloParams.enabled = tremoloRateMode || tremoloDepthMode;
-  buttonEfxOnOff.enabled = *audioProcessor.efxEnabled;
-  buttonEfxParams.enabled =
-      efxPhaserOnOffMode || efxPhaserRateMode || efxPhaserDepthMode;
+    case ButtonSpec::kSelectPatch:
+      lit = !alternativeMode && patch % 8 == spec.value;
+      break;
 
-  if (tuneMode)
-  {
-    juce::String tuningString =
-        "TUNING           " +
-        juce::String(442.0 + audioProcessor.masterTune / 32767.0 * 3.85, 1) +
-        "Hz          ";
-    lcd.setText(tuningString);
-    alphaDial.setValue(audioProcessor.masterTune / 32767.0,
-                       juce::dontSendNotification);
+    case ButtonSpec::kToggleParam:
+      lit = audioProcessor.paramValue(spec.param) >= 0.5f;
+      break;
+
+    case ButtonSpec::kCycleModes:
+      lit = mode == spec.first || mode == spec.second;
+      break;
+    }
+
+    buttons[i].enabled = lit;
   }
-  else if (chorusRateMode)
+
+  uint8_t line[Lcd::kChars];
+  double dial = 0;
+
+  if (mode == kModePatch)
   {
-    juce::String paramString =
-        "CHORUS RATE    " +
-        (*audioProcessor.chorusRate < 9 ? juce::String(" ")
-                                        : juce::String("")) +
-        juce::String(*audioProcessor.chorusRate + 1) + " _______________ ";
-    paramString = paramString.replaceSection(
-        17 + 1 + *audioProcessor.chorusRate, 1, "\xff");
-    lcd.setText(paramString);
-    alphaDial.setValue((*audioProcessor.chorusRate / 14.0) * 2.0 - 1.0,
-                       juce::dontSendNotification);
+    memset(line, ' ', Lcd::kChars);
+    if (patch >= 0 && patch < NUM_PATCHES)
+      lcdPut(line, 0, displayPatchNames[patch]);
+    dial = patch / 16.0 * 2.0 - 1.0;
   }
-  else if (chorusDepthMode)
+  else if (mode == kModeTune)
   {
-    juce::String paramString =
-        "CHORUS DEPTH   " +
-        (*audioProcessor.chorusDepth < 9 ? juce::String(" ")
-                                         : juce::String("")) +
-        juce::String(*audioProcessor.chorusDepth + 1) + " _______________ ";
-    paramString = paramString.replaceSection(
-        17 + 1 + *audioProcessor.chorusDepth, 1, "\xff");
-    lcd.setText(paramString);
-    alphaDial.setValue((*audioProcessor.chorusDepth / 14.0) * 2.0 - 1.0,
-                       juce::dontSendNotification);
-  }
-  else if (tremoloRateMode)
-  {
-    juce::String paramString =
-        "TREMOLO RATE   " +
-        (*audioProcessor.tremoloRate < 9 ? juce::String(" ")
-                                         : juce::String("")) +
-        juce::String(*audioProcessor.tremoloRate + 1) + " _______________ ";
-    paramString = paramString.replaceSection(
-        17 + 1 + *audioProcessor.tremoloRate, 1, "\xff");
-    lcd.setText(paramString);
-    alphaDial.setValue((*audioProcessor.tremoloRate / 14.0) * 2.0 - 1.0,
-                       juce::dontSendNotification);
-  }
-  else if (tremoloDepthMode)
-  {
-    juce::String paramString =
-        "TREMOLO DEPTH  " +
-        (*audioProcessor.tremoloDepth < 9 ? juce::String(" ")
-                                          : juce::String("")) +
-        juce::String(*audioProcessor.tremoloDepth + 1) + " _______________ ";
-    paramString = paramString.replaceSection(
-        17 + 1 + *audioProcessor.tremoloDepth, 1, "\xff");
-    lcd.setText(paramString);
-    alphaDial.setValue((*audioProcessor.tremoloDepth / 14.0) * 2.0 - 1.0,
-                       juce::dontSendNotification);
-  }
-  else if (efxPhaserRateMode)
-  {
-    int value = *audioProcessor.efxPhaserRate * 14;
-    juce::String paramString =
-        "PHASER RATE    " + (value < 9 ? juce::String(" ") : juce::String("")) +
-        juce::String(value + 1) + " _______________ ";
-    paramString = paramString.replaceSection(17 + 1 + value, 1, "\xff");
-    lcd.setText(paramString);
-    alphaDial.setValue((value / 14.0) * 2.0 - 1.0, juce::dontSendNotification);
-  }
-  else if (efxPhaserDepthMode)
-  {
-    int value = *audioProcessor.efxPhaserDepth * 14;
-    juce::String paramString =
-        "PHASER DEPTH   " + (value < 9 ? juce::String(" ") : juce::String("")) +
-        juce::String(value + 1) + " _______________ ";
-    paramString = paramString.replaceSection(17 + 1 + value, 1, "\xff");
-    lcd.setText(paramString);
-    alphaDial.setValue((value / 14.0) * 2.0 - 1.0, juce::dontSendNotification);
+    // 442 Hz de referencia y +/-3,85 Hz de recorrido: es lo que abarca el
+    // parámetro de afinación del firmware.
+    const juce::String hz(442.0 + audioProcessor.masterTune / 32767.0 * 3.85,
+                          1);
+
+    memset(line, ' ', Lcd::kChars);
+    lcdPut(line, 0, "TUNING");
+    lcdPut(line, Lcd::kColumns, hz.toRawUTF8());
+    lcdPut(line, Lcd::kColumns + hz.length(), "Hz");
+    dial = audioProcessor.masterTune / 32767.0;
   }
   else
   {
-    lcd.setText(displayPatchNames[audioProcessor.currentPatch]);
-    alphaDial.setValue(audioProcessor.currentPatch / 16.0 * 2.0 - 1,
-                       juce::dontSendNotification);
+    const int step = paramStep(mode);
+    renderParamLine(line, modeSpecs[mode], step);
+    dial = step / (double)(kParamSteps - 1) * 2.0 - 1.0;
   }
 
-  volumeSlider.setValue(*audioProcessor.volume, juce::dontSendNotification);
+  lcd.setText(line);
+  alphaDial.setValue(dial, juce::dontSendNotification);
+  volumeSlider.setValue(audioProcessor.paramValue(kVolume),
+                        juce::dontSendNotification);
 
   this->repaint();
 }

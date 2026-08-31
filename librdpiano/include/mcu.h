@@ -1,27 +1,16 @@
 #ifndef MCU_H
 #define MCU_H
 
-#include "command_port.h"
 #include "mame_utils.h"
-#include "rom_loader.h"
-#include "sound_chip.h"
+#include "rd_board.h"
 
-enum
-{
-	M6800_IRQ_LINE = 0, // IRQ line number
-
-	M6800_LINE_MAX
-};
-enum
-{
-	M6801_TIN_LINE = M6800_LINE_MAX, // P20/TIN Input Capture line (edge sense). Active edge is selectable by internal reg.
-	M6801_IS3_LINE,					 // SC1/IOS/IS3 (P54/IS on HD6301Y)
-	M6801_STBY_LINE,				 // STBY pin, or internal standby
-
-	M6801_LINE_MAX
-};
-
-class Mcu
+// El core HD63701 (derivado de MAME, trampa 5 de CLAUDE.md) mas la placa a la
+// que esta soldado. Desde la fase 3 el mapa de memoria no esta aqui: vive en
+// `RdBoard` (REFACTORIZACION §2). Lo que queda en este fichero es CPU —el
+// juego de instrucciones, el temporizador y las lineas de interrupcion— y el
+// protocolo del firmware, que corre la CPU entre mensajes y por eso no cabe
+// en `CommandPort`.
+class Mcu : public RdBoardCpu
 {
 public:
 	Mcu(const u8 *temp_ic5, const u8 *temp_ic6, const u8 *temp_ic7, const u8 *temp_progrom, const u8 *temp_paramsrom);
@@ -85,20 +74,20 @@ public:
 	void loadSounds(const u8 *temp_ic5, const u8 *temp_ic6, const u8 *temp_ic7, const u8 *temp_paramsrom, size_t from_addr);
 	void reset();
 
+	// --- RdBoardCpu: lo que la placa necesita de la CPU ---
+	u32 programCounter() const override { return m_pc.d; }
+	void setInputLine(int line, int state) override { execute_set_input(line, state); }
+	u8 readCpuRegister(u16 addr) override;
+	void writeCpuRegister(u16 addr, u8 data) override;
+
 private:
-	// Board specific
-	u8 read_byte(u16 addr);
-	void write_byte(u16 addr, u8 data);
+	// El bus. `read_byte`/`write_byte` son los nombres que usan las macros RM/WM
+	// del core de MAME: se dejan como reenvio de una linea para no tocar
+	// mcu_ops.h.
+	RdBoard board;
 
-	SoundChip sound_chip;
-	CommandPort command_port;
-
-	u8 latch_val = 0x00;
-	u8 program_rom[PROG_ROM_BYTES];
-	u8 params_rom[PARAMS_ROM_BYTES];
-	// ROM de params sin descifrar, propiedad del llamante de loadRomSet().
-	const u8 *params_rom_src = nullptr;
-	u8 ram[0x1000] = {0}; // el mapa solo direcciona 0x0000-0x0FFF
+	u8 read_byte(u16 addr) { return board.read(addr); }
+	void write_byte(u16 addr, u8 data) { board.write(addr, data); }
 
 	// Generic CPU
 	void take_trap();

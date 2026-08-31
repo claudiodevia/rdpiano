@@ -16,13 +16,15 @@ Todas las medidas de esta página se tomaron en esta máquina, con las ROM del r
 0 comprobaciones fallidas, 0 hashes distintos del golden, 3,5 s. Ese es el suelo contra el que se
 mide cualquier refactor de esta lista.
 
-**Estado: las [fases 0, 1 y 2](#19-plan-por-fases) están hechas.** La fase 0 en `limpieza`,
+**Estado: las [fases 0, 1, 2 y 3](#19-plan-por-fases) están hechas.** La fase 0 en `limpieza`,
 `c1408e0..ff87048`. Los apartados que cubrieron llevan una nota al principio diciendo qué cambió;
 el texto que sigue a la nota describe el estado anterior, que es lo que explica por qué se tocó.
-**Los 16 hashes del golden no se movieron en ninguna de las tres fases**: ni la extracción de
-IC19/IC9/IC8 (fase 1) ni la del motor (fase 2) tocan el emulador, que es lo único que el harness
-mide. La fase 2 **sí cambia el audio del producto**, a propósito y sólo donde arregla un defecto
-catalogado — el golden no lo ve, y por eso la red de la cadena es `test_engine.cpp`.
+**Los 16 hashes del golden no se movieron en ninguna de las cuatro fases**: ni la extracción de
+IC19/IC9/IC8 (fase 1), ni la del motor (fase 2), ni la de la placa (fase 3) tocan la aritmética del
+emulador, que es lo único que el harness mide. La fase 2 **sí cambia el audio del producto**, a
+propósito y sólo donde arregla un defecto catalogado — el golden no lo ve, y por eso la red de la
+cadena es `test_engine.cpp`. La fase 3 no cambia el audio en ningún sitio; lo que cambia es cómo se
+guarda un preset, cómo responde el dial del phaser y de dónde sale el binario.
 
 ---
 
@@ -31,26 +33,27 @@ catalogado — el golden no lo ve, y por eso la red de la cadena es `test_engine
 | # | Tema | Impacto | Esfuerzo | Estado | Ubicación |
 |---|---|---|---|---|---|
 | 1 | No existe frontera *motor de audio* ↔ *plugin*: toda la cadena vive dentro de `processBlock` | **Alto** — bloquea toda prueba automática de la cadena real | Alto | ✔ Fase 2 | [PluginProcessor.cpp:367-575](../rdpiano_juce/Source/PluginProcessor.cpp#L367-L575)  |
-| 2 | `Mcu` acumula cuatro responsabilidades (CPU, placa, protocolo, ROMs) | **Alto** — cambiar una toca las otras | Alto | Parcial (fase 1: protocolo y ROMs, fuera; falta separar CPU y placa) | [mcu.cpp](../librdpiano/src/mcu.cpp)  |
+| 2 | `Mcu` acumula cuatro responsabilidades (CPU, placa, protocolo, ROMs) | **Alto** — cambiar una toca las otras | Alto | **Hecho** (fases 1 y 3) | [rd_board.h](../librdpiano/include/rd_board.h)  |
 | 3 | El protocolo del firmware (`0x30/0x31/0xE0/0x50…`) está esparcido por tres capas vía `commands_queue` pública | **Alto** — 22 `push` de bytes crudos fuera del núcleo | Medio | **Hecho** (fase 1) | [command_port.h](../librdpiano/include/command_port.h)  |
 | 4 | 320 KB de LUT deterministas se recalculan por instancia: **15,8 ms** y memoria duplicada | **Alto** | Bajo | **Hecho** (fase 1, opción 1) | [sa_tables.h](../librdpiano/include/sa_tables.h)  |
 | 5 | `SoundChip::update()`: 135 líneas, tres bloques anónimos con estado compartido por variables sueltas | Medio — es el código más delicado del proyecto | Bajo | **Hecho** (fase 1) | [sa_blocks.h](../librdpiano/include/sa_blocks.h)  |
 | 6 | `loadSounds()` hace dos cosas: recargar wave ROM (2,06 ms) y reubicar el parche (0,8 ms) | Medio — el 72 % del coste sobra al cambiar de parche dentro del mismo set | Bajo | **Hecho** (fase 1) | [rom_loader.h](../librdpiano/include/rom_loader.h)  |
 | 7 | 188 KB por instancia en buffers que no hacen falta (`ram` 16× sobredimensionada, `params_rom_tmp` temporal como miembro) | Medio | Bajo | **Hecho** (fase 0) | [mcu.h:52-56](../librdpiano/include/mcu.h#L52-L56)  |
 | 8 | `processBlock` hace ocho trabajos distintos en una función | Medio | Medio | **Hecho** (fase 2) | [rd_engine.cpp](../librdpiano/src/rd_engine.cpp)  |
-| 9 | Parámetros a mano (punteros públicos + XML manual + `sendChangeMessage`) en vez de `APVTS` | Medio — ~120 líneas repetidas y estado que se puede desincronizar | Medio | Pendiente | [PluginProcessor.h:66-113](../rdpiano_juce/Source/PluginProcessor.h#L66-L113)  |
-| 10 | `PluginEditor`: 17 botones y 6 modos de parámetro escritos a mano uno por uno | Medio — ~250 de 413 líneas son copia-pega | Medio | Pendiente | [PluginEditor.cpp](../rdpiano_juce/Source/PluginEditor.cpp)  |
+| 9 | Parámetros a mano (punteros públicos + XML manual + `sendChangeMessage`) en vez de `APVTS` | Medio — ~120 líneas repetidas y estado que se puede desincronizar | Medio | **Hecho** (fase 3) | [PluginParams.h](../rdpiano_juce/Source/PluginParams.h)  |
+| 10 | `PluginEditor`: 17 botones y 6 modos de parámetro escritos a mano uno por uno | Medio — ~250 de 413 líneas son copia-pega | Medio | **Hecho** (fase 3) | [PluginEditor.cpp](../rdpiano_juce/Source/PluginEditor.cpp)  |
 | 11 | Tablas de datos duplicadas entre plugin, harness y editor (nombres, ROM sets, codificación de tune) | Medio — ya han divergido | Bajo | Parcial (fase 0) | [patches.h](../librdpiano/include/patches.h)  |
 | 12 | `lsp/`: `spaced` y `phaser` repiten tabla, utilidades y acceso a IRAM | Bajo | Bajo | Parcial (fases 0 y 2: movidos al núcleo y congelados por hash; falta `lsp_common.h`) | [spaced.cpp](../librdpiano/src/lsp/spaced.cpp), [phaser.cpp](../librdpiano/src/lsp/phaser.cpp)  |
 | 13 | Código muerto y campos vestigiales (`chorusRateToDepthChange`, `midiMessageCount`, `current_sample_rate`, bloques comentados) | Bajo — pero engaña al lector | Bajo | **Hecho** (fase 0) | varios  |
 | 14 | Propiedad manual: `new`/`delete` crudos, punteros públicos, tipos de 1,4 MB copiables por defecto | Medio | Bajo | **Hecho** (fase 0) | [PluginProcessor.h:82-105](../rdpiano_juce/Source/PluginProcessor.h#L82-L105)  |
 | 15 | El núcleo escribe en `stdout` desde la ruta de audio | Medio — impide usarlo en RT sin parchearlo | Bajo | **Hecho** (fase 1) | [rd_trace.h](../librdpiano/include/rd_trace.h)  |
-| 16 | Dos sistemas de build sin relación; la CI compila pero **no ejecuta** el harness | **Alto** — el golden no protege nada en CI | Medio | Parcial (fases 0 y 1: falta §16.3) | [.jucer](../rdpiano_juce/rdpiano_juce.jucer), [main.yml](../.github/workflows/main.yml)  |
-| 17 | No hay pruebas unitarias: la única red es un test agregado que necesita arrancar el firmware entero | **Alto** — ninguna clase nueva de esta lista nace con algo que la proteja | Medio | Parcial (fases 0-2: 388 comprobaciones, motor incluido) | [test/](../librdpiano/test/)  |
+| 16 | Dos sistemas de build sin relación; la CI compila pero **no ejecuta** el harness | **Alto** — el golden no protege nada en CI | Medio | **Hecho** (fases 0, 1 y 3) | [CMakeLists.txt](../CMakeLists.txt), [main.yml](../.github/workflows/main.yml)  |
+| 17 | No hay pruebas unitarias: la única red es un test agregado que necesita arrancar el firmware entero | **Alto** — ninguna clase nueva de esta lista nace con algo que la proteja | Medio | **Hecho** (fases 0-3: 427 comprobaciones del núcleo + 95 del plugin) | [test/](../librdpiano/test/)  |
 
-Los números 1, 3, 16 y 17 son los que de verdad limitan el proyecto: mientras el motor no exista
-como objeto separado, no haya pruebas por unidad y la CI no ejecute nada, cada cambio se sigue
-validando de oído. El [§17](#17-las-pruebas-que-faltan-una-por-clase) recorre clase por clase qué
+Los números 1, 3, 16 y 17 eran los que de verdad limitaban el proyecto: mientras el motor no
+existiera como objeto separado, no hubiera pruebas por unidad y la CI no ejecutara nada, cada
+cambio se seguía validando de oído. Los cuatro están cerrados; lo que queda en la tabla sin cerrar
+—§11 y §12— es duplicación, no riesgo. El [§17](#17-las-pruebas-que-faltan-una-por-clase) recorre clase por clase qué
 prueba le corresponde a cada refactor de esta tabla: sin eso, mover código de sitio solo cambia el
 sitio.
 
@@ -114,6 +117,17 @@ y deja `rdpiano_juce/Source/` con lo que de verdad es específico del plugin: `P
 ---
 
 ## 2. `Mcu` hace cuatro trabajos
+
+> **Hecho** (fases 1 y 3). La fase 1 sacó el protocolo (`CommandPort`) y las ROM (`RomLoader`); la
+> fase 3, la placa: `RdBoard` ([rd_board.h](../librdpiano/include/rd_board.h)) se lleva el mapa de
+> memoria, la RAM, el latch, el chip de sonido y los dos puertos del bus de comandos. `Mcu` queda
+> como el core HD63701 más un `RdBoard`, y su API pública no cambia: sigue siendo lo que llaman el
+> motor y el harness, ahora reenviando. En vez de la plantilla que proponía la tabla de abajo, el
+> acoplamiento va en la dirección contraria —la placa habla con la CPU por `RdBoardCpu`, tres
+> métodos virtuales que sólo se tocan en los puertos y en los registros del temporizador— y
+> `RdBoard::read`/`write` quedan `inline` en la cabecera: el camino caliente del emulador no paga
+> ni una llamada más. Los 16 hashes del golden son idénticos, y `test_board.cpp` pasa de 5
+> comprobaciones de aritmética a 44 que escriben y leen el mapa entero con una CPU de mentira.
 
 [mcu.cpp](../librdpiano/src/mcu.cpp) (638 líneas + 2.358 de `mcu_ops.h`) mezcla:
 
@@ -406,6 +420,23 @@ la función tiene problemas de forma que valen por sí solos:
 
 ## 9. Parámetros: hacerlo a mano cuesta ~120 líneas y se desincroniza
 
+> **Hecho** (fase 3). Los diez parámetros se declaran una sola vez en
+> [PluginParams.h](../rdpiano_juce/Source/PluginParams.h) y de ahí sale el layout del
+> `AudioProcessorValueTreeState`. Los valores de fábrica **son** los de `RdEngineParams`, el POD
+> que lee el motor: el segundo juego escrito a mano en `setStateInformation` ya no existe, y con él
+> se fue el defecto de `chorusRate` (5 → 1) y `chorusDepth` (14 → 3). El preset conserva la
+> etiqueta `<RdPiano>` y los atributos `currentPatch` y `masterTune`, así que una sesión antigua se
+> sigue abriendo: recupera parche y afinación, y los efectos vuelven a fábrica, que es lo que aquel
+> código pretendía hacer. `rdpiano_plugin_tests` fija los cuatro casos —ida y vuelta, valores de
+> fábrica, atributos que faltan y preset corrupto— y se escribió **antes** del cambio, roja en
+> exactamente esas dos comprobaciones.
+>
+> *Desviación del plan:* `masterTune` **no** pasa a ser un parámetro automatizable. Lo sería un
+> `AudioParameterInt` más, pero aplicarlo llama a `Mcu::setMasterTune()`, que corre ~200 muestras
+> de emulador y acaba con un `programChange(0)` (trampa 4 de CLAUDE.md); automatizarlo pondría eso
+> en el hilo de audio en cada tick. Viaja en el árbol del APVTS como propiedad, igual que
+> `currentPatch`, que sigue siendo el programa del `AudioProcessor`.
+
 Hoy conviven tres mecanismos para la misma información:
 
 1. Once punteros `juce::AudioParameter*` **públicos**, creados uno a uno con `addParameter` +
@@ -433,6 +464,29 @@ automatizarlo.
 ---
 
 ## 10. `PluginEditor`: 250 de 413 líneas son copia-pega
+
+> **Hecho** (fase 3). Un `ButtonSpec` por botón (17) y un `ModeSpec` por modo del display (8), y el
+> constructor, `resized()`, `buttonClicked()` y `updateValues()` son bucles sobre esas dos tablas.
+> Los ocho `bool` de modo pasan a un único `DisplayMode`: que sólo uno pueda estar activo deja de
+> ser una convención —había que poner siete a `false` en cada pulsación— y pasa a ser el tipo. Las
+> cuatro máquinas de estado de tres posiciones son una sola acción `kCycleModes`, y TUNE entra en
+> ella con `first == second`. Las coordenadas del panel están en un sitio, y las dos líneas
+> duplicadas desaparecieron solas.
+>
+> La línea del LCD se construye en un `uint8_t[34]` y `Lcd::setText` recibe eso, no una
+> `juce::String`: con ello se va el bug de [AUDITORIA §13](AUDITORIA.md), porque ni la longitud
+> fija ni el marcador `0xff` codificado como dos bytes de UTF-8 son ya expresables.
+>
+> **Dos comportamientos de UI cambian, a propósito.** El primero: el marcador de la barra de
+> parámetros ahora se dibuja (antes salía roto por el bug anterior). El segundo: los seis modos de
+> parámetro comparten el mapeo del dial. Los cuatro enteros ya usaban `floor((dial/2+0,5)·14)`,
+> pero los dos del phaser escribían `jlimit(dial, 0, 1)` mientras el display los releía como
+> `paso/14`, de modo que la mitad izquierda del dial daba 0 y la aguja saltaba al soltar. Ninguno
+> de los dos toca el audio; los dos son visibles y hay que mirarlos.
+>
+> Lo que **no** cambia, y lleva su comentario: con un modo del phaser activo los botones de banco y
+> de parche siguen encendidos, porque los modos del phaser nunca entraron en la condición
+> `alternativeMode`. Es una rareza heredada; conservarla es deliberado.
 
 Tres bloques repetidos con la misma forma:
 
@@ -558,7 +612,7 @@ Nada de esto rompe nada; todo desorienta a quien lee.
 | Bucle `do/while` de `execute_run` | [mcu.cpp:415-425](../librdpiano/src/mcu.cpp#L415-L425) | Comentado, incluye un "failsafe" que quizá haga falta |
 | Direcciones de handshake alternativas | [mcu.cpp:468](../librdpiano/src/mcu.cpp#L468), [485](../librdpiano/src/mcu.cpp#L485) | Comentadas: son las del **otro** firmware |
 | ~10 `printf` comentados de traza | `mcu.cpp` | Ver [§15](#15-el-núcleo-escribe-en-stdout) |
-| `mks20_cpub_1.0.bin` | [.jucer](../rdpiano_juce/rdpiano_juce.jucer) | Empotrada en el binario, nunca referenciada desde el código |
+| `mks20_cpub_1.0.bin` | `.jucer` (retirado en la fase 3) | Empotrada en el binario, nunca referenciada desde el código |
 
 Los tres últimos casos no son basura: son **conocimiento** (qué firmware alternativo existe, qué
 trazas hicieron falta, qué failsafe se probó). Lo que corresponde no es borrarlos sin más, sino
@@ -636,10 +690,15 @@ Con eso, las diez trazas comentadas vuelven al código —donde son útiles— s
 
 ## 16. Build: dos sistemas sin relación, y una CI que no verifica nada
 
-> **Parcial, fase 0** (`c1408e0`, `1218db2`). Hecha la propuesta 1, y con `enable_testing()` la CI
-> corre `ctest --output-on-failure` (suite unitaria + harness) en un job propio del que ahora
-> depende `release`. **Pendientes** la propuesta 2 (job con ASan; verificado a mano que pasa
-> limpio, falta el YAML) y la 3 (`juce_add_plugin`), que es de la fase 3.
+> **Hecho** (fases 0, 1 y 3). Las tres propuestas. La 1 y la 2 en las fases 0 y 1: `ctest` en la CI,
+> sin ASan y con ASan, y `release` depende de los dos jobs. La 3 en la fase 3: el `.jucer` y el
+> Projucer ya no existen, el plugin sale de `juce_add_plugin` en
+> [rdpiano_juce/CMakeLists.txt](../rdpiano_juce/CMakeLists.txt) y **enlaza** el target `librdpiano`
+> en vez de recompilar sus fuentes, todo colgando de un `CMakeLists.txt` en la raíz. Los cinco
+> formatos siguen saliendo, con el mismo nombre de binario, el mismo bundle id y los mismos códigos
+> de fabricante y plugin; el `.lv2` es la única excepción y pasa a llamarse `rdpiano_juce.lv2`
+> (su URI no cambia). El generador tiene que ser Xcode: `juce_add_plugin` sólo crea el objetivo
+> AUv3 con ese.
 
 ```
 librdpiano/CMakeLists.txt   → librdpiano + rdpiano_e2e + rdpiano_standalone
@@ -896,7 +955,8 @@ static_assert(all_of(kPatches, [](const Patch& p){ return p.sampleRate == 32000 
 
 Lo que no cabe en `static_assert` va a `test_patches.cpp`: que los cuatro ficheros de cada ROM set
 existan en `roms/` y midan `0x20000` bytes, y que los nombres canónicos coincidan con los recursos
-que el `.jucer` empotra. Es la prueba que impide que plugin, editor y harness vuelvan a discrepar.
+que empotra el plugin (el `.jucer` hasta la fase 2; su `CMakeLists.txt` desde la fase 3). Es la
+prueba que impide que plugin, editor y harness vuelvan a discrepar.
 
 **Plugin.** Con `APVTS` ([§9](#9-parámetros-hacerlo-a-mano-cuesta-120-líneas-y-se-desincroniza)) la
 prueba que merece la pena es una sola y es barata: fijar los 20-y-pico parámetros a valores no por
@@ -932,15 +992,15 @@ Una suite unitaria verde con el golden roto es un cambio de audio no verificado,
 | `test_rom_loader.cpp` | 150 → 219 reales | Fase 1 ✔ | ~40 ms |
 | `test_sa_tables.cpp` | 80 → 79 reales | Fase 1 ✔ | ~30 ms |
 | `test_command_port.cpp` | 150 → 262 reales | Fase 1 ✔ | < 10 ms |
-| `test_board.cpp` | 120 | Fase 0 (aritmética del bus) + **pendiente** (mapa completo, necesita `RdBoard`) | < 10 ms |
+| `test_board.cpp` | 120 → 380 reales | Fase 0 (aritmética) + Fase 3 ✔ (mapa completo sobre `RdBoard`) | ~60 ms |
 | `test_sound_chip_blocks.cpp` + vectores | 200 → 297 reales + 2.256 casos | Fase 1 ✔ | ~20 ms |
 | `test_lsp.cpp`, `test_resampler.cpp` | 150 | Fase 2 | ~100 ms |
 | `test_engine.cpp` | 350 | Fase 2 | ~2 s |
-| `test_plugin_state.cpp` | 80 | Fase 3 | < 10 ms |
+| `test_plugin_state.cpp` | 80 → 265 reales, ejecutable aparte | Fase 3 ✔ | ~600 ms |
 
-Menos de 1.400 líneas en total, escritas a lo largo de las tres fases, y una suite que —salvo el
-motor— termina en décimas de segundo. Frente a las 209 líneas de `processBlock` que hoy solo se
-verifican abriendo un DAW, la proporción es favorable.
+Unas 2.000 líneas en total, escritas a lo largo de las cuatro fases, y una suite que —salvo el
+motor— termina en décimas de segundo. Frente a las 209 líneas de `processBlock` que antes de la
+fase 2 sólo se verificaban abriendo un DAW, la proporción es favorable.
 
 ---
 
@@ -1188,13 +1248,83 @@ tras rehacer el `.jucer`.
   prueba que lo autoriza (`test_lsp.cpp`) ya existe, pero unificar el andamiaje sigue sin ser un
   paso propio del plan.
 
-**Fase 3 — plugin y build**
+**Fase 3 — plugin y build** — **HECHA**, rama `limpieza`.
 
-18. `APVTS` ([§9](#9-parámetros-hacerlo-a-mano-cuesta-120-líneas-y-se-desincroniza)).
-19. Editor guiado por tablas ([§10](#10-plugineditor-250-de-413-líneas-son-copia-pega)).
-20. `juce_add_plugin` y retirada del Projucer ([§16.3](#16-build-dos-sistemas-sin-relación-y-una-ci-que-no-verifica-nada)).
-21. **T** — `test_plugin_state.cpp`: ida y vuelta de presets con `juce_add_console_app`, ya posible sin Projucer ([§17.7](#177-datos-y-plugin)).
-22. Separar `Hd63701Cpu` / `RdBoard` ([§2](#2-mcu-hace-cuatro-trabajos)) — lo último, cuando ya haya pruebas por bloque.
+*Verificación de la fase entera:* los 16 hashes del golden idénticos; suite unitaria de 38 suites y
+427 comprobaciones, harness e2e, y las 5 suites y 95 comprobaciones de `rdpiano_plugin_tests`;
+`ctest` completo en 5,3 s desde el build de la raíz; todo verde también con `-DRDPIANO_SANITIZE=ON`;
+los cinco formatos del plugin compilados con `build-osx.sh` (`BUILD SUCCEEDED`, universal
+arm64+x86_64).
+
+*El orden real no es el de la lista.* El paso 20 va primero porque el 21 depende de él —sin CMake no
+hay `juce_add_console_app`— y el 21 va antes que el 18 y el 19, que es lo que pide la regla de
+[§17.1](#171-la-regla-caracterizar-antes-de-mover): la prueba de presets se escribió contra el XML a
+mano y tenía que seguir valiendo, sin editarla, contra el APVTS.
+
+| # | Paso | Estado |
+|---|---|---|
+| 20 | `juce_add_plugin` y retirada del Projucer | ✔ |
+| 21 | **T** `test_plugin_state.cpp` | ✔ 2 comprobaciones rojas, las del defecto de §9 |
+| 18 | `APVTS` | ✔ las dos, verdes |
+| 19 | Editor guiado por tablas | ✔ |
+| 22 | **T** `test_board.cpp` completo + separar CPU y placa | ✔ 44 comprobaciones, hashes intactos |
+
+1. ✔ **CMake y fuera el Projucer** ([§16.3](#16-build-dos-sistemas-sin-relación-y-una-ci-que-no-verifica-nada)).
+   Un `CMakeLists.txt` en la raíz que construye el núcleo, sus pruebas y el plugin; el plugin
+   **enlaza** `librdpiano` en vez de listar y recompilar sus fuentes, así que añadir un `.cpp` al
+   núcleo ya no obliga a editar un XML con `id` inventados a mano. Se comprobó producto a producto
+   que el `.vst3`, el `.component`, el `.app` y el `.appex` conservan nombre, bundle id
+   (`com.GiulioZausa.rdpiano`) y los códigos `GlZs`/`RDPN` del `.jucer`; el `.lv2` es el único que
+   cambia de nombre. *Dos cosas que costaron:* JUCE 8.0.1 llama a `CGWindowListCreateImage`, que el
+   SDK de macOS 15+ marca como no disponible, así que hay que fijar el objetivo de despliegue en
+   10.13 —el mismo que ponía el Projucer— y pasárselo a `juceaide` por `MACOSX_DEPLOYMENT_TARGET`,
+   porque se compila en una invocación anidada de CMake que no hereda la caché. Y el generador tiene
+   que ser Xcode, o no hay AUv3. `test_patches.cpp` pasa de leer el `.jucer` a leer el CMakeLists,
+   que es donde está ahora la lista de recursos empotrados.
+2. ✔ **T + presets** ([§17.7](#177-datos-y-plugin)). `rdpiano_plugin_tests` es una app de consola
+   que enlaza el mismo código compartido que los cinco formatos e instancia el `AudioProcessor` de
+   verdad. Habla con él sólo por su API pública —`getParameters()` por id,
+   `getStateInformation`/`setStateInformation`, `setCurrentProgram`—, nunca por los punteros
+   concretos, precisamente para sobrevivir al paso siguiente sin una línea de cambio. Contra el
+   plugin de la fase 2: 93 verdes y **2 rojas**, `chorusRate` y `chorusDepth`, que son exactamente
+   el defecto que [§9](#9-parámetros-hacerlo-a-mano-cuesta-120-líneas-y-se-desincroniza) describe.
+3. ✔ **APVTS** ([§9](#9-parámetros-hacerlo-a-mano-cuesta-120-líneas-y-se-desincroniza)). Las dos
+   rojas, verdes, sin tocar la prueba. Los valores de fábrica salen de `RdEngineParams`: plugin y
+   motor ya no pueden discrepar sobre qué es "de fábrica", y una comprobación lo fija. `masterTune`
+   se queda fuera de la automatización, con su motivo escrito en §9.
+4. ✔ **Editor por tablas** ([§10](#10-plugineditor-250-de-413-líneas-son-copia-pega)). Dos tablas,
+   17 + 8 filas, y cuatro bucles. Los ocho `bool` de modo son un `enum`. De paso desaparece el bug
+   de `Lcd::setText` ([AUDITORIA §13](AUDITORIA.md)) porque la línea es un `uint8_t[34]`. **Cambian
+   dos comportamientos de UI**, los dos anotados en §10: el marcador de la barra ahora se dibuja, y
+   el dial del phaser deja de tener una asimetría entre lo que escribe y lo que lee.
+5. ✔ **T + `RdBoard`** ([§2](#2-mcu-hace-cuatro-trabajos), [§17.4](#174-núcleo-romloader-rdboard-commandport)).
+   El mapa de memoria sale de `mcu.cpp` —el fichero derivado de MAME que no hay que tocar— y
+   `test_board.cpp` pasa de 5 comprobaciones de aritmética a 44 que escriben y leen sobre una
+   `RdBoard` con una CPU de mentira: RAM, latch (incluida la rareza de que escribir en 0xC000 lo
+   mueva), la ROM de programa contra `decode_program_rom` y sus cuatro espejos, la página de params
+   en los cuatro bancos, los dos puertos del handshake con el PC puesto a mano, y que escribir en el
+   puerto 2 baje la línea TIN. Comprobado que muerden: cambiar `& 0x1fff` por `& 0x0fff` en la ROM
+   de programa enciende dos comprobaciones. Los 16 hashes del golden, idénticos, y el harness tarda
+   lo mismo: `read`/`write` quedan `inline` en la cabecera.
+
+**Lo que la fase 3 dejó fuera, y por qué:**
+
+- **`masterTune` como parámetro automatizable**, que es lo que proponía §9. El motivo está arriba:
+  aplicarlo corre el emulador. Hacerlo bien pide diferir el cambio al principio de `render()`, bajo
+  el lock que ya existe, y eso es un cambio de comportamiento con su propia prueba.
+- **El bus de entrada estéreo** de un plugin marcado sintetizador, que la fase 2 ya había dejado
+  fuera por el mismo motivo: quitar un bus cambia el layout que ven los hosts.
+- **La fila única por parche** de [§11](#11-tablas-de-datos-duplicadas). `displayPatchNames` sigue
+  siendo una segunda tabla de nombres dentro del editor, en formato de 2×17 columnas. Unificarla con
+  `patchNames` es fácil pero es §11, que nunca fue un paso del plan.
+- **El `lsp_common.h`** de [§12](#12-lsp-dos-transcripciones-con-la-misma-infraestructura), por lo
+  mismo.
+- **La UI sigue sin prueba.** `rdpiano_plugin_tests` llega al `AudioProcessor`, no al
+  `AudioProcessorEditor`: las dos tablas nuevas hacen el panel mucho más fácil de probar —son datos—
+  pero nadie las prueba todavía.
+- **JUCE sigue en 8.0.1.** Actualizar arreglaría el `CGWindowListCreateImage` que obliga a fijar el
+  objetivo de despliegue, pero mover la versión de JUCE toca DSP y UI: es un cambio a escuchar y a
+  mirar, no un paso de build.
 
 ---
 
@@ -1225,7 +1355,15 @@ redes se lanzan juntas y es lo único que hay que recordar:
 ```bash
 cd librdpiano && cmake -B build -DRDPIANO_SANITIZE=OFF -DCMAKE_BUILD_TYPE=Release
 cmake --build build --target rdpiano_tests rdpiano_e2e
-ctest --test-dir build --output-on-failure    # unit (~2,6 s) + e2e (~2,5 s)
+ctest --test-dir build --output-on-failure    # unit (~2,6 s) + e2e (~2,2 s)
+```
+
+Desde la fase 3, la red completa —con el plugin dentro— sale del build de la raíz:
+
+```bash
+cmake -B build -G Xcode -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64"
+cmake --build build --config Release --target rdpiano_tests rdpiano_e2e rdpiano_plugin_tests
+ctest --test-dir build -C Release --output-on-failure   # las tres, ~5,3 s
 ```
 
 ```bash

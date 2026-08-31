@@ -13,13 +13,13 @@
 #include <JuceHeader.h>
 
 //==============================================================================
-Lcd::Lcd() { memcpy(LCD_Data, "                                  ", 17 * 2); }
+Lcd::Lcd() { memset(LCD_Data, ' ', kChars); }
 
 Lcd::~Lcd() {}
 
-void Lcd::setText(const juce::String &text)
+void Lcd::setText(const uint8_t (&chars)[kChars])
 {
-  memcpy(LCD_Data, text.begin(), 17 * 2);
+  memcpy(LCD_Data, chars, kChars);
   // repaint();
 }
 
@@ -32,11 +32,11 @@ void Lcd::paint(juce::Graphics &g)
 
   float sfC = 0.445 / (scale / 5);
 
-  for (int i = 0; i < 2; i++)
+  for (int i = 0; i < kRows; i++)
   {
-    for (int j = 0; j < 17; j++)
+    for (int j = 0; j < kColumns; j++)
     {
-      uint8_t ch = LCD_Data[i * 17 + j];
+      uint8_t ch = LCD_Data[i * kColumns + j];
       LCD_FontRenderStandard(i * (50 * sfC), j * (34 * sfC), ch, g);
     }
   }

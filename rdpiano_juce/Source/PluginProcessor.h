@@ -8,9 +8,11 @@
 
 #pragma once
 
-#include "../../librdpiano/include/rd_engine.h"
 #include <JuceHeader.h>
 #include <memory>
+
+#include "PluginParams.h"
+#include "rd_engine.h"
 
 //==============================================================================
 /**
@@ -18,11 +20,17 @@
  * puente con JUCE. La cadena de audio entera —emulador, chorus, phaser,
  * trémolo, EQ, resampling y reparto del MIDI— vive en `RdPianoEngine`, que no
  * conoce JUCE y se prueba headless (REFACTORIZACION §1).
+ *
+ * Desde la fase 3 los parámetros son un `AudioProcessorValueTreeState`
+ * construido desde la tabla de `PluginParams.h` (§9): declararlos, guardarlos
+ * y validarlos era antes tres listas paralelas escritas a mano, con dos juegos
+ * de valores por defecto que no coincidían. `rdpiano_plugin_tests` fija la ida
+ * y vuelta.
  */
 class RdPiano_juceAudioProcessor
     : public juce::AudioProcessor,
       public juce::ChangeBroadcaster,
-      public juce::AudioProcessorParameter::Listener
+      public juce::AudioProcessorValueTreeState::Listener
 {
 public:
   //==============================================================================
@@ -30,9 +38,8 @@ public:
   ~RdPiano_juceAudioProcessor() override;
 
   //==============================================================================
-  void parameterValueChanged(int parameterIndex, float newValue) override;
-  void parameterGestureChanged(int parameterIndex,
-                               bool gestureIsStarting) override;
+  void parameterChanged(const juce::String &parameterID,
+                        float newValue) override;
 
   //==============================================================================
   void prepareToPlay(double sampleRate, int samplesPerBlock) override;
@@ -67,16 +74,14 @@ public:
 
   //==============================================================================
 
-  juce::AudioParameterFloat *volume;
-  juce::AudioParameterBool *chorusEnabled;
-  juce::AudioParameterInt *chorusRate;
-  juce::AudioParameterInt *chorusDepth;
-  juce::AudioParameterBool *tremoloEnabled;
-  juce::AudioParameterInt *tremoloRate;
-  juce::AudioParameterInt *tremoloDepth;
-  juce::AudioParameterBool *efxEnabled;
-  juce::AudioParameterFloat *efxPhaserRate;
-  juce::AudioParameterFloat *efxPhaserDepth;
+  // Los parámetros, y el acceso por índice de tabla que usa el editor: es lo
+  // que permite que `PluginEditor` recorra descriptores en vez de repetir un
+  // bloque por control (§10).
+  juce::AudioProcessorValueTreeState apvts;
+
+  juce::RangedAudioParameter &param(RdParamId id) const;
+  float paramValue(RdParamId id) const;
+  void setParamValue(RdParamId id, float value);
 
   // Espejos de lo que el motor ya sabe, para el editor y para los presets.
   int currentPatch = 0;
@@ -92,6 +97,11 @@ public:
 
 private:
   void syncParamsToEngine();
+
+  // Punteros crudos a los valores de los parámetros, resueltos una vez en el
+  // constructor. `render()` los lee una vez por bloque: buscar por id desde el
+  // hilo de audio sería una búsqueda de cadena por bloque.
+  std::atomic<float> *paramValues[kNumRdParams] = {};
 
   //==============================================================================
   JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(RdPiano_juceAudioProcessor)

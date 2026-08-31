@@ -12,3 +12,6 @@ node_modules
 out.json
 out.v
 points.csv
+
+# Build de CMake de la raíz (núcleo + pruebas + plugin)
+build

@@ -30,11 +30,23 @@ More info on this guide: https://www.osirisguitar.com/2020/04/01/how-to-make-uns
 
 ## Building
 
-- Clone the repository
-- Download [Projucer](https://juce.com/download/)
-- Open with Projucer rdpiano_juce/rdpiano_juce.jucer
-- Generate the version you need (MacOS, iOS)
-- Build with XCode
+Everything — the core, its tests and the plugin — is built from the top-level `CMakeLists.txt`.
+macOS only, Xcode required.
+
+```bash
+git clone <this repo> && cd rdpiano
+bash rdpiano_juce/download-juce.sh      # fetches JUCE 8.0.1 into rdpiano_juce/JUCE
+bash rdpiano_juce/build/build-osx.sh    # VST3, AU, AUv3, LV2 and Standalone
+```
+
+The plugins end up in `build/rdpiano_juce/rdpiano_juce_artefacts/Release/`.
+
+To work on the emulator alone (no JUCE needed):
+
+```bash
+cd librdpiano && cmake -B build && cmake --build build
+ctest --test-dir build --output-on-failure
+```
 
 ## Acknowledgements
 

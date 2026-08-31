@@ -1,9 +1,10 @@
 #!/bin/bash
-# Descarga JUCE (modules + Projucer precompilado) en rdpiano_juce/JUCE.
+# Descarga JUCE en rdpiano_juce/JUCE.
 #
-# El zip de release trae el arbol completo: JUCE/modules (que es donde el
-# .jucer busca los modulos, ver MODULEPATH) y JUCE/Projucer.app, que es lo que
-# usa build-osx.sh. Por eso basta con una sola descarga.
+# Desde la fase 3 el plugin se construye con la API CMake de JUCE
+# (juce_add_plugin), asi que lo que hace falta del zip es el arbol de fuentes
+# completo: JUCE/CMakeLists.txt, JUCE/modules y JUCE/extras/Build, de donde sale
+# juceaide. El Projucer que trae el zip ya no se usa.
 set -e
 
 VERSION=8.0.1
@@ -19,4 +20,4 @@ curl -fL "https://github.com/juce-framework/JUCE/releases/download/$VERSION/juce
 rm -rf "$ROOT/JUCE"
 unzip -qo "$ZIP" -d "$ROOT"
 
-echo "Listo: modulos en $ROOT/JUCE/modules, Projucer en $ROOT/JUCE"
+echo "Listo: JUCE en $ROOT/JUCE (modulos en $ROOT/JUCE/modules)"
