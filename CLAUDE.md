@@ -94,9 +94,12 @@ externas (no necesita SDL, portmidi ni JUCE) y ~40x tiempo real: arranca el firm
 
 ```bash
 cd librdpiano && cmake -B build -DRDPIANO_SANITIZE=OFF -DCMAKE_BUILD_TYPE=Release
-cmake --build build --target rdpiano_e2e
-cd .. && ./librdpiano/build/rdpiano_e2e --roms roms --golden librdpiano/test/golden.txt
+cmake --build build --target rdpiano_tests rdpiano_e2e
+ctest --test-dir build --output-on-failure     # suite unitaria + harness
 ```
+
+`ctest` corre dos ejecutables: `rdpiano_tests` (unitario, sin emular audio, <1 s) y `rdpiano_e2e`
+(el harness). La CI ejecuta exactamente eso en cada push, y `release` depende de ello.
 
 Los 16 parches tardan ~3 s. Comprueba: arranque silencioso, que la nota suene, el acorde, que la
 cola se extinga tras el note-off (**detector de voces colgadas**, ver trampa 3), polifonía de 16
@@ -109,6 +112,12 @@ el escalado seco del plugin), escúchalos, y solo entonces regenera con `--write
 regenerar el golden para "arreglar" un fallo sin escuchar antes.
 
 `--patch N` limita a un parche (~0.2 s) para iterar rápido.
+
+**La suite unitaria** (`librdpiano/test/unit/`) prueba unidades sueltas sin emular: hoy, la
+aritmética del bus (`test_board.cpp`) y la tabla de parches y sus ROMs (`test_patches.cpp`). Se
+añaden suites con `TEST_SUITE(nombre)` y una línea en el `CMakeLists.txt` — sin globs, sin
+dependencias; el andamiaje entero es `test/check.h`. Regla: la prueba se escribe **antes** del
+refactor que acompaña y tiene que pasar sin editarla después.
 
 Lo que el harness **no** cubre: efectos del plugin (chorus/phaser/tremolo/EQ), resampling,
 `setMasterTune()` y la UI. Eso sigue siendo verificación auditiva con `librdpiano/test/standalone.cpp`

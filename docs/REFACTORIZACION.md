@@ -860,7 +860,8 @@ Los pasos marcados **T** son de prueba. No son un apéndice de cada fase: van **
 al que acompañan, por la regla de [§17.1](#171-la-regla-caracterizar-antes-de-mover). Un paso de
 código cuyo **T** todavía no está verde no se empieza.
 
-**Fase 0 — sin riesgo de audio, sin tocar lógica** *(un par de tardes)*
+**Fase 0 — sin riesgo de audio, sin tocar lógica** *(un par de tardes)* — **hecha**
+(rama `limpieza`, siete commits; el harness sigue con los 16 hashes intactos)
 
 1. Añadir `rdpiano_e2e` a la CI ([§16.1](#16-build-dos-sistemas-sin-relación-y-una-ci-que-no-verifica-nada)). Primero esto: es la red del resto.
 2. **T** — `check.h` extraído de `e2e.cpp`, esqueleto `rdpiano_tests`, `enable_testing()`, y los dos ejecutables corriendo por `ctest` en la CI ([§17.2](#172-infraestructura-40-líneas-cero-dependencias)).
