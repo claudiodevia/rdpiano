@@ -15,21 +15,24 @@
 static constexpr int DATA_BITS = 24;
 static constexpr int64_t MIN_VAL = -(1LL << (DATA_BITS - 1));
 static constexpr int64_t MAX_VAL = (1LL << (DATA_BITS - 1)) - 1;
-static constexpr int32_t clamp_24(int64_t v) {
+static constexpr int32_t clamp_24(int64_t v)
+{
   if (v > MAX_VAL)
     return static_cast<int32_t>(MAX_VAL);
   if (v < MIN_VAL)
     return static_cast<int32_t>(MIN_VAL);
   return static_cast<int32_t>(v);
 }
-static constexpr int32_t sign_extend_24(int32_t x) {
+static constexpr int32_t sign_extend_24(int32_t x)
+{
   x &= 0xffffff;
   if (x & 0x800000) // If sign bit is set
     x |= ~0xffffff;
   return x;
 }
 
-void SpaceD::reset() {
+void SpaceD::reset()
+{
   audioInL = 0;
   audioInR = 0;
   audioOutL = 0;
@@ -57,7 +60,8 @@ void SpaceD::reset() {
   preDelay2 = 8388608 + (3866624 >> 6);
 }
 
-void SpaceD::process() {
+void SpaceD::process()
+{
   int32_t accA_0;
   int32_t accA_1;
   int32_t accA_3;

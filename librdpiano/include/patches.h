@@ -103,51 +103,52 @@ inline constexpr size_t PROG_ROM_SIZE = 0x2000;
 namespace patches_detail
 {
 
-template <typename T, size_t N> constexpr size_t count(const T (&)[N])
-{
-    return N;
-}
+    template <typename T, size_t N>
+    constexpr size_t count(const T (&)[N])
+    {
+        return N;
+    }
 
-constexpr bool offsets_in_range()
-{
-    for (int i = 0; i < NUM_PATCHES; i++)
-        if (patchToOffset[i] >= WAVE_ROM_SIZE)
-            return false;
-    return true;
-}
-
-constexpr bool rom_sets_in_range()
-{
-    for (int i = 0; i < NUM_PATCHES; i++)
-        if (patchToRomSetId[i] < 0 || patchToRomSetId[i] >= ROMSET_COUNT)
-            return false;
-    return true;
-}
-
-constexpr bool sample_rates_known()
-{
-    for (int i = 0; i < NUM_PATCHES; i++)
-        if (patchSampleRates[i] != 20000 && patchSampleRates[i] != 32000)
-            return false;
-    return true;
-}
-
-constexpr bool names_present()
-{
-    for (int i = 0; i < NUM_PATCHES; i++)
-        if (patchNames[i] == nullptr || patchNames[i][0] == '\0')
-            return false;
-    return true;
-}
-
-constexpr bool rom_files_present()
-{
-    for (int s = 0; s < ROMSET_COUNT; s++)
-        for (int c = 0; c < ROM_CHIP_COUNT; c++)
-            if (romSetFiles[s][c] == nullptr || romSetFiles[s][c][0] == '\0')
+    constexpr bool offsets_in_range()
+    {
+        for (int i = 0; i < NUM_PATCHES; i++)
+            if (patchToOffset[i] >= WAVE_ROM_SIZE)
                 return false;
-    return true;
-}
+        return true;
+    }
+
+    constexpr bool rom_sets_in_range()
+    {
+        for (int i = 0; i < NUM_PATCHES; i++)
+            if (patchToRomSetId[i] < 0 || patchToRomSetId[i] >= ROMSET_COUNT)
+                return false;
+        return true;
+    }
+
+    constexpr bool sample_rates_known()
+    {
+        for (int i = 0; i < NUM_PATCHES; i++)
+            if (patchSampleRates[i] != 20000 && patchSampleRates[i] != 32000)
+                return false;
+        return true;
+    }
+
+    constexpr bool names_present()
+    {
+        for (int i = 0; i < NUM_PATCHES; i++)
+            if (patchNames[i] == nullptr || patchNames[i][0] == '\0')
+                return false;
+        return true;
+    }
+
+    constexpr bool rom_files_present()
+    {
+        for (int s = 0; s < ROMSET_COUNT; s++)
+            for (int c = 0; c < ROM_CHIP_COUNT; c++)
+                if (romSetFiles[s][c] == nullptr || romSetFiles[s][c][0] == '\0')
+                    return false;
+        return true;
+    }
 
 } // namespace patches_detail
 

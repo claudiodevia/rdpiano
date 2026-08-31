@@ -15,30 +15,31 @@
 #define LIBRESAMPLE_INCLUDED
 
 #ifdef __cplusplus
-extern "C" {
-#endif	/* __cplusplus */
+extern "C"
+{
+#endif /* __cplusplus */
 
-void *resample_open(int      highQuality,
-                    double   minFactor,
-                    double   maxFactor);
+  void *resample_open(int highQuality,
+                      double minFactor,
+                      double maxFactor);
 
-void *resample_dup(const void *handle);
+  void *resample_dup(const void *handle);
 
-int resample_get_filter_width(const void *handle);
+  int resample_get_filter_width(const void *handle);
 
-int resample_process(void   *handle,
-                     double  factor,
-                     float  *inBuffer,
-                     int     inBufferLen,
-                     int     lastFlag,
-                     int    *inBufferUsed,
-                     float  *outBuffer,
-                     int     outBufferLen);
+  int resample_process(void *handle,
+                       double factor,
+                       float *inBuffer,
+                       int inBufferLen,
+                       int lastFlag,
+                       int *inBufferUsed,
+                       float *outBuffer,
+                       int outBufferLen);
 
-void resample_close(void *handle);
+  void resample_close(void *handle);
 
 #ifdef __cplusplus
-}		/* extern "C" */
-#endif	/* __cplusplus */
+} /* extern "C" */
+#endif /* __cplusplus */
 
 #endif /* LIBRESAMPLE_INCLUDED */

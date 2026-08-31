@@ -13,7 +13,6 @@
 #include <cmath>
 #include <stdint.h>
 
-
 inline constexpr int32_t spaceDRateTable[] = {
     26,   52,   78,   104,  131,  157,  183,  209,  235,  262,  288,  314,
     340,  367,  393,  419,  445,  471,  498,  524,  550,  576,  602,  629,
@@ -29,9 +28,9 @@ inline constexpr int32_t spaceDRateTable[] = {
 };
 
 inline constexpr int32_t spaceDDepthTable[] = {
-    0,   2,   4,   6,   8,   10,  13,  15,  17,  19,  22,  24,  26,  29,  31,
-    33,  36,  38,  40,  43,  45,  48,  50,  53,  55,  58,  60,  63,  65,  68,
-    70,  73,  75,  78,  80,  83,  86,  88,  91,  94,  96,  99,  102, 105, 107,
+    0, 2, 4, 6, 8, 10, 13, 15, 17, 19, 22, 24, 26, 29, 31,
+    33, 36, 38, 40, 43, 45, 48, 50, 53, 55, 58, 60, 63, 65, 68,
+    70, 73, 75, 78, 80, 83, 86, 88, 91, 94, 96, 99, 102, 105, 107,
     110, 113, 116, 118, 121, 124, 127, 130, 133, 136, 138, 141, 144, 147, 150,
     153, 156, 159, 162, 165, 169, 172, 175, 178, 181, 184, 187, 191, 194, 197,
     200, 204, 207, 210, 214, 217, 220, 224, 227, 230, 234, 237, 241, 244, 248,
@@ -40,11 +39,13 @@ inline constexpr int32_t spaceDDepthTable[] = {
     367, 371, 375, 379, 384, 388, 392, 397};
 
 inline int32_t spaceDRateFromMs(float ms) { return ms * 498.0f; }
-inline int32_t spaceDDepth(float amount) {
+inline int32_t spaceDDepth(float amount)
+{
   return spaceDDepthTable[(int)floor(amount * 0x80)];
 }
 
-class SpaceD {
+class SpaceD
+{
 public:
   void process();
   void reset();
@@ -75,11 +76,13 @@ private:
   int32_t eram[0x10000];
   int32_t iram[0x200];
 
-  inline void writeMemOffs(uint8_t memOffs, int32_t value) {
+  inline void writeMemOffs(uint8_t memOffs, int32_t value)
+  {
     uint32_t ramPos = ((uint32_t)memOffs + bufferPos) & 0x7f;
     iram[ramPos] = value;
   }
-  inline int64_t readMemOffs(uint8_t memOffs) {
+  inline int64_t readMemOffs(uint8_t memOffs)
+  {
     uint32_t ramPos = ((uint32_t)memOffs + bufferPos) & 0x7f;
     return iram[ramPos];
   }

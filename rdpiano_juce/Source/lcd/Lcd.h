@@ -15,7 +15,8 @@
 //==============================================================================
 /*
  */
-class Lcd : public juce::Component {
+class Lcd : public juce::Component
+{
 public:
   Lcd();
   ~Lcd() override;

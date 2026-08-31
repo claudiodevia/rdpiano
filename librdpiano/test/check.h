@@ -59,20 +59,20 @@ struct CheckRun
 #define CHECK(cond) checks.add(#cond, (cond))
 #define CHECK_MSG(cond, ...) checks.add(#cond, (cond), check_fmt(__VA_ARGS__))
 
-#define CHECK_EQ(got, want)                                                  \
-  checks.add(#got " == " #want, (long long)(got) == (long long)(want),       \
-             check_fmt("obtenido %lld, esperado %lld", (long long)(got),     \
+#define CHECK_EQ(got, want)                                              \
+  checks.add(#got " == " #want, (long long)(got) == (long long)(want),   \
+             check_fmt("obtenido %lld, esperado %lld", (long long)(got), \
                        (long long)(want)))
 
-#define CHECK_NEAR(got, want, tol)                                           \
-  checks.add(#got " ~= " #want,                                              \
-             fabs((double)(got) - (double)(want)) <= (double)(tol),          \
-             check_fmt("obtenido %g, esperado %g +/- %g", (double)(got),     \
+#define CHECK_NEAR(got, want, tol)                                       \
+  checks.add(#got " ~= " #want,                                          \
+             fabs((double)(got) - (double)(want)) <= (double)(tol),      \
+             check_fmt("obtenido %g, esperado %g +/- %g", (double)(got), \
                        (double)(want), (double)(tol)))
 
-#define CHECK_HASH(name, got, want)                                          \
-  checks.add(name, (unsigned long long)(got) == (unsigned long long)(want),  \
-             check_fmt("hash %016llx, esperado %016llx",                     \
+#define CHECK_HASH(name, got, want)                                         \
+  checks.add(name, (unsigned long long)(got) == (unsigned long long)(want), \
+             check_fmt("hash %016llx, esperado %016llx",                    \
                        (unsigned long long)(got), (unsigned long long)(want)))
 
 #endif

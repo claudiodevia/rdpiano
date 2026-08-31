@@ -18,7 +18,8 @@
 class RdPiano_juceAudioProcessorEditor : public juce::AudioProcessorEditor,
                                          public juce::Button::Listener,
                                          public juce::Slider::Listener,
-                                         public juce::ChangeListener {
+                                         public juce::ChangeListener
+{
 public:
   RdPiano_juceAudioProcessorEditor(RdPiano_juceAudioProcessor &);
   ~RdPiano_juceAudioProcessorEditor() override;
@@ -37,13 +38,15 @@ public:
 private:
   RdPiano_juceAudioProcessor &audioProcessor;
 
-  class MksButton : public juce::Button {
+  class MksButton : public juce::Button
+  {
   public:
     int x, y, w, h;
     float scaleFactor;
     bool enabled = false;
     MksButton() : juce::Button("") {}
-    void position(int x, int y, int w, int h, float scaleFactor) {
+    void position(int x, int y, int w, int h, float scaleFactor)
+    {
       this->x = x;
       this->y = y;
       this->w = w;
@@ -51,7 +54,8 @@ private:
       this->scaleFactor = scaleFactor;
     }
     void paintButton(juce::Graphics &g, bool isMouseOverButton,
-                     bool isButtonDown) override {
+                     bool isButtonDown) override
+    {
       auto topLeft = getBoundsInParent().getTopLeft();
       float downShift = isButtonDown ? 8 / scaleFactor : 0;
       g.drawImage(
@@ -61,7 +65,8 @@ private:
           y / scaleFactor - topLeft.y - downShift, w / scaleFactor,
           h / scaleFactor, x, y, w, h);
 
-      if (enabled) {
+      if (enabled)
+      {
         g.setColour(juce::Colours::red);
         g.fillRect(49 / scaleFactor + downShift, 36 / scaleFactor - downShift,
                    79 / scaleFactor, 28 / scaleFactor);
@@ -97,7 +102,8 @@ private:
   bool efxPhaserRateMode = false;
   bool efxPhaserDepthMode = false;
 
-  class KnobLF : public juce::LookAndFeel_V3 {
+  class KnobLF : public juce::LookAndFeel_V3
+  {
   public:
     KnobLF() {}
     ~KnobLF() {}
@@ -105,7 +111,8 @@ private:
     void drawRotarySlider(juce::Graphics &g, int x, int y, int width,
                           int height, float sliderPos,
                           const float rotaryStartAngle,
-                          const float rotaryEndAngle, juce::Slider &slider) {
+                          const float rotaryEndAngle, juce::Slider &slider)
+    {
       auto scale = (770.55 / width);
       auto centerX = x + width * 0.5f;
       auto centerY = y + height * 0.5f;

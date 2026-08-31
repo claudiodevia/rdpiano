@@ -34,7 +34,8 @@ typedef std::unique_ptr<void, ResampleHandleDeleter> ResampleHandle;
 class RdPiano_juceAudioProcessor
     : public juce::AudioProcessor,
       public juce::ChangeBroadcaster,
-      public juce::AudioProcessorParameter::Listener {
+      public juce::AudioProcessorParameter::Listener
+{
 public:
   //==============================================================================
   RdPiano_juceAudioProcessor();

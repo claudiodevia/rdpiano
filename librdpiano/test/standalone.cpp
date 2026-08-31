@@ -15,18 +15,22 @@ static SDL_AudioDeviceID sdl_audio;
 
 Mcu *mcu;
 
-void audio_callback(void * /*userdata*/, Uint8 *stream, int len) {
+void audio_callback(void * /*userdata*/, Uint8 *stream, int len)
+{
   len /= 4;
 
-  for (size_t i = 0; i < len; i++) {
+  for (size_t i = 0; i < len; i++)
+  {
     s16 sample = mcu->generate_next_sample();
     ((int16_t *)stream)[i * 2] = sample;
     ((int16_t *)stream)[i * 2 + 1] = sample;
   }
 }
 
-static const char *audio_format_to_str(int format) {
-  switch (format) {
+static const char *audio_format_to_str(int format)
+{
+  switch (format)
+  {
   case AUDIO_S8:
     return "S8";
   case AUDIO_U8:
@@ -51,7 +55,8 @@ static const char *audio_format_to_str(int format) {
   return "UNK";
 }
 
-int MCU_OpenAudio(int deviceIndex, int pageSize, int pageNum) {
+int MCU_OpenAudio(int deviceIndex, int pageSize, int pageNum)
+{
   SDL_AudioSpec spec = {};
   SDL_AudioSpec spec_actual = {};
 
@@ -66,12 +71,14 @@ int MCU_OpenAudio(int deviceIndex, int pageSize, int pageNum) {
   spec.samples = audio_page_size / 4;
 
   int num = SDL_GetNumAudioDevices(0);
-  if (num == 0) {
+  if (num == 0)
+  {
     printf("No audio output device found.\n");
     return 0;
   }
 
-  if (deviceIndex < -1 || deviceIndex >= num) {
+  if (deviceIndex < -1 || deviceIndex >= num)
+  {
     printf("Out of range audio device index is requested. Default audio output "
            "device is selected.\n");
     deviceIndex = -1;
@@ -83,7 +90,8 @@ int MCU_OpenAudio(int deviceIndex, int pageSize, int pageNum) {
 
   sdl_audio = SDL_OpenAudioDevice(deviceIndex == -1 ? NULL : audioDevicename, 0,
                                   &spec, &spec_actual, 0);
-  if (!sdl_audio) {
+  if (!sdl_audio)
+  {
     return 0;
   }
 
@@ -107,7 +115,8 @@ void MCU_CloseAudio(void) { SDL_CloseAudio(); }
 
 static PmStream *midiInStream;
 
-int MIDI_Init() {
+int MIDI_Init()
+{
   Pm_Initialize();
 
   int in_id = Pm_CreateVirtualInput("RdPiano", NULL, NULL);
@@ -117,7 +126,8 @@ int MIDI_Init() {
 
   // Empty the buffer, just in case anything got through
   PmEvent receiveBuffer[1];
-  while (Pm_Poll(midiInStream)) {
+  while (Pm_Poll(midiInStream))
+  {
     Pm_Read(midiInStream, receiveBuffer, 1);
   }
 
@@ -126,9 +136,11 @@ int MIDI_Init() {
 
 void MIDI_Quit() { Pm_Terminate(); }
 
-void MIDI_Update() {
+void MIDI_Update()
+{
   PmEvent event;
-  while (Pm_Read(midiInStream, &event, 1)) {
+  while (Pm_Read(midiInStream, &event, 1))
+  {
     mcu->sendMidiCmd(Pm_MessageStatus(event.message),
                      Pm_MessageData1(event.message),
                      Pm_MessageData2(event.message));
@@ -137,9 +149,11 @@ void MIDI_Update() {
   }
 }
 
-void load_rom(u8 *data, size_t len, const char *filename) {
+void load_rom(u8 *data, size_t len, const char *filename)
+{
   FILE *f = fopen(filename, "rb");
-  if (f == NULL) {
+  if (f == NULL)
+  {
     printf("Error opening %s\n", filename);
     exit(2);
   }
@@ -147,7 +161,8 @@ void load_rom(u8 *data, size_t len, const char *filename) {
   fclose(f);
 }
 
-int main() {
+int main()
+{
   u8 temp_ic5[0x20000];
   u8 temp_ic6[0x20000];
   u8 temp_ic7[0x20000];
@@ -164,32 +179,38 @@ int main() {
   mcu = new Mcu(temp_ic5, temp_ic6, temp_ic7, temp_progrom, temp_paramsrom);
   mcu->commands_queue.push(0x30);
 
-  if (SDL_Init(SDL_INIT_AUDIO | SDL_INIT_VIDEO | SDL_INIT_TIMER) < 0) {
+  if (SDL_Init(SDL_INIT_AUDIO | SDL_INIT_VIDEO | SDL_INIT_TIMER) < 0)
+  {
     fprintf(stderr, "FATAL ERROR: Failed to initialize the SDL2: %s.\n",
             SDL_GetError());
     fflush(stderr);
     return 2;
   }
 
-  if (!MCU_OpenAudio(-1, 512, 32)) {
+  if (!MCU_OpenAudio(-1, 512, 32))
+  {
     fprintf(stderr, "FATAL ERROR: Failed to open the audio stream.\n");
     fflush(stderr);
     return 2;
   }
 
-  if (!MIDI_Init()) {
+  if (!MIDI_Init())
+  {
     fprintf(stderr, "ERROR: Failed to initialize the MIDI Input.\nWARNING: "
                     "Continuing without MIDI Input...\n");
     fflush(stderr);
   }
 
   bool quit_requested = false;
-  while (!quit_requested) {
+  while (!quit_requested)
+  {
     MIDI_Update();
 
     SDL_Event sdl_event;
-    while (SDL_PollEvent(&sdl_event)) {
-      switch (sdl_event.type) {
+    while (SDL_PollEvent(&sdl_event))
+    {
+      switch (sdl_event.type)
+      {
       case SDL_QUIT:
         quit_requested = true;
         break;

@@ -37,9 +37,9 @@ struct TestRegistrar
   }
 };
 
-#define TEST_SUITE(name)                                                      \
-  static void name(CheckRun &checks);                                         \
-  static TestRegistrar name##_registrar(#name, name);                         \
+#define TEST_SUITE(name)                              \
+  static void name(CheckRun &checks);                 \
+  static TestRegistrar name##_registrar(#name, name); \
   static void name(CheckRun &checks)
 
 // Directorio pasado con --roms; las suites que no leen ROMs lo ignoran.
