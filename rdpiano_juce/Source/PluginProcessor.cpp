@@ -8,19 +8,11 @@
 
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
+#include "../../librdpiano/include/patches.h"
 #include <cmath>
 
-const char *rd200PatchNames[] = {"MKS-20: Piano 1",   "MKS-20: Piano 2",
-                                 "MKS-20: Piano 3",   "MKS-20: Harpsichord",
-                                 "MKS-20: Clavi",     "MKS-20: Vibraphone",
-                                 "MKS-20: E-Piano 1", "MKS-20: E-Piano 2"};
-
-const char *mk80PatchNames[] = {"MK-80: Classic",    "MK-80: Special",
-                                "MK-80: Blend",      "MK-80: Contemporary",
-                                "MK-80: A. Piano 1", "MK-80: A. Piano 2",
-                                "MK-80: Clavi",      "MK-80: Vibraphone"};
-
-struct RomSet {
+struct RomSet
+{
   const uint8_t *ic5;
   const uint8_t *ic6;
   const uint8_t *ic7;
@@ -40,39 +32,13 @@ const RomSet mk80RomSet = {(const uint8_t *)BinaryData::MK80_IC5_bin,
                            (const uint8_t *)BinaryData::MK80_IC7_bin,
                            (const uint8_t *)BinaryData::MK80_IC18_bin};
 
-const RomSet *patchToRomSet[] = {
-    &mks20ARomSet, &mks20ARomSet, &mks20ARomSet, &mks20BRomSet,
-    &mks20BRomSet, &mks20BRomSet, &mks20BRomSet, &mks20BRomSet,
-    &mk80RomSet,   &mk80RomSet,   &mk80RomSet,   &mk80RomSet,
-    &mk80RomSet,   &mk80RomSet,   &mk80RomSet,   &mk80RomSet};
+const RomSet *const romSets[ROMSET_COUNT] = {&mks20ARomSet, &mks20BRomSet,
+                                             &mk80RomSet};
 
-const size_t patchToOffset[] = {
-    // MKS-20
-    0x000000, // Piano 1
-    0x008000, // Piano 2
-    0x010000, // Piano 3
-    0x018000, // Harpsichord
-    0x003c20, // Clavi
-    0x00ab50, // Vibraphone
-    0x014260, // E-Piano 1
-    0x01bef0, // E-Piano 2
-
-    // MK80
-    0x000020, // Classic
-    0x008000, // Special
-    0x010000, // Blend
-    0x018000, // Contemporary
-    0x002c00, // A. Piano 1
-    0x00b1f0, // A. Piano 2
-    0x012910, // Clavi
-    0x0199f0, // Vibraphone
-};
-
-const int sampleRates[] = {
-    // MKS-20
-    20000, 20000, 20000, 32000, 32000, 20000, 20000, 32000,
-    // MK80
-    20000, 20000, 20000, 32000, 20000, 20000, 32000, 20000};
+static const RomSet *romSetForPatch(int patch)
+{
+  return romSets[patchToRomSetId[patch]];
+}
 
 const int chorusRateToMsPeriod[] = {
     2700, // 1
@@ -115,11 +81,12 @@ RdPiano_juceAudioProcessor::RdPiano_juceAudioProcessor()
     : AudioProcessor(
           BusesProperties()
               .withInput("Input", juce::AudioChannelSet::stereo(), true)
-              .withOutput("Output", juce::AudioChannelSet::stereo(), true)) {
+              .withOutput("Output", juce::AudioChannelSet::stereo(), true))
+{
   mcu = new Mcu(
-      patchToRomSet[0]->ic5, patchToRomSet[0]->ic6, patchToRomSet[0]->ic7,
+      romSetForPatch(0)->ic5, romSetForPatch(0)->ic6, romSetForPatch(0)->ic7,
       // (const uint8_t *)BinaryData::mks20_cpub_1_0_bin,
-      (const uint8_t *)BinaryData::RD200_B_bin, patchToRomSet[0]->ic18);
+      (const uint8_t *)BinaryData::RD200_B_bin, romSetForPatch(0)->ic18);
 
   spaceD = new SpaceD();
   phaser = new Phaser();
@@ -128,7 +95,7 @@ RdPiano_juceAudioProcessor::RdPiano_juceAudioProcessor()
   spaceD->reset();
   phaser->reset();
 
-  sourceSampleRate = sampleRates[0];
+  sourceSampleRate = patchSampleRates[0];
 
   // DAW parameters
   addParameter(volume = new juce::AudioParameterFloat(
@@ -207,7 +174,8 @@ RdPiano_juceAudioProcessor::RdPiano_juceAudioProcessor()
   // efxReverbBalance->addListener(this);
 }
 
-RdPiano_juceAudioProcessor::~RdPiano_juceAudioProcessor() {
+RdPiano_juceAudioProcessor::~RdPiano_juceAudioProcessor()
+{
   // memset(mcu, 0, sizeof(Mcu));
   delete mcu;
   mcu = 0;
@@ -219,7 +187,8 @@ RdPiano_juceAudioProcessor::~RdPiano_juceAudioProcessor() {
 
 //==============================================================================
 void RdPiano_juceAudioProcessor::parameterValueChanged(int parameterIndex,
-                                                       float newValue) {
+                                                       float newValue)
+{
   sendChangeMessage();
 }
 
@@ -227,7 +196,8 @@ void RdPiano_juceAudioProcessor::parameterGestureChanged(
     int parameterIndex, bool gestureIsStarting) {}
 
 //==============================================================================
-const juce::String RdPiano_juceAudioProcessor::getName() const {
+const juce::String RdPiano_juceAudioProcessor::getName() const
+{
   return JucePlugin_Name;
 }
 
@@ -239,18 +209,19 @@ bool RdPiano_juceAudioProcessor::isMidiEffect() const { return false; }
 
 double RdPiano_juceAudioProcessor::getTailLengthSeconds() const { return 0.0; }
 
-int RdPiano_juceAudioProcessor::getNumPrograms() { return 8 + 8; }
+int RdPiano_juceAudioProcessor::getNumPrograms() { return NUM_PATCHES; }
 
 int RdPiano_juceAudioProcessor::getCurrentProgram() { return currentPatch; }
 
-void RdPiano_juceAudioProcessor::setCurrentProgram(int index) {
+void RdPiano_juceAudioProcessor::setCurrentProgram(int index)
+{
   if (index < 0 || index >= getNumPrograms())
     return;
 
   mcuLock.enter();
   // if (patchToRomSet[index] != patchToRomSet[currentPatch]) {
-  mcu->loadSounds(patchToRomSet[index]->ic5, patchToRomSet[index]->ic6,
-                  patchToRomSet[index]->ic7, patchToRomSet[index]->ic18,
+  mcu->loadSounds(romSetForPatch(index)->ic5, romSetForPatch(index)->ic6,
+                  romSetForPatch(index)->ic7, romSetForPatch(index)->ic18,
                   patchToOffset[index]);
   // }
 
@@ -258,23 +229,24 @@ void RdPiano_juceAudioProcessor::setCurrentProgram(int index) {
   mcu->commands_queue.push(0x31);
   mcu->commands_queue.push(0x30);
   mcuLock.exit();
-  sourceSampleRate = sampleRates[currentPatch];
+  sourceSampleRate = patchSampleRates[currentPatch];
 
   sendChangeMessage();
 }
 
-const juce::String RdPiano_juceAudioProcessor::getProgramName(int index) {
+const juce::String RdPiano_juceAudioProcessor::getProgramName(int index)
+{
   if (index >= getNumPrograms())
     return juce::String();
 
-  return juce::String(index >= 8 ? mk80PatchNames[index - 8]
-                                 : rd200PatchNames[index]);
+  return juce::String(patchNames[index]);
 }
 
 void RdPiano_juceAudioProcessor::changeProgramName(
     int index, const juce::String &newName) {}
 
-void RdPiano_juceAudioProcessor::setMasterTune(int16_t tune) {
+void RdPiano_juceAudioProcessor::setMasterTune(int16_t tune)
+{
   masterTune = tune;
 
   mcuLock.enter();
@@ -289,13 +261,15 @@ void RdPiano_juceAudioProcessor::setMasterTune(int16_t tune) {
   // TODO: we need to do this horrible switcharoo since changing
   // the tuning on patches different than 0 doesn't work...
   mcu->commands_queue.push(0x30);
-  for (size_t cycle = 0; cycle < 100; cycle++) {
+  for (size_t cycle = 0; cycle < 100; cycle++)
+  {
     mcu->generate_next_sample();
   }
   mcu->commands_queue.push(0xE0);
   mcu->commands_queue.push(tuneMsb);
   mcu->commands_queue.push(tuneLsb);
-  for (size_t cycle = 0; cycle < 100; cycle++) {
+  for (size_t cycle = 0; cycle < 100; cycle++)
+  {
     mcu->generate_next_sample();
   }
   mcu->commands_queue.push(0x30);
@@ -305,7 +279,8 @@ void RdPiano_juceAudioProcessor::setMasterTune(int16_t tune) {
   sendChangeMessage();
 }
 
-void RdPiano_juceAudioProcessor::mcuReset() {
+void RdPiano_juceAudioProcessor::mcuReset()
+{
   mcuLock.enter();
 
   mcu->reset();
@@ -322,7 +297,8 @@ void RdPiano_juceAudioProcessor::mcuReset() {
   mcu->commands_queue.push(0xE0);
   mcu->commands_queue.push(tuneMsb);
   mcu->commands_queue.push(tuneLsb);
-  for (size_t cycle = 0; cycle < 1024; cycle++) {
+  for (size_t cycle = 0; cycle < 1024; cycle++)
+  {
     mcu->generate_next_sample();
   }
   mcu->commands_queue.push(0x31);
@@ -333,7 +309,8 @@ void RdPiano_juceAudioProcessor::mcuReset() {
 
 //==============================================================================
 void RdPiano_juceAudioProcessor::prepareToPlay(double sampleRate,
-                                               int samplesPerBlock) {
+                                               int samplesPerBlock)
+{
   double ratio = sampleRate / 32000;
   emu_sample_buffer_size = ceil(samplesPerBlock * ratio);
   emu_sample_bufferL = new float[emu_sample_buffer_size];
@@ -354,27 +331,33 @@ void RdPiano_juceAudioProcessor::prepareToPlay(double sampleRate,
   midEQ.prepare(spec);
 }
 
-void RdPiano_juceAudioProcessor::releaseResources() {
-  if (emu_sample_bufferL) {
+void RdPiano_juceAudioProcessor::releaseResources()
+{
+  if (emu_sample_bufferL)
+  {
     delete[] emu_sample_bufferL;
     emu_sample_bufferL = 0;
   }
-  if (emu_sample_bufferR) {
+  if (emu_sample_bufferR)
+  {
     delete[] emu_sample_bufferR;
     emu_sample_bufferR = 0;
   }
-  if (emu_resampled_sample_bufferL) {
+  if (emu_resampled_sample_bufferL)
+  {
     delete[] emu_resampled_sample_bufferL;
     emu_resampled_sample_bufferL = 0;
   }
-  if (emu_resampled_sample_bufferR) {
+  if (emu_resampled_sample_bufferR)
+  {
     delete[] emu_resampled_sample_bufferR;
     emu_resampled_sample_bufferR = 0;
   }
 }
 
 bool RdPiano_juceAudioProcessor::isBusesLayoutSupported(
-    const BusesLayout &layouts) const {
+    const BusesLayout &layouts) const
+{
   if (layouts.getMainOutputChannelSet() != juce::AudioChannelSet::stereo())
     return false;
 
@@ -382,7 +365,8 @@ bool RdPiano_juceAudioProcessor::isBusesLayoutSupported(
 }
 
 void RdPiano_juceAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer,
-                                              juce::MidiBuffer &midiMessages) {
+                                              juce::MidiBuffer &midiMessages)
+{
   juce::ScopedNoDenormals noDenormals;
   auto totalNumInputChannels = getTotalNumInputChannels();
   auto totalNumOutputChannels = getTotalNumOutputChannels();
@@ -401,31 +385,38 @@ void RdPiano_juceAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer,
   double currentError = renderBufferFrames - renderBufferFramesFloat;
 
   int limit = buffer.getNumSamples() / 4;
-  if (samplesError > limit && renderBufferFrames > limit) {
+  if (samplesError > limit && renderBufferFrames > limit)
+  {
     renderBufferFrames -= limit;
     currentError -= limit;
-  } else if (-samplesError > limit) {
+  }
+  else if (-samplesError > limit)
+  {
     renderBufferFrames += limit;
     currentError += limit;
   }
 
-  if (renderBufferFrames < 2) {
+  if (renderBufferFrames < 2)
+  {
     printf("Not enough samples to render\n");
     fflush(stdout);
     return;
   }
   if (renderBufferFrames > 20000 ||
-      renderBufferFrames > emu_sample_buffer_size) {
+      renderBufferFrames > emu_sample_buffer_size)
+  {
     printf("Too many samples to render\n");
     fflush(stdout);
     return;
   }
 
-  for (size_t i = 0; i < emu_sample_buffer_size; i++) {
+  for (size_t i = 0; i < emu_sample_buffer_size; i++)
+  {
     emu_sample_bufferL[i] = 0;
     emu_sample_bufferR[i] = 0;
   }
-  for (size_t i = 0; i < buffer.getNumSamples(); i++) {
+  for (size_t i = 0; i < buffer.getNumSamples(); i++)
+  {
     emu_resampled_sample_bufferL[i] = 0;
     emu_resampled_sample_bufferR[i] = 0;
   }
@@ -442,13 +433,16 @@ void RdPiano_juceAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer,
   phaser->depth = phaserDepthTable[(int)floor(*efxPhaserDepth * 0x7f)];
 
   mcuLock.enter();
-  for (int i = 0; i < renderBufferFrames; i++) {
+  for (int i = 0; i < renderBufferFrames; i++)
+  {
     int evI = 0;
-    for (const auto metadata : midiMessages) {
+    for (const auto metadata : midiMessages)
+    {
       auto message = metadata.getMessage();
       if (metadata.samplePosition >= i &&
           std::find(processedEvents.begin(), processedEvents.end(), evI) ==
-              processedEvents.end()) {
+              processedEvents.end())
+      {
         mcu->sendMidiCmd(message.getRawData()[0], message.getRawData()[1],
                          message.getRawData()[2]);
         processedEvents.push_back(evI);
@@ -462,9 +456,12 @@ void RdPiano_juceAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer,
 
     spaceD->audioInL = sample << 5;
     spaceD->audioInR = sample << 5;
-    if (*chorusEnabled) {
+    if (*chorusEnabled)
+    {
       spaceD->process();
-    } else {
+    }
+    else
+    {
       spaceD->audioOutL = spaceD->audioInL;
       spaceD->audioOutR = spaceD->audioInR;
     }
@@ -472,7 +469,8 @@ void RdPiano_juceAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer,
     spaceD->audioOutR >>= 6;
 
     // if (*efxPhaserOnOff && *efxEnabled) {
-    if (*efxEnabled) {
+    if (*efxEnabled)
+    {
       phaser->audioInL = spaceD->audioOutL << 5;
       phaser->audioInR = spaceD->audioOutR << 5;
       phaser->process();
@@ -487,7 +485,8 @@ void RdPiano_juceAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer,
 
   double ratio = destSampleRate / sourceSampleRate;
   if (savedDestSampleRate != destSampleRate ||
-      savedSourceSampleRate != sourceSampleRate) {
+      savedSourceSampleRate != sourceSampleRate)
+  {
     savedDestSampleRate = destSampleRate;
     savedSourceSampleRate = sourceSampleRate;
     if (resampleL)
@@ -507,7 +506,8 @@ void RdPiano_juceAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer,
                    false, &inUsed, emu_resampled_sample_bufferR,
                    buffer.getNumSamples());
   samplesError += currentError;
-  if (inUsed == 0) {
+  if (inUsed == 0)
+  {
     samplesError = 0;
     printf("click: %d\n", out);
   }
@@ -516,12 +516,14 @@ void RdPiano_juceAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer,
   float *channelDataR = buffer.getWritePointer(1);
 
   const float scaling = 0.5f;
-  for (int i = 0; i < buffer.getNumSamples(); i++) {
+  for (int i = 0; i < buffer.getNumSamples(); i++)
+  {
     channelDataL[i] = emu_resampled_sample_bufferL[i] * scaling;
     channelDataR[i] = emu_resampled_sample_bufferR[i] * scaling;
 
     tremoloPhase = (tremoloPhase + 1) & 0xffffffff;
-    if (*tremoloEnabled) {
+    if (*tremoloEnabled)
+    {
       float tremoloL = (0.5f + 0.5f * sin(*tremoloRate * 3.14159265359 *
                                           tremoloPhase / destSampleRate));
       float tremoloR =
@@ -547,10 +549,12 @@ void RdPiano_juceAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer,
   // flush midi
   mcuLock.enter();
   int evI = 0;
-  for (const auto metadata : midiMessages) {
+  for (const auto metadata : midiMessages)
+  {
     auto message = metadata.getMessage();
     if (std::find(processedEvents.begin(), processedEvents.end(), evI) ==
-        processedEvents.end()) {
+        processedEvents.end())
+    {
       mcu->sendMidiCmd(message.getRawData()[0], message.getRawData()[1],
                        message.getRawData()[2]);
       processedEvents.push_back(evI);
@@ -563,7 +567,8 @@ void RdPiano_juceAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer,
   }
   mcuLock.exit();
 
-  if (hasMidi) {
+  if (hasMidi)
+  {
     midiMessageCount++;
     // sendChangeMessage();
   }
@@ -572,13 +577,15 @@ void RdPiano_juceAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer,
 //==============================================================================
 bool RdPiano_juceAudioProcessor::hasEditor() const { return true; }
 
-juce::AudioProcessorEditor *RdPiano_juceAudioProcessor::createEditor() {
+juce::AudioProcessorEditor *RdPiano_juceAudioProcessor::createEditor()
+{
   return new RdPiano_juceAudioProcessorEditor(*this);
 }
 
 //==============================================================================
 void RdPiano_juceAudioProcessor::getStateInformation(
-    juce::MemoryBlock &destData) {
+    juce::MemoryBlock &destData)
+{
   std::unique_ptr<juce::XmlElement> xml(new juce::XmlElement("RdPiano"));
   xml->setAttribute("masterTune", masterTune);
   xml->setAttribute("currentPatch", currentPatch);
@@ -596,12 +603,15 @@ void RdPiano_juceAudioProcessor::getStateInformation(
 }
 
 void RdPiano_juceAudioProcessor::setStateInformation(const void *data,
-                                                     int sizeInBytes) {
+                                                     int sizeInBytes)
+{
   std::unique_ptr<juce::XmlElement> xmlState(
       getXmlFromBinary(data, sizeInBytes));
 
-  if (xmlState.get() != nullptr) {
-    if (xmlState->hasTagName("RdPiano")) {
+  if (xmlState.get() != nullptr)
+  {
+    if (xmlState->hasTagName("RdPiano"))
+    {
       masterTune = xmlState->getIntAttribute("masterTune", 0);
       currentPatch = xmlState->getIntAttribute("currentPatch", 0);
       *volume = (float)xmlState->getDoubleAttribute("volume", 1.0);
@@ -641,19 +651,20 @@ void RdPiano_juceAudioProcessor::setStateInformation(const void *data,
 
   mcuLock.enter();
   mcu->loadSounds(
-      patchToRomSet[currentPatch]->ic5, patchToRomSet[currentPatch]->ic6,
-      patchToRomSet[currentPatch]->ic7, patchToRomSet[currentPatch]->ic18,
+      romSetForPatch(currentPatch)->ic5, romSetForPatch(currentPatch)->ic6,
+      romSetForPatch(currentPatch)->ic7, romSetForPatch(currentPatch)->ic18,
       patchToOffset[currentPatch]);
 
   mcu->commands_queue.push(0x31);
   mcu->commands_queue.push(0x30);
   mcuLock.exit();
 
-  sourceSampleRate = sampleRates[currentPatch];
+  sourceSampleRate = patchSampleRates[currentPatch];
 }
 
 //==============================================================================
 // This creates new instances of the plugin..
-juce::AudioProcessor *JUCE_CALLTYPE createPluginFilter() {
+juce::AudioProcessor *JUCE_CALLTYPE createPluginFilter()
+{
   return new RdPiano_juceAudioProcessor();
 }

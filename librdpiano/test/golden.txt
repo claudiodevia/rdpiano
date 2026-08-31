@@ -1,0 +1,17 @@
+# rdpiano e2e golden hashes: <parche> <hash fnv1a64> <nombre>
+ 0 107a674049d2232f  MKS-20: Piano 1
+ 1 95abedcc94b02244  MKS-20: Piano 2
+ 2 74390ee4b11499ab  MKS-20: Piano 3
+ 3 24ec8f59a8f6b302  MKS-20: Harpsichord
+ 4 30a78022741099be  MKS-20: Clavi
+ 5 350b647c114a664f  MKS-20: Vibraphone
+ 6 33beb59b04e5513b  MKS-20: E-Piano 1
+ 7 75ade6f6e8fb626d  MKS-20: E-Piano 2
+ 8 6f6939f91f10fb8f  MK-80: Classic
+ 9 88010fe9518e8422  MK-80: Special
+10 6971bb5b1ae539dd  MK-80: Blend
+11 84370413729d83ff  MK-80: Contemporary
+12 93a8850d7162baa4  MK-80: A. Piano 1
+13 490a7c70a56bc06b  MK-80: A. Piano 2
+14 8b0da0f1c2af3ae8  MK-80: Clavi
+15 587c724b5d450089  MK-80: Vibraphone

@@ -7,34 +7,38 @@ project(RdPiano VERSION 1.0)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED True)
 
-add_compile_options(-fsanitize=address)
-add_link_options(-fsanitize=address)
+# ASAN por defecto: es intencional para desarrollo. Apagarlo (-DRDPIANO_SANITIZE=OFF)
+# hace que el harness e2e corra bastante más rápido.
+option(RDPIANO_SANITIZE "Build with AddressSanitizer" ON)
+if (RDPIANO_SANITIZE)
+    add_compile_options(-fsanitize=address)
+    add_link_options(-fsanitize=address)
+endif()
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-constant-logical-operand")
 
-# find SDL2
-find_package(SDL2 REQUIRED)
-
-# find portmidi
-find_path(PORTMIDI_INCLUDE_DIR portmidi.h)
-find_library(PORTMIDI_LIBRARY portmidi)
-
-if (NOT PORTMIDI_INCLUDE_DIR OR NOT PORTMIDI_LIBRARY)
-    message(FATAL_ERROR "portmidi library not found")
-endif()
-
-# include directories for all targets
-include_directories(${SDL2_INCLUDE_DIRS} ${PORTMIDI_INCLUDE_DIR} "include")
+include_directories("include")
 
 # library target
 add_library(librdpiano src/mcu.cpp src/sound_chip.cpp)
-
-# test application target
-add_executable(rdpiano_standalone test/standalone.cpp)
-
-# link libraries for test app
-target_link_libraries(rdpiano_standalone ${SDL2_LIBRARIES} ${PORTMIDI_LIBRARY} librdpiano)
-
-# include directories for specific targets
 target_include_directories(librdpiano PRIVATE src)
-target_include_directories(rdpiano_standalone PRIVATE test)
+
+# end-to-end test harness: sin dependencias externas, siempre se compila
+add_executable(rdpiano_e2e test/e2e.cpp)
+target_link_libraries(rdpiano_e2e librdpiano)
+target_include_directories(rdpiano_e2e PRIVATE test)
+
+# SDL2 + portmidi son opcionales: solo hacen falta para la app interactiva
+find_package(SDL2 QUIET)
+find_path(PORTMIDI_INCLUDE_DIR portmidi.h)
+find_library(PORTMIDI_LIBRARY portmidi)
+
+if (SDL2_FOUND AND PORTMIDI_INCLUDE_DIR AND PORTMIDI_LIBRARY)
+    add_executable(rdpiano_standalone test/standalone.cpp)
+    target_include_directories(rdpiano_standalone
+        PRIVATE test ${SDL2_INCLUDE_DIRS} ${PORTMIDI_INCLUDE_DIR})
+    target_link_libraries(rdpiano_standalone
+        ${SDL2_LIBRARIES} ${PORTMIDI_LIBRARY} librdpiano)
+else()
+    message(STATUS "SDL2/portmidi no encontrados: se omite rdpiano_standalone")
+endif()

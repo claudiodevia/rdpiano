@@ -87,9 +87,35 @@ con tag `latest`.
 
 ## Cómo verificar cambios
 
-No hay suite de tests. La verificación es **auditiva**: `librdpiano/test/standalone.cpp` es una app
-SDL+portmidi interactiva. Cualquier cambio en `sound_chip.cpp` o en los `UNSCRAMBLE_*` es de alto
-riesgo y sin red de seguridad — decirlo explícitamente al usuario en vez de asumir que compiló bien.
+**Primera parada: el harness e2e** (`librdpiano/test/e2e.cpp`). Headless, sin dependencias
+externas (no necesita SDL, portmidi ni JUCE) y ~40x tiempo real: arranca el firmware, recorre los
+16 parches, inyecta MIDI fijo y mide el audio.
+
+```bash
+cd librdpiano && cmake -B build -DRDPIANO_SANITIZE=OFF -DCMAKE_BUILD_TYPE=Release
+cmake --build build --target rdpiano_e2e
+cd .. && ./librdpiano/build/rdpiano_e2e --roms roms --golden librdpiano/test/golden.txt
+```
+
+Los 16 parches tardan ~3 s. Comprueba: arranque silencioso, que la nota suene, el acorde, que la
+cola se extinga tras el note-off (**detector de voces colgadas**, ver trampa 3), polifonía de 16
+voces, rango de pico — y un **hash bit-exacto** del stream por parche contra
+`librdpiano/test/golden.txt`. Cualquier cambio en `sound_chip.cpp`, en los `UNSCRAMBLE_*` o en el
+MCU mueve el hash. Sale con código 1 si algo falla.
+
+Si el cambio de audio es **intencionado**: renderiza WAVs (`--wav-dir DIR`, un WAV por parche con
+el escalado seco del plugin), escúchalos, y solo entonces regenera con `--write-golden`. Nunca
+regenerar el golden para "arreglar" un fallo sin escuchar antes.
+
+`--patch N` limita a un parche (~0.2 s) para iterar rápido.
+
+Lo que el harness **no** cubre: efectos del plugin (chorus/phaser/tremolo/EQ), resampling,
+`setMasterTune()` y la UI. Eso sigue siendo verificación auditiva con `librdpiano/test/standalone.cpp`
+(app SDL+portmidi interactiva) o con el plugin en un DAW. Un cambio en `sound_chip.cpp` que pase el
+harness sigue siendo de alto riesgo tímbrico si el hash cambió: decírselo al usuario, no asumir.
+
+La tabla de parches (offsets, sample rates, nombres, ROM set) vive en `librdpiano/include/patches.h`
+y la comparten plugin y harness — si se toca, ambos cambian a la vez.
 
 ## Convenciones
 
