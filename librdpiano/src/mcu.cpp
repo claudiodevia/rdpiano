@@ -412,18 +412,8 @@ void Mcu::execute_run()
       execute_set_input(0, ASSERT_LINE);
   check_irq_lines();
 
-  // do
-  // {
-  //   // failsafe
-  //   if (m_icount > 10000)
-  //     m_icount = 0;
-    
-  //   if (m_wai_state & (M6800_WAI | M6800_SLP))
-  //     eat_cycles();
-  //   else
-  //     execute_one();
-  // } while (m_icount > 0);
-
+  // Una instrucción por llamada: el reloj maestro es el audio, no la CPU.
+  // (Hubo un bucle por presupuesto de ciclos; ver docs/FIRMWARE.md §4.)
   execute_one();
 }
 
@@ -463,9 +453,8 @@ u8 Mcu::read_byte(u16 addr)
   else if (addr == 0x0002) {
     u8 data_comm_bus = 0xff;
 
-    // HACK: only works with the RD200 ROM
+    // HACK: only works with the RD200 ROM (docs/FIRMWARE.md §2)
     if (!commands_queue.empty() && (PCD == 0xE12B || PCD == 0xE15E || PCD == 0xE168))
-    // if (!commands_queue.empty() && (PCD == 0xE0E4 || PCD == 0xE111 || PCD == 0xE11B))
     {
       data_comm_bus = commands_queue.front();
       commands_queue.pop();
@@ -480,9 +469,8 @@ u8 Mcu::read_byte(u16 addr)
   else if (addr == 0x0003) {
     // printf("%04x: read port2\n", PCD);
 
-    // HACK: only works with the RD200 ROM
+    // HACK: only works with the RD200 ROM (docs/FIRMWARE.md §2)
     if (PCD == 0xE15A) return 0xFF;
-    // if (PCD == 0xE10D) return 0xFF;
     return 0x00;
   }
 
@@ -534,8 +522,9 @@ void Mcu::write_byte(u16 addr, u8 data)
   else if (addr == 0x0003) {
     // printf("%04x: port2 write %04x=%02x\n", PCD, addr, data);
 
-    // TODO: Currently not working, investigate
-    current_sample_rate = (data >> 2) & 1;
+    // El bit 2 selecciona la tasa de muestreo en la máquina real, pero aquí
+    // nunca llegó a funcionar: la tasa sale de patchSampleRates[].
+    // Ver docs/FIRMWARE.md §3.
 
     execute_set_input(M6801_TIN_LINE, CLEAR_LINE);
   }

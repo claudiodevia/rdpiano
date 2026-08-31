@@ -96,22 +96,6 @@ private:
   bool efxPhaserOnOffMode = false;
   bool efxPhaserRateMode = false;
   bool efxPhaserDepthMode = false;
-  bool efxReverbOnOffMode = false;
-  bool efxReverbTypeMode = false;
-  bool efxReverbBalanceMode = false;
-
-  unsigned long lastMidiMessageCount = 0;
-
-  // class MidiMessageTimer : public juce::Timer {
-  // public:
-  //   RdPiano_juceAudioProcessorEditor &parent;
-  //   MidiMessageTimer(RdPiano_juceAudioProcessorEditor &parent)
-  //       : parent(parent){};
-
-  //   void timerCallback() override { parent.repaint(); };
-  //   void restart() { startTimer(100); }
-  // };
-  // MidiMessageTimer midiMessageTimer;
 
   class KnobLF : public juce::LookAndFeel_V3 {
   public:

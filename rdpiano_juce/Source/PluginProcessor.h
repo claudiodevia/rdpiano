@@ -75,9 +75,6 @@ public:
   // juce::AudioParameterBool *efxPhaserOnOff;
   juce::AudioParameterFloat *efxPhaserRate;
   juce::AudioParameterFloat *efxPhaserDepth;
-  // juce::AudioParameterBool *efxReverbOnOff;
-  // juce::AudioParameterInt *efxReverbType;
-  // juce::AudioParameterFloat *efxReverbBalance;
 
   int currentPatch = 0;
   int masterTune = 0;
@@ -98,8 +95,6 @@ public:
   size_t emu_sample_buffer_size = 0;
 
   unsigned long tremoloPhase = 0;
-
-  unsigned long midiMessageCount = 0;
 
   void setMasterTune(int16_t tune);
   void mcuReset();

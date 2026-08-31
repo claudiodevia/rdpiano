@@ -145,13 +145,6 @@ void RdPiano_juceAudioProcessorEditor::paint(juce::Graphics &g) {
   g.drawImage(juce::ImageCache::getFromMemory(BinaryData::interactable_png,
                                               BinaryData::interactable_pngSize),
               1188 / sfC, volumeY, 100 / sfC, 131 / sfC, 1188, 1179, 100, 131);
-
-  // if (audioProcessor.midiMessageCount != lastMidiMessageCount) {
-  //   g.setColour(juce::Colours::greenyellow);
-  //   g.fillRect(5197 / sfC, 517 / sfC, 85 / sfC, 38 / sfC);
-  //   lastMidiMessageCount = audioProcessor.midiMessageCount;
-  //   midiMessageTimer.restart();
-  // }
 }
 
 void RdPiano_juceAudioProcessorEditor::buttonClicked(juce::Button *button) {
@@ -163,9 +156,6 @@ void RdPiano_juceAudioProcessorEditor::buttonClicked(juce::Button *button) {
   // bool prevEfxPhaserOnOffMode = efxPhaserOnOffMode;
   bool prevEfxPhaserDepthMode = efxPhaserDepthMode;
   bool prevEfxPhaserRateMode = efxPhaserRateMode;
-  // bool prevEfxReverbOnOffMode = efxReverbOnOffMode;
-  // // bool prevEfxReverbTypeMode = efxReverbTypeMode;
-  // // bool prevEfxReverbBalanceMode = efxReverbBalanceMode;
 
   tuneMode = false;
   chorusRateMode = false;
@@ -175,9 +165,6 @@ void RdPiano_juceAudioProcessorEditor::buttonClicked(juce::Button *button) {
   // efxPhaserOnOffMode = false;
   efxPhaserRateMode = false;
   efxPhaserDepthMode = false;
-  // efxReverbOnOffMode = false;
-  // efxReverbTypeMode = false;
-  // efxReverbBalanceMode = false;
   if (button == &buttonMks20) {
     audioProcessor.setCurrentProgram(0);
   } else if (button == &buttonMk80) {
@@ -329,9 +316,8 @@ void RdPiano_juceAudioProcessorEditor::updateValues() {
   buttonTremoloOnOff.enabled = *audioProcessor.tremoloEnabled;
   buttonTremoloParams.enabled = tremoloRateMode || tremoloDepthMode;
   buttonEfxOnOff.enabled = *audioProcessor.efxEnabled;
-  buttonEfxParams.enabled = efxPhaserOnOffMode || efxPhaserRateMode ||
-                            efxPhaserDepthMode || efxReverbOnOffMode ||
-                            efxReverbTypeMode || efxReverbBalanceMode;
+  buttonEfxParams.enabled =
+      efxPhaserOnOffMode || efxPhaserRateMode || efxPhaserDepthMode;
 
   if (tuneMode) {
     juce::String tuningString =

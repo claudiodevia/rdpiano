@@ -58,24 +58,6 @@ const int chorusRateToMsPeriod[] = {
     175,  // 15
 };
 
-const int chorusRateToDepthChange[] = {
-    11200, // 1
-    5600,  // 2
-    3700,  // 3
-    2700,  // 4
-    2200,  // 5
-    1800,  // 6
-    1520,  // 7
-    1360,  // 8
-    1200,  // 9
-    1040,  // 10
-    960,   // 11
-    880,   // 12
-    800,   // 13
-    720,   // 14
-    680,   // 15
-};
-
 //==============================================================================
 RdPiano_juceAudioProcessor::RdPiano_juceAudioProcessor()
     : AudioProcessor(
@@ -85,7 +67,6 @@ RdPiano_juceAudioProcessor::RdPiano_juceAudioProcessor()
 {
   mcu = new Mcu(
       romSetForPatch(0)->ic5, romSetForPatch(0)->ic6, romSetForPatch(0)->ic7,
-      // (const uint8_t *)BinaryData::mks20_cpub_1_0_bin,
       (const uint8_t *)BinaryData::RD200_B_bin, romSetForPatch(0)->ic18);
 
   spaceD = new SpaceD();
@@ -147,16 +128,6 @@ RdPiano_juceAudioProcessor::RdPiano_juceAudioProcessor()
   addParameter(
       efxPhaserDepth = new juce::AudioParameterFloat(
           juce::ParameterID{"efxPhaserDepth", 1}, "Phaser Depth", 0, 1, 0.8));
-  // addParameter(
-  //     efxReverbOnOff = new juce::AudioParameterBool(
-  //         juce::ParameterID{"efxReverbOnOff", 1}, "Reverb Enabled", true));
-  // addParameter(
-  //     efxReverbType = new juce::AudioParameterInt(
-  //         juce::ParameterID{"efxReverbType", 1}, "Reverb Type", 0, 1, 0));
-  // addParameter(
-  //     efxReverbBalance = new juce::AudioParameterFloat(
-  //         juce::ParameterID{"efxReverbBalance", 1}, "Reverb Balance", 0, 1,
-  //         0));
 
   volume->addListener(this);
   chorusEnabled->addListener(this);
@@ -169,9 +140,6 @@ RdPiano_juceAudioProcessor::RdPiano_juceAudioProcessor()
   // efxPhaserOnOff->addListener(this);
   efxPhaserRate->addListener(this);
   efxPhaserDepth->addListener(this);
-  // efxReverbOnOff->addListener(this);
-  // efxReverbType->addListener(this);
-  // efxReverbBalance->addListener(this);
 }
 
 RdPiano_juceAudioProcessor::~RdPiano_juceAudioProcessor()
@@ -371,12 +339,9 @@ void RdPiano_juceAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer,
   auto totalNumInputChannels = getTotalNumInputChannels();
   auto totalNumOutputChannels = getTotalNumOutputChannels();
 
-  bool hasMidi = false;
-
   for (auto i = totalNumInputChannels; i < totalNumOutputChannels; ++i)
     buffer.clear(i, 0, buffer.getNumSamples());
 
-  // int sourceSampleRate = mcu->current_sample_rate ? 32000 : 20000;
   double destSampleRate = getSampleRate();
 
   double renderBufferFramesFloat =
@@ -446,8 +411,6 @@ void RdPiano_juceAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer,
         mcu->sendMidiCmd(message.getRawData()[0], message.getRawData()[1],
                          message.getRawData()[2]);
         processedEvents.push_back(evI);
-
-        hasMidi = true;
       }
       evI++;
     }
@@ -560,18 +523,10 @@ void RdPiano_juceAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer,
       processedEvents.push_back(evI);
 
       printf("leftover midi\n");
-
-      hasMidi = true;
     }
     evI++;
   }
   mcuLock.exit();
-
-  if (hasMidi)
-  {
-    midiMessageCount++;
-    // sendChangeMessage();
-  }
 }
 
 //==============================================================================

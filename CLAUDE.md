@@ -52,9 +52,10 @@ Las ROMs vienen con líneas de dirección/datos permutadas en el PCB; se deshace
 
 1. **El handshake del bus depende de direcciones fijas del firmware RD200.** `read_byte` compara
    `PCD` contra `0xE12B/0xE15E/0xE168/0xE15A` para entregar bytes de `commands_queue`. Por eso
-   solo se carga `RD200_B.bin` aunque haya dumps de MKS-20/MK-80. Cambiar firmware = recalcular.
-2. `current_sample_rate` (bit del puerto 2) **no funciona**; el rate real sale de `sampleRates[]`
-   en el plugin.
+   solo se carga `RD200_B.bin` aunque haya dumps de MKS-20/MK-80. Cambiar firmware = recalcular:
+   las direcciones equivalentes del firmware de MKS-20 están en [docs/FIRMWARE.md](docs/FIRMWARE.md).
+2. El **bit de sample rate del puerto 2** no funciona (nunca funcionó); el rate real sale de
+   `patchSampleRates[]` en `patches.h`. Ver [docs/FIRMWARE.md §3](docs/FIRMWARE.md).
 3. Hay **dos hacks en `SoundChip::update()`**: early-out con `env_value==0 && env_dest==0`
    (rendimiento) y silenciado condicional para evitar voces colgadas (marcado `investigate`).
 4. `setMasterTune()` corre el emulador **desde el hilo de UI** bajo `mcuLock` (`juce::SpinLock`),
