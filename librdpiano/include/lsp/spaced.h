@@ -10,7 +10,6 @@
 
 #pragma once
 
-#include <cmath>
 #include <stdint.h>
 
 inline constexpr int32_t spaceDRateTable[] = {
@@ -38,10 +37,19 @@ inline constexpr int32_t spaceDDepthTable[] = {
     307, 311, 314, 318, 322, 326, 330, 334, 338, 342, 346, 350, 354, 358, 363,
     367, 371, 375, 379, 384, 388, 392, 397};
 
-inline int32_t spaceDRateFromMs(float ms) { return ms * 498.0f; }
+inline int32_t spaceDRateFromMs(float ms) { return (int32_t)(ms * 498.0f); }
+
+// `amount` va de 0 a 1. El plugin nunca llega a 1 (chorusDepth/15 <= 0.93),
+// pero el motor acepta parámetros arbitrarios: sin el recorte, amount == 1
+// indexaría spaceDDepthTable[128], que está fuera de la tabla.
 inline int32_t spaceDDepth(float amount)
 {
-  return spaceDDepthTable[(int)floor(amount * 0x80)];
+  int index = (int)(amount * 0x80);
+  if (index < 0)
+    index = 0;
+  if (index > 0x7f)
+    index = 0x7f;
+  return spaceDDepthTable[index];
 }
 
 class SpaceD

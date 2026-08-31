@@ -9,53 +9,26 @@
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
 #include "../../librdpiano/include/patches.h"
-#include <cmath>
 
-struct RomSet
-{
-  const uint8_t *ic5;
-  const uint8_t *ic6;
-  const uint8_t *ic7;
-  const uint8_t *ic18;
-};
-
-const RomSet mks20ARomSet = {(const uint8_t *)BinaryData::mks20_15179738_BIN,
-                             (const uint8_t *)BinaryData::mks20_15179737_BIN,
-                             (const uint8_t *)BinaryData::mks20_15179736_BIN,
-                             (const uint8_t *)BinaryData::mks20_15179757_BIN};
-const RomSet mks20BRomSet = {(const uint8_t *)BinaryData::mks20_15179741_BIN,
-                             (const uint8_t *)BinaryData::mks20_15179740_BIN,
-                             (const uint8_t *)BinaryData::mks20_15179739_BIN,
-                             (const uint8_t *)BinaryData::mks20_15179757_BIN};
-const RomSet mk80RomSet = {(const uint8_t *)BinaryData::MK80_IC5_bin,
-                           (const uint8_t *)BinaryData::MK80_IC6_bin,
-                           (const uint8_t *)BinaryData::MK80_IC7_bin,
-                           (const uint8_t *)BinaryData::MK80_IC18_bin};
-
-const RomSet *const romSets[ROMSET_COUNT] = {&mks20ARomSet, &mks20BRomSet,
-                                             &mk80RomSet};
-
-static const RomSet *romSetForPatch(int patch)
-{
-  return romSets[patchToRomSetId[patch]];
-}
-
-const int chorusRateToMsPeriod[] = {
-    2700, // 1
-    1380, // 2
-    910,  // 3
-    680,  // 4
-    540,  // 5
-    450,  // 6
-    385,  // 7
-    335,  // 8
-    300,  // 9
-    265,  // 10
-    245,  // 11
-    220,  // 12
-    205,  // 13
-    190,  // 14
-    175,  // 15
+// Las ROMs empotradas, en el orden de RomSetId. Los nombres canónicos están en
+// patches.h y test_patches.cpp comprueba que el .jucer empotra exactamente
+// esos ficheros.
+static const RdRomSet romSets[ROMSET_COUNT] = {
+    // ROMSET_MKS20_A
+    {(const uint8_t *)BinaryData::mks20_15179738_BIN,
+     (const uint8_t *)BinaryData::mks20_15179737_BIN,
+     (const uint8_t *)BinaryData::mks20_15179736_BIN,
+     (const uint8_t *)BinaryData::mks20_15179757_BIN},
+    // ROMSET_MKS20_B
+    {(const uint8_t *)BinaryData::mks20_15179741_BIN,
+     (const uint8_t *)BinaryData::mks20_15179740_BIN,
+     (const uint8_t *)BinaryData::mks20_15179739_BIN,
+     (const uint8_t *)BinaryData::mks20_15179757_BIN},
+    // ROMSET_MK80
+    {(const uint8_t *)BinaryData::MK80_IC5_bin,
+     (const uint8_t *)BinaryData::MK80_IC6_bin,
+     (const uint8_t *)BinaryData::MK80_IC7_bin,
+     (const uint8_t *)BinaryData::MK80_IC18_bin},
 };
 
 //==============================================================================
@@ -65,15 +38,8 @@ RdPiano_juceAudioProcessor::RdPiano_juceAudioProcessor()
               .withInput("Input", juce::AudioChannelSet::stereo(), true)
               .withOutput("Output", juce::AudioChannelSet::stereo(), true))
 {
-  mcu = std::make_unique<Mcu>(
-      romSetForPatch(0)->ic5, romSetForPatch(0)->ic6, romSetForPatch(0)->ic7,
-      (const uint8_t *)BinaryData::RD200_B_bin, romSetForPatch(0)->ic18);
-
-  mcuReset();
-  spaceD.reset();
-  phaser.reset();
-
-  sourceSampleRate = patchSampleRates[0];
+  engine = std::make_unique<RdPianoEngine>(
+      romSets, (const uint8_t *)BinaryData::RD200_B_bin);
 
   // DAW parameters
   addParameter(volume = new juce::AudioParameterFloat(
@@ -174,22 +140,14 @@ void RdPiano_juceAudioProcessor::setCurrentProgram(int index)
   if (index < 0 || index >= getNumPrograms())
     return;
 
+  // El motor decide si hay que recargar el juego de ROM o basta con remapear
+  // una página (REFACTORIZACION §6). Lo que sigue siendo del plugin es
+  // serializarlo con el hilo de audio: setPatch() corre el emulador.
   mcuLock.enter();
-  // Solo se recarga el ROM set cuando cambia de verdad: dentro del mismo set,
-  // cambiar de parche es remapear una página (REFACTORIZACION §6). Esto es lo
-  // que hace que arrastrar el dial deje de costar ~2,9 ms por evento
-  // (FIABILIDAD §6).
-  if (patchToRomSetId[index] != patchToRomSetId[currentPatch])
-    mcu->loadRomSet(romSetForPatch(index)->ic5, romSetForPatch(index)->ic6,
-                    romSetForPatch(index)->ic7, romSetForPatch(index)->ic18);
-
-  mcu->selectPatch(patchToOffset[index]);
+  engine->setPatch(index);
+  mcuLock.exit();
 
   currentPatch = index;
-  mcu->reloadPatch();
-  mcuLock.exit();
-  sourceSampleRate = patchSampleRates[currentPatch];
-
   sendChangeMessage();
 }
 
@@ -212,55 +170,51 @@ void RdPiano_juceAudioProcessor::setMasterTune(int16_t tune)
   // Lo que sigue siendo del plugin es serializarlo con el hilo de audio: esto
   // corre el emulador desde el hilo de UI (trampa 4 de CLAUDE.md).
   mcuLock.enter();
-  mcu->setMasterTune(tune);
+  engine->setMasterTune(tune);
   mcuLock.exit();
 
   sendChangeMessage();
 }
 
-void RdPiano_juceAudioProcessor::mcuReset()
+// Vuelca los parámetros de JUCE al POD que lee render(). Se llama una vez por
+// bloque, antes de renderizar: el motor no conoce juce::AudioParameter.
+void RdPiano_juceAudioProcessor::syncParamsToEngine()
 {
-  mcuLock.enter();
-  // El plugin calienta siempre a 20 kHz, también en los parches de 32 kHz.
-  // TODO: el harness calienta al ritmo del parche; hay que decidir cuál es el
-  // arranque bueno y dejar uno solo (REFACTORIZACION §3).
-  mcu->boot((int16_t)masterTune, false);
-  mcuLock.exit();
+  RdEngineParams &p = engine->params;
+  p.volume = *volume;
+  p.chorusEnabled = *chorusEnabled;
+  p.chorusRate = *chorusRate;
+  p.chorusDepth = *chorusDepth;
+  p.tremoloEnabled = *tremoloEnabled;
+  p.tremoloRate = *tremoloRate;
+  p.tremoloDepth = *tremoloDepth;
+  p.efxEnabled = *efxEnabled;
+  p.efxPhaserRate = *efxPhaserRate;
+  p.efxPhaserDepth = *efxPhaserDepth;
 }
 
 //==============================================================================
 void RdPiano_juceAudioProcessor::prepareToPlay(double sampleRate,
                                                int samplesPerBlock)
 {
-  double ratio = sampleRate / 32000;
-  emu_sample_buffer_size = ceil(samplesPerBlock * ratio);
-  // assign() y no new[]: si el host llama dos veces sin releaseResources de
-  // por medio, aquí no se fuga nada (AUDITORIA §12).
-  emu_sample_bufferL.assign(emu_sample_buffer_size, 0.0f);
-  emu_sample_bufferR.assign(emu_sample_buffer_size, 0.0f);
-  emu_resampled_sample_bufferL.assign(samplesPerBlock, 0.0f);
-  emu_resampled_sample_bufferR.assign(samplesPerBlock, 0.0f);
-
-  mcuReset();
-
-  spaceD.reset();
-  phaser.reset();
-
-  juce::dsp::ProcessSpec spec;
-  spec.sampleRate = sampleRate;
-  spec.maximumBlockSize = samplesPerBlock;
-  spec.numChannels = getTotalNumOutputChannels();
-
-  midEQ.prepare(spec);
+  // Todo lo que render() va a necesitar —búferes, resamplers, coeficientes del
+  // EQ— se reserva aquí (AUDITORIA §§1, 2, 11, 12), y arranca el firmware.
+  //
+  // No hace falta volver a seleccionar el parche: lo que boot() reinicia es el
+  // firmware, no el mapeo de la página de params que hizo selectPatch(), así
+  // que el parche sobrevive al arranque. Volver a aplicarlo cambiaría el audio
+  // (medido: hash distinto ya en el parche 0, por el trabajo de firmware que
+  // añaden el 0x31/0x30 de más).
+  mcuLock.enter();
+  engine->prepare(sampleRate, samplesPerBlock);
+  mcuLock.exit();
 }
 
 void RdPiano_juceAudioProcessor::releaseResources()
 {
-  emu_sample_bufferL.clear();
-  emu_sample_bufferR.clear();
-  emu_resampled_sample_bufferL.clear();
-  emu_resampled_sample_bufferR.clear();
-  emu_sample_buffer_size = 0;
+  mcuLock.enter();
+  engine->release();
+  mcuLock.exit();
 }
 
 bool RdPiano_juceAudioProcessor::isBusesLayoutSupported(
@@ -276,196 +230,36 @@ void RdPiano_juceAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer,
                                               juce::MidiBuffer &midiMessages)
 {
   juce::ScopedNoDenormals noDenormals;
-  auto totalNumInputChannels = getTotalNumInputChannels();
-  auto totalNumOutputChannels = getTotalNumOutputChannels();
 
-  for (auto i = totalNumInputChannels; i < totalNumOutputChannels; ++i)
-    buffer.clear(i, 0, buffer.getNumSamples());
+  const int numSamples = buffer.getNumSamples();
+  for (int ch = getTotalNumInputChannels(); ch < getTotalNumOutputChannels();
+       ++ch)
+    buffer.clear(ch, 0, numSamples);
 
-  double destSampleRate = getSampleRate();
-
-  double renderBufferFramesFloat =
-      (double)buffer.getNumSamples() / destSampleRate * sourceSampleRate;
-  unsigned int renderBufferFrames = ceil(renderBufferFramesFloat);
-  double currentError = renderBufferFrames - renderBufferFramesFloat;
-
-  int limit = buffer.getNumSamples() / 4;
-  if (samplesError > limit && renderBufferFrames > limit)
-  {
-    renderBufferFrames -= limit;
-    currentError -= limit;
-  }
-  else if (-samplesError > limit)
-  {
-    renderBufferFrames += limit;
-    currentError += limit;
-  }
-
-  if (renderBufferFrames < 2)
-  {
-    printf("Not enough samples to render\n");
-    fflush(stdout);
+  if (buffer.getNumChannels() < 2 || numSamples <= 0)
     return;
-  }
-  if (renderBufferFrames > 20000 ||
-      renderBufferFrames > emu_sample_buffer_size)
-  {
-    printf("Too many samples to render\n");
-    fflush(stdout);
-    return;
-  }
 
-  for (size_t i = 0; i < emu_sample_buffer_size; i++)
-  {
-    emu_sample_bufferL[i] = 0;
-    emu_sample_bufferR[i] = 0;
-  }
-  for (size_t i = 0; i < buffer.getNumSamples(); i++)
-  {
-    emu_resampled_sample_bufferL[i] = 0;
-    emu_resampled_sample_bufferR[i] = 0;
-  }
+  syncParamsToEngine();
 
-  std::vector<int> processedEvents;
-
-  bool mode32khz = sourceSampleRate == 32000;
-
-  spaceD.rate =
-      spaceDRateFromMs(1000.0f / chorusRateToMsPeriod[*chorusRate] / 4.0f);
-  spaceD.depth = spaceDDepth(*chorusDepth / 15.0f);
-
-  phaser.rate = phaserRateTable[(int)floor(*efxPhaserRate * 0x7f)];
-  phaser.depth = phaserDepthTable[(int)floor(*efxPhaserDepth * 0x7f)];
-
-  mcuLock.enter();
-  for (int i = 0; i < renderBufferFrames; i++)
-  {
-    int evI = 0;
-    for (const auto metadata : midiMessages)
-    {
-      auto message = metadata.getMessage();
-      if (metadata.samplePosition >= i &&
-          std::find(processedEvents.begin(), processedEvents.end(), evI) ==
-              processedEvents.end())
-      {
-        mcu->sendMidiCmd(message.getRawData()[0], message.getRawData()[1],
-                         message.getRawData()[2]);
-        processedEvents.push_back(evI);
-      }
-      evI++;
-    }
-
-    int32_t sample = mcu->generate_next_sample(mode32khz);
-
-    spaceD.audioInL = sample << 5;
-    spaceD.audioInR = sample << 5;
-    if (*chorusEnabled)
-    {
-      spaceD.process();
-    }
-    else
-    {
-      spaceD.audioOutL = spaceD.audioInL;
-      spaceD.audioOutR = spaceD.audioInR;
-    }
-    spaceD.audioOutL >>= 6;
-    spaceD.audioOutR >>= 6;
-
-    // if (*efxPhaserOnOff && *efxEnabled) {
-    if (*efxEnabled)
-    {
-      phaser.audioInL = spaceD.audioOutL << 5;
-      phaser.audioInR = spaceD.audioOutR << 5;
-      phaser.process();
-      spaceD.audioOutL = phaser.audioOutL >> 6;
-      spaceD.audioOutR = phaser.audioOutR >> 6;
-    }
-
-    emu_sample_bufferL[i] = spaceD.audioOutL / 65536.0f * *volume;
-    emu_sample_bufferR[i] = spaceD.audioOutR / 65536.0f * *volume;
-  }
-  mcuLock.exit();
-
-  double ratio = destSampleRate / sourceSampleRate;
-  if (savedDestSampleRate != destSampleRate ||
-      savedSourceSampleRate != sourceSampleRate)
-  {
-    savedDestSampleRate = destSampleRate;
-    savedSourceSampleRate = sourceSampleRate;
-    // reset() cierra el handle anterior, si lo había
-    resampleL.reset(resample_open(1, ratio, ratio));
-    resampleR.reset(resample_open(1, ratio, ratio));
-  }
-
-  int inUsed = 0;
-  int out = 0;
-  out = resample_process(resampleL.get(), ratio, emu_sample_bufferL.data(),
-                         renderBufferFrames, false, &inUsed,
-                         emu_resampled_sample_bufferL.data(),
-                         buffer.getNumSamples());
-  resample_process(resampleR.get(), ratio, emu_sample_bufferR.data(),
-                   renderBufferFrames, false, &inUsed,
-                   emu_resampled_sample_bufferR.data(),
-                   buffer.getNumSamples());
-  samplesError += currentError;
-  if (inUsed == 0)
-  {
-    samplesError = 0;
-    printf("click: %d\n", out);
-  }
-
-  float *channelDataL = buffer.getWritePointer(0);
-  float *channelDataR = buffer.getWritePointer(1);
-
-  const float scaling = 0.5f;
-  for (int i = 0; i < buffer.getNumSamples(); i++)
-  {
-    channelDataL[i] = emu_resampled_sample_bufferL[i] * scaling;
-    channelDataR[i] = emu_resampled_sample_bufferR[i] * scaling;
-
-    tremoloPhase = (tremoloPhase + 1) & 0xffffffff;
-    if (*tremoloEnabled)
-    {
-      float tremoloL = (0.5f + 0.5f * sin(*tremoloRate * 3.14159265359 *
-                                          tremoloPhase / destSampleRate));
-      float tremoloR =
-          (0.5f + 0.5f * sin(3.1415926535 + *tremoloRate * 3.14159265359 *
-                                                tremoloPhase / destSampleRate));
-      float depth = *tremoloDepth / 14.0f;
-      channelDataL[i] *= (1.0f - depth) + (tremoloL * depth);
-      channelDataR[i] *= (1.0f - depth) + (tremoloR * depth);
-    }
-  }
-
-  // mid EQ (tuned by ear listening to the MKS-20)
-  const float midFreq = 350.0f; // Hz
-  const float q = 0.2f;
-  const float gainDB = 8;
-  const float gainLinear = juce::Decibels::decibelsToGain(gainDB);
-  *midEQ.state = *juce::dsp::IIR::Coefficients<float>::makePeakFilter(
-      getSampleRate(), midFreq, q, gainLinear);
-  juce::dsp::AudioBlock<float> block(buffer);
-  juce::dsp::ProcessContextReplacing<float> context(block);
-  midEQ.process(context);
-
-  // flush midi
-  mcuLock.enter();
-  int evI = 0;
+  // Un solo recorrido de midiMessages, que ya viene ordenado por
+  // samplePosition. `numBytes` se mira antes de leer data[1] y data[2]: un
+  // SysEx corto vive en el montículo y leer de más sí sale del búfer
+  // (AUDITORIA §5).
   for (const auto metadata : midiMessages)
   {
-    auto message = metadata.getMessage();
-    if (std::find(processedEvents.begin(), processedEvents.end(), evI) ==
-        processedEvents.end())
-    {
-      mcu->sendMidiCmd(message.getRawData()[0], message.getRawData()[1],
-                       message.getRawData()[2]);
-      processedEvents.push_back(evI);
+    const juce::uint8 *raw = metadata.data;
+    const int n = metadata.numBytes;
+    if (n < 1)
+      continue;
 
-      printf("leftover midi\n");
-    }
-    evI++;
+    engine->pushMidi(metadata.samplePosition, raw[0],
+                     n > 1 ? raw[1] : (juce::uint8)0,
+                     n > 2 ? raw[2] : (juce::uint8)0);
   }
-  mcuLock.exit();
+
+  juce::SpinLock::ScopedLockType lock(mcuLock);
+  engine->render(buffer.getWritePointer(0), buffer.getWritePointer(1),
+                 numSamples);
 }
 
 //==============================================================================
@@ -544,17 +338,8 @@ void RdPiano_juceAudioProcessor::setStateInformation(const void *data,
   setMasterTune(masterTune);
 
   mcuLock.enter();
-  // Aquí sí se recarga el set entero: al restaurar un preset no se sabe qué
-  // ROM tiene cargada el Mcu.
-  mcu->loadRomSet(
-      romSetForPatch(currentPatch)->ic5, romSetForPatch(currentPatch)->ic6,
-      romSetForPatch(currentPatch)->ic7, romSetForPatch(currentPatch)->ic18);
-  mcu->selectPatch(patchToOffset[currentPatch]);
-
-  mcu->reloadPatch();
+  engine->setPatch(currentPatch);
   mcuLock.exit();
-
-  sourceSampleRate = patchSampleRates[currentPatch];
 }
 
 //==============================================================================

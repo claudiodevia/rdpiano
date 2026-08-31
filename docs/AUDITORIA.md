@@ -544,7 +544,7 @@ LGPL/BSD de libresample).
   lo mismo.
 - [`getProgramName`, PluginProcessor.cpp:266](rdpiano_juce/Source/PluginProcessor.cpp#L266) comprueba
   `index >= getNumPrograms()` pero no `index < 0` (a diferencia de `setCurrentProgram`, que sí lo hace).
-- `spaceDDepth()` ([spaced.h:20](rdpiano_juce/Source/lsp/spaced.h#L20)) indexa
+- `spaceDDepth()` ([spaced.h:20](librdpiano/include/lsp/spaced.h#L20)) indexa
   `spaceDDepthTable[floor(amount * 0x80)]`: con `amount == 1.0` el índice es 128 sobre una tabla de
   128 entradas. El único llamante pasa `chorusDepth/15.0f ≤ 0.933`, así que no se alcanza — pero la
   función es pública y no se acota a sí misma.

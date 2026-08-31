@@ -1,0 +1,28 @@
+# Estilo de rdpiano — calibrado, no elegido a ojo.
+#
+# Se obtuvo minimizando el diff contra el código ya escrito a mano: se probaron
+# las 7 bases de clang-format y ~45 opciones en búsqueda voraz sobre los 30
+# archivos propios del repo (excluidos mcu_ops.h / mame_utils.h de MAME, lsp/
+# de Zausa y resample/ de libresample). Resultado: 11 de esos 30 archivos salen
+# byte a byte idénticos, y el residuo se concentra en los que todavía están a 4
+# espacios (sound_chip.cpp, patches.h) — es deuda de formato, no desajuste del
+# estilo.
+#
+# Calibrado con el clang-format 22.1.3 que trae la extensión cpptools de VS Code
+# (LLVM/bin/clang-format), que es el binario con el que formatea ⇧⌥F.
+
+BasedOnStyle: Microsoft   # llave en línea aparte (Allman): lo que usa el repo,
+                          # 107 llaves colgadas frente a 0 adosadas
+IndentWidth: 2            # CLAUDE.md §Convenciones
+ColumnLimit: 80           # el p99 del ancho real de línea es exactamente 80
+
+AllowShortFunctionsOnASingleLine: All   # getters de una línea en las cabeceras
+NamespaceIndentation: All
+AlignEscapedNewlines: Left              # macros de test/check.h
+
+# Reordenar #include rompe el núcleo del emulador, que depende del orden.
+SortIncludes: Never
+
+# Los comentarios largos van partidos a mano (castellano, arte ASCII de los
+# diagramas de bus): que clang-format no los rehaga.
+ReflowComments: Never

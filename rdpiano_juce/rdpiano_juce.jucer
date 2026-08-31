@@ -5,7 +5,7 @@
               pluginManufacturerCode="GlZs" pluginCode="RDPN" cppLanguageStandard="20"
               pluginFormats="buildAU,buildAUv3,buildLV2,buildStandalone,buildVST3"
               pluginName="RdPiano" pluginDesc="RdPiano" companyName="Giulio Zausa"
-              headerPath="../librdpiano/include" lv2Uri="https://www.rdpiano.com/plugins/rdpiano">
+              headerPath="../../../librdpiano/include" lv2Uri="https://www.rdpiano.com/plugins/rdpiano">
   <MAINGROUP id="U4zWTk" name="rdpiano">
     <GROUP id="{2A963864-0088-F09D-D718-9519C340ABCB}" name="ui">
       <FILE id="YLS3MI" name="alphadial.png" compile="0" resource="1" file="../ui/alphadial.png"/>
@@ -35,12 +35,6 @@
       <FILE id="OthL6U" name="RD200_B.bin" compile="0" resource="1" file="../roms/RD200_B.bin"/>
     </GROUP>
     <GROUP id="{A9A4FE8C-A726-5731-A9C6-45A227C17A55}" name="Source">
-      <GROUP id="{363881CB-CC91-D877-CE27-45F5EF93C4BF}" name="lsp">
-        <FILE id="JRZ5Ik" name="phaser.cpp" compile="1" resource="0" file="Source/lsp/phaser.cpp"/>
-        <FILE id="qV5jGl" name="phaser.h" compile="0" resource="0" file="Source/lsp/phaser.h"/>
-        <FILE id="bsdrzI" name="spaced.cpp" compile="1" resource="0" file="Source/lsp/spaced.cpp"/>
-        <FILE id="mFtKJT" name="spaced.h" compile="0" resource="0" file="Source/lsp/spaced.h"/>
-      </GROUP>
       <GROUP id="{2B94B29E-7631-334E-156D-FCAACEAFE17C}" name="lcd">
         <FILE id="CZNcI0" name="Lcd.cpp" compile="1" resource="0" file="Source/lcd/Lcd.cpp"/>
         <FILE id="k9F0wB" name="Lcd.h" compile="0" resource="0" file="Source/lcd/Lcd.h"/>
@@ -58,6 +52,10 @@
           <FILE id="Rd1Cmd" name="command_port.h" compile="0" resource="0" file="../librdpiano/include/command_port.h"/>
           <FILE id="Rd1Trc" name="rd_trace.h" compile="0" resource="0" file="../librdpiano/include/rd_trace.h"/>
           <FILE id="Rd1Pat" name="patches.h" compile="0" resource="0" file="../librdpiano/include/patches.h"/>
+          <FILE id="Rd1Eng" name="rd_engine.h" compile="0" resource="0" file="../librdpiano/include/rd_engine.h"/>
+          <FILE id="qV5jGl" name="phaser.h" compile="0" resource="0" file="../librdpiano/include/lsp/phaser.h"/>
+          <FILE id="mFtKJT" name="spaced.h" compile="0" resource="0" file="../librdpiano/include/lsp/spaced.h"/>
+          <FILE id="gEM408" name="libresample.h" compile="0" resource="0" file="../librdpiano/include/resample/libresample.h"/>
         </GROUP>
         <GROUP id="{4841733A-2FA6-3B64-6697-19A463ECA7EC}" name="src">
           <FILE id="PJENE4" name="mcu.cpp" compile="1" resource="0" file="../librdpiano/src/mcu.cpp"/>
@@ -66,16 +64,16 @@
           <FILE id="Rd2Rom" name="rom_loader.cpp" compile="1" resource="0" file="../librdpiano/src/rom_loader.cpp"/>
           <FILE id="Rd2Cmd" name="command_port.cpp" compile="1" resource="0" file="../librdpiano/src/command_port.cpp"/>
           <FILE id="Rd2Trc" name="rd_trace.cpp" compile="1" resource="0" file="../librdpiano/src/rd_trace.cpp"/>
+          <FILE id="Rd2Eng" name="rd_engine.cpp" compile="1" resource="0" file="../librdpiano/src/rd_engine.cpp"/>
+          <FILE id="JRZ5Ik" name="phaser.cpp" compile="1" resource="0" file="../librdpiano/src/lsp/phaser.cpp"/>
+          <FILE id="bsdrzI" name="spaced.cpp" compile="1" resource="0" file="../librdpiano/src/lsp/spaced.cpp"/>
+          <FILE id="PvZm34" name="config.h" compile="0" resource="0" file="../librdpiano/src/resample/config.h"/>
+          <FILE id="DNIVSF" name="filterkit.c" compile="1" resource="0" file="../librdpiano/src/resample/filterkit.c"/>
+          <FILE id="qbCgVx" name="filterkit.h" compile="0" resource="0" file="../librdpiano/src/resample/filterkit.h"/>
+          <FILE id="zTAEyd" name="resample.c" compile="1" resource="0" file="../librdpiano/src/resample/resample.c"/>
+          <FILE id="iRReK5" name="resample_defs.h" compile="0" resource="0" file="../librdpiano/src/resample/resample_defs.h"/>
+          <FILE id="vL5CnJ" name="resamplesubs.c" compile="1" resource="0" file="../librdpiano/src/resample/resamplesubs.c"/>
         </GROUP>
-      </GROUP>
-      <GROUP id="{5F344C4D-8974-0F43-24EF-59E1852B1A44}" name="resample">
-        <FILE id="PvZm34" name="config.h" compile="0" resource="0" file="Source/resample/config.h"/>
-        <FILE id="DNIVSF" name="filterkit.c" compile="1" resource="0" file="Source/resample/filterkit.c"/>
-        <FILE id="qbCgVx" name="filterkit.h" compile="0" resource="0" file="Source/resample/filterkit.h"/>
-        <FILE id="gEM408" name="libresample.h" compile="0" resource="0" file="Source/resample/libresample.h"/>
-        <FILE id="zTAEyd" name="resample.c" compile="1" resource="0" file="Source/resample/resample.c"/>
-        <FILE id="iRReK5" name="resample_defs.h" compile="0" resource="0" file="Source/resample/resample_defs.h"/>
-        <FILE id="vL5CnJ" name="resamplesubs.c" compile="1" resource="0" file="Source/resample/resamplesubs.c"/>
       </GROUP>
       <FILE id="AJqnYv" name="PluginProcessor.cpp" compile="1" resource="0"
             file="Source/PluginProcessor.cpp"/>

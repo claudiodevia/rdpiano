@@ -8,28 +8,16 @@
 
 #pragma once
 
-#include "../../librdpiano/include/mcu.h"
-#include "lsp/spaced.h"
-#include "lsp/phaser.h"
-#include "resample/libresample.h"
+#include "../../librdpiano/include/rd_engine.h"
 #include <JuceHeader.h>
 #include <memory>
-#include <vector>
-
-// Los handles del resampler son punteros de C que hay que cerrar; con esto los
-// cierra el destructor (AUDITORIA §9).
-struct ResampleHandleDeleter
-{
-  void operator()(void *handle) const
-  {
-    if (handle)
-      resample_close(handle);
-  }
-};
-typedef std::unique_ptr<void, ResampleHandleDeleter> ResampleHandle;
 
 //==============================================================================
 /**
+ * Desde la fase 2 este archivo es sólo el plugin: parámetros, presets y el
+ * puente con JUCE. La cadena de audio entera —emulador, chorus, phaser,
+ * trémolo, EQ, resampling y reparto del MIDI— vive en `RdPianoEngine`, que no
+ * conoce JUCE y se prueba headless (REFACTORIZACION §1).
  */
 class RdPiano_juceAudioProcessor
     : public juce::AudioProcessor,
@@ -87,43 +75,24 @@ public:
   juce::AudioParameterInt *tremoloRate;
   juce::AudioParameterInt *tremoloDepth;
   juce::AudioParameterBool *efxEnabled;
-  // juce::AudioParameterBool *efxPhaserOnOff;
   juce::AudioParameterFloat *efxPhaserRate;
   juce::AudioParameterFloat *efxPhaserDepth;
 
+  // Espejos de lo que el motor ya sabe, para el editor y para los presets.
   int currentPatch = 0;
   int masterTune = 0;
 
-  std::unique_ptr<Mcu> mcu;
-
-  ResampleHandle resampleL;
-  ResampleHandle resampleR;
-  int savedDestSampleRate = 0;
-  int sourceSampleRate = 0;
-  int savedSourceSampleRate = 0;
-  double samplesError = 0;
-
-  std::vector<float> emu_sample_bufferL;
-  std::vector<float> emu_sample_bufferR;
-  std::vector<float> emu_resampled_sample_bufferL;
-  std::vector<float> emu_resampled_sample_bufferR;
-  size_t emu_sample_buffer_size = 0;
-
-  unsigned long tremoloPhase = 0;
+  std::unique_ptr<RdPianoEngine> engine;
 
   void setMasterTune(int16_t tune);
-  void mcuReset();
 
-  SpaceD spaceD;
-  Phaser phaser;
-
-  juce::dsp::ProcessorDuplicator<juce::dsp::IIR::Filter<float>,
-                                 juce::dsp::IIR::Coefficients<float>>
-      midEQ;
-
+  // Serializa el hilo de UI con el de audio: `setPatch` y `setMasterTune`
+  // corren el emulador (trampa 4 de CLAUDE.md).
   juce::SpinLock mcuLock;
 
 private:
+  void syncParamsToEngine();
+
   //==============================================================================
   JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(RdPiano_juceAudioProcessor)
 };

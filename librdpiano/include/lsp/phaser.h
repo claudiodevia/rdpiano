@@ -10,7 +10,6 @@
 
 #pragma once
 
-#include <cmath>
 #include <stdint.h>
 
 inline constexpr int32_t phaserRateTable[] = {

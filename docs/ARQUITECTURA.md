@@ -595,7 +595,7 @@ plataforma que se compila:
 `PluginProcessor`, `PluginEditor`. No hay un solo `#ifdef _WIN32`/`__APPLE__`/`__linux__` en el
 código del proyecto. La única condicional de plataforma en todo el árbol está en la librería de
 terceros: `resample_defs.h` incluye `config.h` salvo en `WIN32`/`__CYGWIN__`
-([resample_defs.h:17](/rdpiano_juce/Source/resample/resample_defs.h#L17)).
+([resample_defs.h:17](/librdpiano/src/resample/resample_defs.h#L17)).
 
 **Toolchain.** Los exportadores salen del `.jucer` vía Projucer 8.0.1 (`--resave`), con los mismos
 13 módulos JUCE, `cppLanguageStandard="20"` y `headerPath="../librdpiano/include"`.

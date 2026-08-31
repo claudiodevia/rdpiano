@@ -15,7 +15,7 @@
 **********************************************************************/
 
 /* External interface */
-#include "libresample.h"
+#include "resample/libresample.h"
 
 /* Definitions */
 #include "resample_defs.h"

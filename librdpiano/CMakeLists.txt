@@ -20,9 +20,16 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-constant-logical-operand")
 include_directories("include")
 
 # library target
+#
+# Ademas del emulador, aqui viven los efectos (lsp/) y el resampler
+# (resample/): son C/C++ puro sin nada de JUCE, y desde la fase 2 el motor de
+# audio los usa (REFACTORIZACION §1). El plugin los compila desde aqui.
 add_library(librdpiano src/mcu.cpp src/sound_chip.cpp src/sa_tables.cpp
-    src/rom_loader.cpp src/command_port.cpp src/rd_trace.cpp)
-target_include_directories(librdpiano PRIVATE src)
+    src/rom_loader.cpp src/command_port.cpp src/rd_trace.cpp
+    src/lsp/spaced.cpp src/lsp/phaser.cpp
+    src/rd_engine.cpp
+    src/resample/resample.c src/resample/filterkit.c src/resample/resamplesubs.c)
+target_include_directories(librdpiano PRIVATE src src/resample)
 
 # end-to-end test harness: sin dependencias externas, siempre se compila
 add_executable(rdpiano_e2e test/e2e.cpp)
@@ -35,7 +42,10 @@ add_executable(rdpiano_tests
     test/unit/main.cpp
     test/unit/test_board.cpp
     test/unit/test_command_port.cpp
+    test/unit/test_engine.cpp
+    test/unit/test_lsp.cpp
     test/unit/test_patches.cpp
+    test/unit/test_resampler.cpp
     test/unit/test_rom_loader.cpp
     test/unit/test_sa_tables.cpp
     test/unit/test_sound_chip_blocks.cpp)

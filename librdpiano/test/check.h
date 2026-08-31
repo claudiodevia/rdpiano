@@ -17,6 +17,33 @@
 #include <string>
 #include <vector>
 
+// FNV-1a de 64 bits, byte a byte. Es el mismo hash que usa el harness e2e
+// para el stream de audio; aquí lo comparten las pruebas que congelan una
+// respuesta (efectos, resampler, motor).
+struct Fnv1a
+{
+  unsigned long long h = 0xcbf29ce484222325ull;
+
+  void byte(unsigned char b)
+  {
+    h ^= b;
+    h *= 0x100000001b3ull;
+  }
+
+  void bytes(const void *data, size_t n)
+  {
+    const unsigned char *p = (const unsigned char *)data;
+    for (size_t i = 0; i < n; i++)
+      byte(p[i]);
+  }
+
+  void i32(int v) { bytes(&v, 4); }
+
+  // Los float se hashean por su patrón de bits: dos streams iguales dan el
+  // mismo hash y cualquier bit distinto lo mueve.
+  void f32(float v) { bytes(&v, 4); }
+};
+
 struct Check
 {
   std::string name;

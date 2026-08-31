@@ -16,11 +16,13 @@ Todas las medidas de esta página se tomaron en esta máquina, con las ROM del r
 0 comprobaciones fallidas, 0 hashes distintos del golden, 3,5 s. Ese es el suelo contra el que se
 mide cualquier refactor de esta lista.
 
-**Estado: las [fases 0 y 1](#19-plan-por-fases) están hechas.** La fase 0 en `limpieza`,
+**Estado: las [fases 0, 1 y 2](#19-plan-por-fases) están hechas.** La fase 0 en `limpieza`,
 `c1408e0..ff87048`. Los apartados que cubrieron llevan una nota al principio diciendo qué cambió;
 el texto que sigue a la nota describe el estado anterior, que es lo que explica por qué se tocó.
-**Los 16 hashes del golden no se movieron en ningún paso de ninguna de las dos fases**, incluida la
-extracción de IC19/IC9/IC8, que era el único refactor de la lista que podía moverlos.
+**Los 16 hashes del golden no se movieron en ninguna de las tres fases**: ni la extracción de
+IC19/IC9/IC8 (fase 1) ni la del motor (fase 2) tocan el emulador, que es lo único que el harness
+mide. La fase 2 **sí cambia el audio del producto**, a propósito y sólo donde arregla un defecto
+catalogado — el golden no lo ve, y por eso la red de la cadena es `test_engine.cpp`.
 
 ---
 
@@ -28,23 +30,23 @@ extracción de IC19/IC9/IC8, que era el único refactor de la lista que podía m
 
 | # | Tema | Impacto | Esfuerzo | Estado | Ubicación |
 |---|---|---|---|---|---|
-| 1 | No existe frontera *motor de audio* ↔ *plugin*: toda la cadena vive dentro de `processBlock` | **Alto** — bloquea toda prueba automática de la cadena real | Alto | Pendiente | [PluginProcessor.cpp:367-575](../rdpiano_juce/Source/PluginProcessor.cpp#L367-L575)  |
+| 1 | No existe frontera *motor de audio* ↔ *plugin*: toda la cadena vive dentro de `processBlock` | **Alto** — bloquea toda prueba automática de la cadena real | Alto | ✔ Fase 2 | [PluginProcessor.cpp:367-575](../rdpiano_juce/Source/PluginProcessor.cpp#L367-L575)  |
 | 2 | `Mcu` acumula cuatro responsabilidades (CPU, placa, protocolo, ROMs) | **Alto** — cambiar una toca las otras | Alto | Parcial (fase 1: protocolo y ROMs, fuera; falta separar CPU y placa) | [mcu.cpp](../librdpiano/src/mcu.cpp)  |
 | 3 | El protocolo del firmware (`0x30/0x31/0xE0/0x50…`) está esparcido por tres capas vía `commands_queue` pública | **Alto** — 22 `push` de bytes crudos fuera del núcleo | Medio | **Hecho** (fase 1) | [command_port.h](../librdpiano/include/command_port.h)  |
 | 4 | 320 KB de LUT deterministas se recalculan por instancia: **15,8 ms** y memoria duplicada | **Alto** | Bajo | **Hecho** (fase 1, opción 1) | [sa_tables.h](../librdpiano/include/sa_tables.h)  |
 | 5 | `SoundChip::update()`: 135 líneas, tres bloques anónimos con estado compartido por variables sueltas | Medio — es el código más delicado del proyecto | Bajo | **Hecho** (fase 1) | [sa_blocks.h](../librdpiano/include/sa_blocks.h)  |
 | 6 | `loadSounds()` hace dos cosas: recargar wave ROM (2,06 ms) y reubicar el parche (0,8 ms) | Medio — el 72 % del coste sobra al cambiar de parche dentro del mismo set | Bajo | **Hecho** (fase 1) | [rom_loader.h](../librdpiano/include/rom_loader.h)  |
 | 7 | 188 KB por instancia en buffers que no hacen falta (`ram` 16× sobredimensionada, `params_rom_tmp` temporal como miembro) | Medio | Bajo | **Hecho** (fase 0) | [mcu.h:52-56](../librdpiano/include/mcu.h#L52-L56)  |
-| 8 | `processBlock` hace ocho trabajos distintos en una función | Medio | Medio | Pendiente | [PluginProcessor.cpp:367](../rdpiano_juce/Source/PluginProcessor.cpp#L367)  |
+| 8 | `processBlock` hace ocho trabajos distintos en una función | Medio | Medio | **Hecho** (fase 2) | [rd_engine.cpp](../librdpiano/src/rd_engine.cpp)  |
 | 9 | Parámetros a mano (punteros públicos + XML manual + `sendChangeMessage`) en vez de `APVTS` | Medio — ~120 líneas repetidas y estado que se puede desincronizar | Medio | Pendiente | [PluginProcessor.h:66-113](../rdpiano_juce/Source/PluginProcessor.h#L66-L113)  |
 | 10 | `PluginEditor`: 17 botones y 6 modos de parámetro escritos a mano uno por uno | Medio — ~250 de 413 líneas son copia-pega | Medio | Pendiente | [PluginEditor.cpp](../rdpiano_juce/Source/PluginEditor.cpp)  |
 | 11 | Tablas de datos duplicadas entre plugin, harness y editor (nombres, ROM sets, codificación de tune) | Medio — ya han divergido | Bajo | Parcial (fase 0) | [patches.h](../librdpiano/include/patches.h)  |
-| 12 | `lsp/`: `spaced` y `phaser` repiten tabla, utilidades y acceso a IRAM | Bajo | Bajo | Parcial (fase 0) | [spaced.cpp](../rdpiano_juce/Source/lsp/spaced.cpp), [phaser.cpp](../rdpiano_juce/Source/lsp/phaser.cpp)  |
+| 12 | `lsp/`: `spaced` y `phaser` repiten tabla, utilidades y acceso a IRAM | Bajo | Bajo | Parcial (fases 0 y 2: movidos al núcleo y congelados por hash; falta `lsp_common.h`) | [spaced.cpp](../librdpiano/src/lsp/spaced.cpp), [phaser.cpp](../librdpiano/src/lsp/phaser.cpp)  |
 | 13 | Código muerto y campos vestigiales (`chorusRateToDepthChange`, `midiMessageCount`, `current_sample_rate`, bloques comentados) | Bajo — pero engaña al lector | Bajo | **Hecho** (fase 0) | varios  |
 | 14 | Propiedad manual: `new`/`delete` crudos, punteros públicos, tipos de 1,4 MB copiables por defecto | Medio | Bajo | **Hecho** (fase 0) | [PluginProcessor.h:82-105](../rdpiano_juce/Source/PluginProcessor.h#L82-L105)  |
 | 15 | El núcleo escribe en `stdout` desde la ruta de audio | Medio — impide usarlo en RT sin parchearlo | Bajo | **Hecho** (fase 1) | [rd_trace.h](../librdpiano/include/rd_trace.h)  |
 | 16 | Dos sistemas de build sin relación; la CI compila pero **no ejecuta** el harness | **Alto** — el golden no protege nada en CI | Medio | Parcial (fases 0 y 1: falta §16.3) | [.jucer](../rdpiano_juce/rdpiano_juce.jucer), [main.yml](../.github/workflows/main.yml)  |
-| 17 | No hay pruebas unitarias: la única red es un test agregado que necesita arrancar el firmware entero | **Alto** — ninguna clase nueva de esta lista nace con algo que la proteja | Medio | Parcial (fases 0 y 1: 203 comprobaciones) | [test/](../librdpiano/test/)  |
+| 17 | No hay pruebas unitarias: la única red es un test agregado que necesita arrancar el firmware entero | **Alto** — ninguna clase nueva de esta lista nace con algo que la proteja | Medio | Parcial (fases 0-2: 388 comprobaciones, motor incluido) | [test/](../librdpiano/test/)  |
 
 Los números 1, 3, 16 y 17 son los que de verdad limitan el proyecto: mientras el motor no exista
 como objeto separado, no haya pruebas por unidad y la CI no ejecute nada, cada cambio se sigue
@@ -55,6 +57,12 @@ sitio.
 ---
 
 ## 1. El problema de fondo: no hay frontera entre *motor* y *plugin*
+
+> **Hecho, fase 2.** Existe `RdPianoEngine` ([rd_engine.h](../librdpiano/include/rd_engine.h),
+> [rd_engine.cpp](../librdpiano/src/rd_engine.cpp)): la cadena entera sin una línea de JUCE.
+> `lsp/` y `resample/` se mudaron a `librdpiano/`. `processBlock` pasó de 209 líneas a 35 y
+> `PluginProcessor.cpp` de 565 a 345. Lo prueba `test/unit/test_engine.cpp`, headless.
+> Lo que sigue describe el estado anterior.
 
 `librdpiano` está limpiamente desacoplado de JUCE (bien), pero **solo cubre el emulador**. Todo lo
 demás — escalados, chorus, phaser, trémolo, EQ, resampling, reparto temporal del MIDI, gestión de
@@ -368,6 +376,12 @@ la instancia baja de 1,39 MB a ~0,53 MB sin tocar una sola operación aritmétic
 
 ## 8. `processBlock`: ocho trabajos, una función
 
+> **Hecho, fase 2.** Los ocho trabajos están en `RdPianoEngine` ([§1](#1-el-problema-de-fondo-no-hay-frontera-entre-motor-y-plugin)).
+> El reparto de MIDI es un solo recorrido sin contenedor auxiliar, las constantes mágicas tienen
+> nombre (`kEmuInputShift`, `kEmuOutputShift`, `kOutputScaling`), el escalado seco está definido una
+> vez, el trémolo y el EQ siguen inline pero dentro del motor, y los coeficientes IIR se calculan en
+> `prepare()`. Lo que sigue describe el estado anterior.
+
 Más allá de la extracción del motor ([§1](#1-el-problema-de-fondo-no-hay-frontera-entre-motor-y-plugin)),
 la función tiene problemas de forma que valen por sí solos:
 
@@ -498,6 +512,10 @@ cabecera— ya está descrito en [AUDITORIA §18](AUDITORIA.md#18-carreras-de-da
 > habría dejado de compilar, y `inline` evita además una copia por unidad de traducción.
 > **Sigue pendiente** el `lsp_common.h` que unifique tabla, utilidades y acceso a IRAM.
 
+> **Parcial, fase 2.** `lsp/` vive ahora en `librdpiano/` y `test_lsp.cpp` congela por hash la
+> respuesta de los dos efectos, que es la red que faltaba para poder tocar el andamiaje. El
+> `lsp_common.h` sigue pendiente.
+
 `spaced.cpp` (364 líneas) y `phaser.cpp` (485) son transcripciones máquina a máquina del DSP
 original: cientos de `accA_NNN` numerados por ciclo. **Ese cuerpo no se debe reescribir a mano** —
 igual que `mcu_ops.h`, es código derivado cuya corrección está en la transcripción literal.
@@ -507,8 +525,8 @@ Lo que sí sobra es el andamiaje repetido:
 - `phaserRateTable[]` y `spaceDRateTable[]` son **la misma tabla de 128 valores**, byte a byte.
 - `DATA_BITS`, `MIN_VAL`, `MAX_VAL`, `clamp_24`, `sign_extend_24`: definidos dos veces, idénticos.
 - `writeMemOffs`/`readMemOffs` sobre `iram[0x200]`: definidos dos veces, idénticos
-  ([spaced.h:56-63](../rdpiano_juce/Source/lsp/spaced.h#L56-L63),
-  [phaser.h:41-48](../rdpiano_juce/Source/lsp/phaser.h#L41-L48)).
+  ([spaced.h:56-63](../librdpiano/include/lsp/spaced.h#L56-L63),
+  [phaser.h:41-48](../librdpiano/include/lsp/phaser.h#L41-L48)).
 
 Un `lsp/lsp_common.h` con la tabla, las utilidades y una pequeña base `LspUnit` con la IRAM y
 `bufferPos` elimina la duplicación sin tocar ni una línea de los cuerpos transcritos. De paso, las
@@ -1075,12 +1093,100 @@ firmware no parece producir ese estado —se descubrió al construir los vectore
 el chip a mano—, pero nada en el código lo impide. No se tocó porque poner una máscara *es* un
 cambio de aritmética ([§20](#20-qué-no-tocar)).
 
-**Fase 2 — la frontera del motor** *(el cambio de fondo)*
+**Fase 2 — la frontera del motor** *(el cambio de fondo)* — **HECHA**, rama `limpieza`.
 
-14. **T** — `test_lsp.cpp` y `test_resampler.cpp`: respuesta a impulso de `SpaceD` y `Phaser` congelada antes de tocar el andamiaje común ([§12](#12-lsp-dos-transcripciones-con-la-misma-infraestructura), [§17.6](#176-lo-que-solo-se-puede-probar-con-un-motor-de-verdad)).
-15. `RdPianoEngine` sin JUCE: mover ahí escalados, efectos, resampler y reparto de MIDI ([§1](#1-el-problema-de-fondo-no-hay-frontera-entre-motor-y-plugin), [§8](#8-processblock-ocho-trabajos-una-función)).
-16. **T** — `test_engine.cpp` completo: invariancia de bloque, tasas del host, cero reservas en `render()`, finitud, clics al cambiar de parche, temporización del MIDI ([§17.6](#176-lo-que-solo-se-puede-probar-con-un-motor-de-verdad)). Es el "simulador de host" de [FIABILIDAD §17.1](FIABILIDAD-DIRECTO.md#171-un-simulador-de-host-el-que-más-fallos-habría-cazado), instanciando en vez de copiando.
-17. Arreglar sobre el motor los defectos de `processBlock` de AUDITORIA §§1, 2, 4, 5, 8, 9, 11 — cada arreglo entra con la prueba que lo cubre, que debe fallar antes y pasar después.
+*Verificación de la fase entera:* los 16 hashes del golden idénticos; suite unitaria de 33 suites y
+388 comprobaciones en 2,6 s, `ctest` completo en 5,1 s; todo verde también con
+`-DRDPIANO_SANITIZE=ON` (31 s); plugin compilado con `build-osx.sh` (`BUILD SUCCEEDED`, 0 errores)
+tras rehacer el `.jucer`.
+
+| # | Paso | Estado |
+|---|---|---|
+| — | Mover `lsp/` y `resample/` a `librdpiano/` | ✔ |
+| 14 | **T** `test_lsp.cpp`, `test_resampler.cpp` | ✔ |
+| 15 | `RdPianoEngine` sin JUCE | ✔ |
+| 16 | **T** `test_engine.cpp` | ✔ 8 suites |
+| 17 | AUDITORIA §§1, 2, 4, 5, 8, 9, 11 | ✔ |
+
+0. ✔ **El traslado.** `lsp/` y `resample/` eran C/C++ puro viviendo en `rdpiano_juce/Source/`; pasan
+   a `librdpiano/include/lsp`, `src/lsp`, `include/resample` y `src/resample`. Es lo que permite que
+   las pruebas del núcleo los alcancen sin JUCE. De paso, `spaced.h` y `phaser.h` pierden el
+   `<cmath>` que no cabe en una cabecera del núcleo, y `spaceDDepth()` gana el recorte de índice que
+   le faltaba: con `amount == 1` indexaba la posición 128 de una tabla de 128. El plugin nunca llega
+   a 1 (`chorusDepth/15 <= 0,93`), el motor sí puede.
+1. ✔ **T + efectos y resampler** ([§12](#12-lsp-dos-transcripciones-con-la-misma-infraestructura),
+   [§17.6](#176-lo-que-solo-se-puede-probar-con-un-motor-de-verdad)). Seis hashes de respuesta a
+   impulso y a barrido —dos juegos de parámetros por efecto— capturados **antes** de tocar nada, más
+   la identidad de `spaceDRateTable` y `phaserRateTable` convertida de `diff` a mano en
+   comprobación. Del resampler: longitud de salida por ratio en ocho combinaciones host/parche,
+   finitud en los bordes, y mil ciclos de abrir/cerrar sin mover el pico de RSS —la fuga de
+   [AUDITORIA §9](AUDITORIA.md#9-alto--fuga-de-12-mb-por-instancia-resamplers-nunca-cerrados).
+   Comprobado que muerden: bajar `DATA_BITS` de 24 a 23 en `spaced.cpp` enciende los tres hashes de
+   `lsp_spaced`.
+2. ✔ **`RdPianoEngine`** ([§1](#1-el-problema-de-fondo-no-hay-frontera-entre-motor-y-plugin),
+   [§8](#8-processblock-ocho-trabajos-una-función)). La cadena entera —escalados, chorus, phaser,
+   trémolo, EQ, resampling y reparto de MIDI— en `librdpiano/include/rd_engine.h` y
+   `src/rd_engine.cpp`, sin una línea de JUCE. `processBlock` pasa de **209 líneas a 35**, y
+   `PluginProcessor.cpp` de 565 a 345. Las constantes mágicas de §8 tienen nombre
+   (`kEmuInputShift`, `kEmuOutputShift`, `kOutputScaling`) y el escalado seco existe **una vez**.
+   *Lo que costó más:* el EQ medio era `juce::dsp::IIR`, así que salir de JUCE obligaba a
+   reimplementarlo. `RdBiquad` reproduce `makePeakFilter` y la forma directa II traspuesta de JUCE
+   coeficiente a coeficiente y en el mismo orden de operaciones; lo único que no replica es el
+   `snapToZero`, que `JUCE_SNAP_TO_ZERO` deja en no-op fuera de Intel y por tanto nunca se ejecutó
+   en el build ARM del plugin.
+3. ✔ **T + `test_engine.cpp`** ([§17.6](#176-lo-que-solo-se-puede-probar-con-un-motor-de-verdad)).
+   Ocho suites, 71 comprobaciones. Escritas **antes** de los arreglos del paso 17 y rojas contra el
+   motor recién extraído: 9 comprobaciones fallando en 4 suites, que son exactamente los defectos
+   que el paso 17 arregla. Es el "simulador de host" de
+   [FIABILIDAD §17.1](FIABILIDAD-DIRECTO.md#171-un-simulador-de-host-el-que-más-fallos-habría-cazado),
+   instanciando en vez de copiando 130 líneas.
+4. ✔ **Los arreglos** — [AUDITORIA](AUDITORIA.md) §§1, 2, 4, 5, 8, 9, 11, cada uno con la prueba que
+   lo cubre roja antes y verde después:
+
+   | § | Defecto | Arreglo | Prueba que lo fija |
+   |---|---|---|---|
+   | 1 | Búfer intermedio dimensionado con el factor invertido → **mudo por debajo de 32 kHz** | `32000/hostRate`, dimensionado al peor parche más el margen del corrector de deriva | `engine_host_rates` a 22.050 Hz |
+   | 2 | `resample_open()` (2,5 ms × 2, 1,2 MB) **dentro del hilo de audio** | Los dos handles se abren en `prepare()` con el rango `[host/32000, host/20000]` y no se vuelven a tocar | `engine_no_alloc_in_render` vía `stats.resamplerOpens` |
+   | 4 | Bloque mayor que el preparado → escritura fuera del montículo | Guarda por `outCapacity`, salida a silencio | `engine_edge_blocks` con ASan |
+   | 5 | MIDI cuantizado al principio del bloque, unidades mezcladas, `O(n²)` con reservas en RT | Un solo recorrido con índice que avanza, convirtiendo frames de host a frames de emulador | `engine_midi_timing` |
+   | 8 | Retorno temprano dejando en el búfer la entrada o el bloque anterior | Los tres caminos escriben silencio | `engine_host_rates` |
+   | 9 | Fuga de ~1,2 MB por instancia | Cerrados en `release()` y en el destructor | `resampler_no_leak` |
+   | 11 | Coeficientes IIR reconstruidos cada bloque (una reserva por bloque) | Calculados una vez en `prepare()` | `engine_no_alloc_in_render` |
+
+   Comprobado que las pruebas muerden: devolver el ratio invertido enciende `engine_host_rates` y
+   `engine_block_invariance`; devolver la condición `>= i` del reparto MIDI enciende
+   `engine_midi_timing`.
+
+**Lo que la fase 2 dejó fuera, y por qué:**
+
+- **La invariancia de bloque bit a bit** que pedía [§17.6](#176-lo-que-solo-se-puede-probar-con-un-motor-de-verdad).
+  No es una propiedad de esta arquitectura: `renderBufferFrames` se redondea hacia arriba en cada
+  bloque y el corrector de deriva le resta hasta `numFrames/4`, así que **cuántas muestras genera el
+  emulador depende del troceado**. Medido con 4.096 muestras de una vez contra
+  `7+13+1+512+256+3+1024+64`: el nivel coincide al 0,01 %, pero **23 muestras de 4.096 salen en
+  silencio exacto** —el resampler devuelve menos muestras de las pedidas y la cola del bloque se
+  queda vacía. Es el `printf("click")` que el plugin ya arrastraba, ahora medible. Arreglarlo es
+  cambiar el reparto de muestras por un búfer circular de salida: un cambio de audio, y de diseño,
+  que no está en la lista de la fase 2. `engine_block_invariance` fija hoy el número de huecos para
+  que el día que se arregle baje y no suba.
+- **El headroom.** `engine_headroom` mide 16 voces a velocity 127 con la cadena seca: **pico 2,82,
+  casi 9 dB por encima de fondo de escala**. No es nuevo —es
+  [FIABILIDAD §4](FIABILIDAD-DIRECTO.md#4-n3--alto--el-plugin-no-tiene-headroom-8-de-16-parches-saturan)
+  (N3, ALTO)— pero hasta ahora no se podía medir sin abrir un DAW. La compensación de ganancia por
+  parche y el limitador de seguridad son un cambio de audio que hay que escuchar. La comprobación
+  fija el valor de hoy y saltará cuando se arregle.
+- **El bus de entrada estéreo** de un plugin marcado `pluginIsSynth`, que
+  [AUDITORIA §8](AUDITORIA.md#8-alto--retorno-temprano-sin-limpiar-la-salida) proponía quitar.
+  El daño que causaba —devolver la entrada como si fuera salida— desapareció al escribir siempre los
+  `numFrames`; quitar un bus cambia el layout que ven los hosts y puede romper sesiones guardadas,
+  así que no se toca aquí.
+- **El ritmo del margen de arranque** (trampa 7 de `CLAUDE.md`). El motor calienta a 20 kHz como
+  hacía el plugin, y es lo defendible: `boot()` empieza con un `programChange(0)` y el parche 0 es
+  de 20 kHz, así que el margen corre al ritmo del parche que de verdad está cargado. Alinear el
+  harness movería el golden de los cinco parches de 32 kHz, que es un cambio de audio a escuchar.
+- **El `lsp_common.h`** de [§12](#12-lsp-dos-transcripciones-con-la-misma-infraestructura): la
+  prueba que lo autoriza (`test_lsp.cpp`) ya existe, pero unificar el andamiaje sigue sin ser un
+  paso propio del plan.
 
 **Fase 3 — plugin y build**
 
@@ -1119,7 +1225,7 @@ redes se lanzan juntas y es lo único que hay que recordar:
 ```bash
 cd librdpiano && cmake -B build -DRDPIANO_SANITIZE=OFF -DCMAKE_BUILD_TYPE=Release
 cmake --build build --target rdpiano_tests rdpiano_e2e
-ctest --test-dir build --output-on-failure    # unit (0,5 s) + e2e (~2,7 s)
+ctest --test-dir build --output-on-failure    # unit (~2,6 s) + e2e (~2,5 s)
 ```
 
 ```bash
@@ -1155,8 +1261,8 @@ clang++ -std=c++17 -O2 -Wno-constant-logical-operand -Ilibrdpiano/include \
 ```bash
 grep -rn "commands_queue" rdpiano_juce/Source librdpiano | grep -v Builds   # 0 desde la fase 1 (eran 22)
 grep -n "tuneLsb" rdpiano_juce/Source/PluginProcessor.cpp                   # 0 desde la fase 1 (eran dos copias)
-diff <(sed -n '16,26p' rdpiano_juce/Source/lsp/spaced.cpp) \
-     <(sed -n '16,26p' rdpiano_juce/Source/lsp/phaser.cpp)   # sin salida: tablas idénticas
+./librdpiano/build/rdpiano_tests --roms roms --filter lsp_tables   # las dos tablas de rate,
+                                                                  # comprobadas en vez de diffeadas
 ```
 
 Las medidas de tiempo son de esta máquina (macOS, Apple Silicon, `-O2`); lo que importa no es el

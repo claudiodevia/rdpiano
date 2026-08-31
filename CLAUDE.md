@@ -8,8 +8,8 @@ los chips custom de síntesis. C++17. Sin tests automatizados.
 
 | Ruta | Qué es |
 |---|---|
-| `librdpiano/` | Núcleo del emulador, **sin dependencias**. Aquí vive la lógica real. |
-| `rdpiano_juce/` | Plugin JUCE 8.0.1 (VST3/AU/AUv3/LV2/Standalone), **solo macOS**: UI, efectos, resampling. |
+| `librdpiano/` | Núcleo, **sin dependencias**: emulador + `RdPianoEngine` (cadena de audio completa, incluidos `lsp/` y `resample/`). Aquí vive la lógica real. |
+| `rdpiano_juce/` | Plugin JUCE 8.0.1 (VST3/AU/AUv3/LV2/Standalone), **solo macOS**: UI, parámetros, presets. |
 | `roms/` | Dumps de ROM, empotrados como `BinaryData` vía el `.jucer`. |
 | `re_stuff/` | Artefactos de ingeniería inversa (Verilog, disasm, silicon tooling). **No se compila.** |
 | `ui/`, `docs/` | Assets del panel; capturas. |
@@ -17,12 +17,25 @@ los chips custom de síntesis. C++17. Sin tests automatizados.
 ## Modelo mental
 
 ```
-MIDI → Mcu::sendMidiCmd() → commands_queue → firmware original (program_rom)
-                                                 ↓ escribe 0x1000-0x1FFF
-                                            SoundChip (IC19→IC9→IC8)
-                                                 ↓
-                                   Mcu::generate_next_sample() → s32
+processBlock → RdPianoEngine::pushMidi/render   (rd_engine.h, sin JUCE)
+                 ↓
+   Mcu::sendMidiCmd() → commands_queue → firmware original (program_rom)
+                                            ↓ escribe 0x1000-0x1FFF
+                                       SoundChip (IC19→IC9→IC8)
+                                            ↓
+                              Mcu::generate_next_sample() → s32
+                 ↓
+   escalado seco → SpaceD (chorus) → Phaser → resample → trémolo → EQ medio
 ```
+
+- **`RdPianoEngine`** ([rd_engine.h](librdpiano/include/rd_engine.h)) es la frontera motor/plugin
+  (REFACTORIZACION §1). Contiene la cadena entera y no conoce JUCE; `processBlock` son 35 líneas
+  que vuelcan el MIDI y llaman a `render()`. Contrato: **`prepare()` reserva todo**, `render()` no
+  reserva, no bloquea y no imprime; `setPatch()`/`setMasterTune()` corren el emulador y los
+  serializa el integrador (`mcuLock`). Se prueba headless en `test/unit/test_engine.cpp`.
+- El **EQ medio** es un biquad propio (`RdBiquad`) con los coeficientes y el orden de operaciones
+  de `juce::dsp::IIR::Filter<float>`, para que salir de JUCE no cambiara el timbre. Lo único que no
+  se replica es el `snapToZero` de JUCE, que ya era un no-op fuera de Intel.
 
 - El **reloj maestro es el audio**: `generate_next_sample()` genera 1 muestra y luego corre
   **100 ciclos de CPU** (62 si el parche es de 32 kHz). No existe un bucle de CPU independiente.
@@ -75,8 +88,16 @@ comprueba que siguen siendo biyectivas y fija el `params_rom` de los 16 parches 
 6. `re_stuff/verilog/` está declarado por su propio README como *"probably most of them wrong"*.
    Es material de investigación, no fuente de verdad.
 7. **El plugin y el harness arrancan distinto** en los parches de 32 kHz: `Mcu::boot()` pide el
-   ritmo del margen de arranque, y el plugin pasa 20 kHz siempre mientras el harness pasa el del
-   parche. No tiene valor por defecto para que la divergencia se vea en cada llamada.
+   ritmo del margen de arranque, y el motor pasa 20 kHz siempre mientras el harness pasa el del
+   parche. No tiene valor por defecto para que la divergencia se vea en cada llamada. Cerrarla
+   movería el golden de los cinco parches de 32 kHz: es un cambio de audio, hay que escucharlo.
+8. **`boot()` no pierde el parche.** Reinicia el firmware, pero no el mapeo de la página de params
+   que hizo `selectPatch()`. Volver a llamar a `setPatch()` después de `prepare()` **sí cambia el
+   audio** (medido: hash distinto ya en el parche 0, por el 0x31/0x30 de más). El orden bueno es
+   seleccionar el parche y luego preparar, que es el del harness.
+9. **El `emuCapacity` del motor se dimensiona para 32 kHz**, no para el parche actual: el parche
+   cambia sin volver a preparar. Y lleva `maxBlock/4` de margen porque el corrector de deriva de
+   `render()` puede pedir esas muestras de más.
 
 ## Build
 
@@ -112,9 +133,9 @@ cmake --build build --target rdpiano_tests rdpiano_e2e
 ctest --test-dir build --output-on-failure     # suite unitaria + harness
 ```
 
-`ctest` corre dos ejecutables: `rdpiano_tests` (unitario, sin emular audio, ~0,4 s) y `rdpiano_e2e`
-(el harness). La CI ejecuta exactamente eso en cada push —sin ASan y con ASan, en dos jobs—, y
-`release` depende de los dos.
+`ctest` corre dos ejecutables: `rdpiano_tests` (unitario, ~2,6 s desde que el motor entró en él) y
+`rdpiano_e2e` (el harness). La CI ejecuta exactamente eso en cada push —sin ASan y con ASan, en dos
+jobs—, y `release` depende de los dos.
 
 Los 16 parches tardan ~3 s. Comprueba: arranque silencioso, que la nota suene, el acorde, que la
 cola se extinga tras el note-off (**detector de voces colgadas**, ver trampa 3), polifonía de 16
@@ -128,32 +149,62 @@ regenerar el golden para "arreglar" un fallo sin escuchar antes.
 
 `--patch N` limita a un parche (~0.2 s) para iterar rápido.
 
-**La suite unitaria** (`librdpiano/test/unit/`) prueba unidades sueltas sin emular — 19 suites,
-203 comprobaciones, 0,4 s: aritmética del bus (`test_board.cpp`), tabla de parches y sus ROMs
-(`test_patches.cpp`), las dos LUT (`test_sa_tables.cpp`), descifrado de ROM y páginas de params
-(`test_rom_loader.cpp`), el protocolo del firmware (`test_command_port.cpp`) y los tres bloques de
-`SoundChip` contra 2.256 vectores capturados (`test_sound_chip_blocks.cpp`). Se añaden suites con
-`TEST_SUITE(nombre)` y una línea en el `CMakeLists.txt` — sin globs, sin dependencias; el andamiaje
-entero es `test/check.h`. Regla: la prueba se escribe **antes** del refactor que acompaña y tiene
-que pasar sin editarla después.
+**La suite unitaria** (`librdpiano/test/unit/`) — 33 suites, 388 comprobaciones, 2,6 s: aritmética
+del bus (`test_board.cpp`), tabla de parches y sus ROMs (`test_patches.cpp`), las dos LUT
+(`test_sa_tables.cpp`), descifrado de ROM y páginas de params (`test_rom_loader.cpp`), el protocolo
+del firmware (`test_command_port.cpp`), los tres bloques de `SoundChip` contra 2.256 vectores
+capturados (`test_sound_chip_blocks.cpp`), la respuesta congelada de SpaceD y Phaser
+(`test_lsp.cpp`), el resampler (`test_resampler.cpp`) y **el motor entero** (`test_engine.cpp`).
+Se añaden suites con `TEST_SUITE(nombre)` y una línea en el `CMakeLists.txt` — sin globs, sin
+dependencias; el andamiaje entero es `test/check.h`. Regla: la prueba se escribe **antes** del
+refactor que acompaña y tiene que pasar sin editarla después.
+
+`test_engine.cpp` es el **simulador de host**: instancia `RdPianoEngine` y le pide bloques
+irregulares, tasas de host de 22 a 96 kHz, cambios de parche en caliente y parámetros en sus
+extremos. Comprueba longitud de salida exacta, finitud, temporización del MIDI, detector de clics,
+headroom y —lo que ningún otro test ve— **cero reservas en `render()`**: sustituye el
+`operator new` global y vigila `stats.resamplerOpens`, porque libresample reserva con `malloc` y no
+pasa por `new`. Es lento comparado con el resto (2,2 de los 2,6 s) porque emula audio de verdad.
 
 Los vectores de `test/vectors/` y `golden.txt` se tratan igual: **no se regeneran para poner algo
 en verde**. Cuando el golden dice que el audio cambió y los vectores dicen qué bloque, el bloque es
 la respuesta; cuando el golden cambia y los vectores pasan, el cambio está en el orden de
 evaluación del bucle y se revierte.
 
-Lo que el harness **no** cubre: efectos del plugin (chorus/phaser/tremolo/EQ), resampling,
-`setMasterTune()` y la UI. Eso sigue siendo verificación auditiva con `librdpiano/test/standalone.cpp`
-(app SDL+portmidi interactiva) o con el plugin en un DAW. Un cambio en `sound_chip.cpp` que pase el
-harness sigue siendo de alto riesgo tímbrico si el hash cambió: decírselo al usuario, no asumir.
+Lo que **nada** de esto cubre: `setMasterTune()`, la UI, y sobre todo el **timbre**. Las pruebas
+del motor dicen que la cadena no revienta, no que suene bien: los efectos se congelan por hash de
+respuesta a impulso, que detecta cambios pero no los juzga. Eso sigue siendo verificación auditiva
+con `librdpiano/test/standalone.cpp` (app SDL+portmidi interactiva) o con el plugin en un DAW. Un
+cambio en `sound_chip.cpp` que pase el harness sigue siendo de alto riesgo tímbrico si el hash
+cambió: decírselo al usuario, no asumir.
+
+Tocar `librdpiano/src/lsp/`, `librdpiano/src/rd_engine.cpp` o los `.jucer` **no** mueve el golden
+del e2e —el harness mide el emulador desnudo, sin la cadena— así que ahí la red que manda es
+`test_engine.cpp` y `test_lsp.cpp`, no `golden.txt`.
 
 La tabla de parches (offsets, sample rates, nombres, ROM set) vive en `librdpiano/include/patches.h`
 y la comparten plugin y harness — si se toca, ambos cambian a la vez.
 
+**El plugin hay que compilarlo aparte** (`bash rdpiano_juce/build/build-osx.sh`): `ctest` no lo
+toca, y el `.jucer` puede quedarse desincronizado del disco sin que ninguna prueba se entere.
+
 ## Convenciones
 
-- Indentación 2 espacios, llave en la misma línea; `librdpiano` usa tabs en zonas heredadas de MAME.
-- El núcleo NO conoce JUCE ni `stdio`: las cabeceras de `librdpiano` no incluyen nada de la
+- Indentación 2 espacios, **llave en línea aparte** (Allman) y 80 columnas; `librdpiano` usa tabs
+  en zonas heredadas de MAME (`mcu.h`), y `sound_chip.cpp`/`patches.h` siguen a 4 espacios: deuda
+  de formato, se salda al tocarlos.
+- **Todo archivo C/C++ nuevo o modificado se formatea con el formateador de VS Code** (Format
+  Document, `⇧⌥F`, del C/C++ extension) antes de darlo por terminado. El estilo lo fija
+  `.clang-format` en la raíz —calibrado contra el código existente, no elegido a ojo— así que
+  `⇧⌥F` y la CLI dan lo mismo. Excepciones: `mcu_ops.h` y `mame_utils.h` (derivados de MAME, ver
+  trampa 5), `lsp/` y `resample/` (terceros) — no reformatear en bloque.
+  Masivo, si alguna vez hace falta, en commit aislado para no ensuciar el `git blame`:
+  ```bash
+  CF=~/.vscode/extensions/ms-vscode.cpptools-*/LLVM/bin/clang-format   # el mismo que usa VS Code
+  git diff --name-only --diff-filter=ACMR -- '*.c' '*.h' '*.cpp' | xargs $CF -i   # solo lo tocado
+  ```
+- El núcleo NO conoce JUCE ni `stdio` —tampoco `rd_engine.cpp`, `lsp/` ni `resample/`, que desde la
+  fase 2 son núcleo—: las cabeceras de `librdpiano` no incluyen nada de la
   biblioteca estándar salvo `<stddef.h>`/`<cstdint>`, y la traza sale por `RD_TRACE` (`rd_trace.h`),
   que sin `-DRDPIANO_TRACE` no compila a nada. Mantenerlo así.
 - Tipos cortos de MAME (`u8/s16/u32`) en el núcleo; tipos JUCE en el plugin.
