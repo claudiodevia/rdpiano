@@ -402,10 +402,17 @@ void RdPianoEngine::render(float *left, float *right, int numFrames)
   const float depth = clamp_index(params.tremoloDepth, 0, 14) / 14.0f;
   const int tremRate = clamp_index(params.tremoloRate, 0, 14);
 
+  // La compensación de headroom por parche entra aquí, en la salida: los dos
+  // bloques que la preceden —el emulador y lsp/— son aritmética entera
+  // transcrita del hardware, y multiplicar dentro de ellos cambiaría lo que el
+  // golden del e2e y los hashes de test_lsp.cpp fijan. Fuera, es una constante
+  // más del escalado de salida.
+  const float outputGain = kOutputScaling * patchOutputGain[currentPatch];
+
   for (int i = 0; i < numFrames; i++)
   {
-    left[i] = outL[i] * kOutputScaling;
-    right[i] = outR[i] * kOutputScaling;
+    left[i] = outL[i] * outputGain;
+    right[i] = outR[i] * outputGain;
 
     tremoloPhase = (tremoloPhase + 1) & 0xffffffff;
     if (params.tremoloEnabled)

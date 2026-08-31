@@ -13,8 +13,8 @@
 
 BasedOnStyle: Microsoft   # llave en línea aparte (Allman): lo que usa el repo,
                           # 107 llaves colgadas frente a 0 adosadas
-IndentWidth: 2            # CLAUDE.md §Convenciones
-ColumnLimit: 80           # el p99 del ancho real de línea es exactamente 80
+IndentWidth: 4            # CLAUDE.md §Convenciones
+ColumnLimit: 120          # el p99 del ancho real de línea es exactamente 80
 
 AllowShortFunctionsOnASingleLine: All   # getters de una línea en las cabeceras
 NamespaceIndentation: All

@@ -24,6 +24,7 @@
 #include "mame_utils.h"
 #include "mcu.h"
 #include "patches.h"
+#include "rd_engine.h"
 
 // ---------------------------------------------------------------- ROMs
 //
@@ -97,15 +98,18 @@ struct Accum
   double rms() const { return count ? sqrt(sumSquares / count) : 0.0; }
 };
 
-// El plugin escala así la señal seca: (sample << 5 >> 6) / 65536 * 0.5
-static float plugin_scale(s32 sample)
+// El plugin escala así la señal seca: (sample << 5 >> 6) / 65536 * 0.5, y
+// después la compensación de headroom del parche (patches.h). Sólo afecta a
+// los WAV de --wav-dir, que existen para escuchar lo que sale del producto: el
+// hash y las comprobaciones van sobre la muestra cruda del emulador.
+static float plugin_scale(s32 sample, float gain)
 {
-  return (float)(sample / 2) / 65536.0f * 0.5f;
+  return (float)(sample / 2) / 65536.0f * 0.5f * gain;
 }
 
 // Renderiza nSamples, acumulando en `total` y opcionalmente en `window`.
 static void render(Mcu *mcu, bool rate32, size_t nSamples, Accum *total,
-                   Accum *window, std::vector<float> *wav)
+                   Accum *window, std::vector<float> *wav, float wavGain = 1.0f)
 {
   for (size_t i = 0; i < nSamples; i++)
   {
@@ -115,7 +119,7 @@ static void render(Mcu *mcu, bool rate32, size_t nSamples, Accum *total,
     if (window)
       window->add(sample);
     if (wav)
-      wav->push_back(plugin_scale(sample));
+      wav->push_back(plugin_scale(sample, wavGain));
   }
 }
 
@@ -124,8 +128,8 @@ static void render(Mcu *mcu, bool rate32, size_t nSamples, Accum *total,
 static void write_u32(FILE *f, u32 v) { fwrite(&v, 4, 1, f); }
 static void write_u16(FILE *f, u16 v) { fwrite(&v, 2, 1, f); }
 
-static bool write_wav(const std::string &path, const std::vector<float> &samples,
-                      int sampleRate)
+static bool write_wav(const std::string &path,
+                      const std::vector<float> &samples, int sampleRate)
 {
   FILE *f = fopen(path.c_str(), "wb");
   if (!f)
@@ -182,8 +186,7 @@ struct PatchResult
   double emulatedSecs = 0;
 };
 
-static PatchResult run_patch(int patch, RomBank &roms,
-                             std::vector<float> *wav)
+static PatchResult run_patch(int patch, RomBank &roms, std::vector<float> *wav)
 {
   const char *const *set = romSetFiles[patchToRomSetId[patch]];
   const u8 *ic5 = roms.get(set[ROM_IC5], WAVE_ROM_SIZE);
@@ -194,6 +197,7 @@ static PatchResult run_patch(int patch, RomBank &roms,
 
   const int rate = patchSampleRates[patch];
   const bool rate32 = rate == 32000;
+  const float wavGain = patchOutputGain[patch];
 
   Mcu *mcu = new Mcu(ic5, ic6, ic7, prog, ic18);
   mcu->loadSounds(ic5, ic6, ic7, ic18, patchToOffset[patch]);
@@ -213,7 +217,8 @@ static PatchResult run_patch(int patch, RomBank &roms,
   // 1. Silencio tras el arranque: no debería sonar nada todavía.
   {
     Accum w;
-    render(mcu, rate32, (size_t)(SILENCE_SECS * rate), &total, &w, wav);
+    render(mcu, rate32, (size_t)(SILENCE_SECS * rate), &total, &w, wav,
+           wavGain);
     r.silenceRms = w.rms();
   }
 
@@ -221,7 +226,7 @@ static PatchResult run_patch(int patch, RomBank &roms,
   mcu->sendMidiCmd(0x90, 60, 100);
   {
     Accum w;
-    render(mcu, rate32, (size_t)(NOTE_SECS * rate), &total, &w, wav);
+    render(mcu, rate32, (size_t)(NOTE_SECS * rate), &total, &w, wav, wavGain);
     r.noteRms = w.rms();
   }
 
@@ -231,7 +236,7 @@ static PatchResult run_patch(int patch, RomBank &roms,
   mcu->sendMidiCmd(0x90, 72, 100);
   {
     Accum w;
-    render(mcu, rate32, (size_t)(CHORD_SECS * rate), &total, &w, wav);
+    render(mcu, rate32, (size_t)(CHORD_SECS * rate), &total, &w, wav, wavGain);
     r.chordRms = w.rms();
   }
 
@@ -243,9 +248,9 @@ static PatchResult run_patch(int patch, RomBank &roms,
   {
     size_t frames = (size_t)(RELEASE_SECS * rate);
     size_t tailFrames = (size_t)(TAIL_WINDOW_SECS * rate);
-    render(mcu, rate32, frames - tailFrames, &total, NULL, wav);
+    render(mcu, rate32, frames - tailFrames, &total, NULL, wav, wavGain);
     Accum w;
-    render(mcu, rate32, tailFrames, &total, &w, wav);
+    render(mcu, rate32, tailFrames, &total, &w, wav, wavGain);
     r.releaseTailRms = w.rms();
   }
 
@@ -254,7 +259,7 @@ static PatchResult run_patch(int patch, RomBank &roms,
     mcu->sendMidiCmd(0x90, 48 + n, 100);
   {
     Accum w;
-    render(mcu, rate32, (size_t)(POLY_SECS * rate), &total, &w, wav);
+    render(mcu, rate32, (size_t)(POLY_SECS * rate), &total, &w, wav, wavGain);
     r.polyRms = w.rms();
   }
 
@@ -263,9 +268,9 @@ static PatchResult run_patch(int patch, RomBank &roms,
   {
     size_t frames = (size_t)(POLY_RELEASE_SECS * rate);
     size_t tailFrames = (size_t)(TAIL_WINDOW_SECS * rate);
-    render(mcu, rate32, frames - tailFrames, &total, NULL, wav);
+    render(mcu, rate32, frames - tailFrames, &total, NULL, wav, wavGain);
     Accum w;
-    render(mcu, rate32, tailFrames, &total, &w, wav);
+    render(mcu, rate32, tailFrames, &total, &w, wav, wavGain);
     r.polyTailRms = w.rms();
   }
 
@@ -287,16 +292,16 @@ static const s32 MAX_PEAK = 1 << 24;        // cordura de rango
 
 static void check_patch(const PatchResult &r, CheckRun &checks)
 {
-  checks.add("boot-silence", r.silenceRms < MAX_SILENCE_RMS,
-             check_fmt("silence rms %.1f < %.1f", r.silenceRms,
-                       MAX_SILENCE_RMS));
+  checks.add(
+      "boot-silence", r.silenceRms < MAX_SILENCE_RMS,
+      check_fmt("silence rms %.1f < %.1f", r.silenceRms, MAX_SILENCE_RMS));
 
   checks.add("note-sounds", r.noteRms > MIN_NOTE_RMS,
              check_fmt("note rms %.1f > %.1f", r.noteRms, MIN_NOTE_RMS));
 
-  checks.add("chord-sounds", r.chordRms > r.noteRms / 2,
-             check_fmt("chord rms %.1f > note rms/2 %.1f", r.chordRms,
-                       r.noteRms / 2));
+  checks.add(
+      "chord-sounds", r.chordRms > r.noteRms / 2,
+      check_fmt("chord rms %.1f > note rms/2 %.1f", r.chordRms, r.noteRms / 2));
 
   checks.add("release-decays", r.releaseTailRms < MAX_TAIL_RMS,
              check_fmt("release tail rms %.1f < %.1f", r.releaseTailRms,
@@ -305,9 +310,9 @@ static void check_patch(const PatchResult &r, CheckRun &checks)
   checks.add("poly-sounds", r.polyRms > MIN_NOTE_RMS,
              check_fmt("poly rms %.1f > %.1f", r.polyRms, MIN_NOTE_RMS));
 
-  checks.add("poly-decays", r.polyTailRms < MAX_TAIL_RMS,
-             check_fmt("poly tail rms %.1f < %.1f", r.polyTailRms,
-                       MAX_TAIL_RMS));
+  checks.add(
+      "poly-decays", r.polyTailRms < MAX_TAIL_RMS,
+      check_fmt("poly tail rms %.1f < %.1f", r.polyTailRms, MAX_TAIL_RMS));
 
   checks.add("peak-sane", r.peak > 0 && r.peak < MAX_PEAK,
              check_fmt("peak %d < %d", r.peak, MAX_PEAK));
@@ -355,6 +360,118 @@ static void write_golden(const std::string &path,
   printf("golden escrito en %s\n", path.c_str());
 }
 
+// ---------------------------------------------------------------- headroom
+//
+// Lo que autoriza `patchOutputGain[]` (FIABILIDAD §4 · N3). No es una
+// comprobación: no falla nunca y no entra en el ctest. Es la medida —una sola,
+// reproducible— de la que sale la tabla, y por eso vive aquí y no en un script
+// de usar y tirar.
+//
+// Mide el motor entero, no el emulador desnudo: el pico que importa es el que
+// sale del plugin, con el EQ de +8 dB incluido. Normaliza sobre la cadena seca
+// (sin chorus, sin phaser, sin trémolo) porque el chorus modula y su pico
+// depende de la fase del LFO. Lo que el chorus añade por encima NO lo recoge
+// ningún limitador —no hay— y por eso se mide aparte, en la columna `c/efx`:
+// no entra en la corrección, pero sí dice a cuánto llega el peor caso real.
+//
+// Es idempotente: aplica la ganancia que ya está en la tabla y propone
+// `ganancia_actual x objetivo / pico_medido`, así que una segunda pasada sobre
+// la tabla corregida devuelve los mismos números.
+
+static const double HEADROOM_HOST_RATE = 48000.0;
+static const int HEADROOM_BLOCK = 512;
+static const double HEADROOM_SECS = 1.5;
+
+static double measure_headroom(int patch, const RdRomSet *sets, const u8 *prog,
+                               bool chorus, bool efx)
+{
+  RdPianoEngine engine(sets, prog);
+  if (patch != 0)
+    engine.setPatch(patch);
+  engine.prepare(HEADROOM_HOST_RATE, HEADROOM_BLOCK);
+
+  engine.params.chorusEnabled = chorus;
+  engine.params.efxEnabled = efx;
+  engine.params.tremoloEnabled = false;
+  engine.params.volume = 1.0f;
+
+  // El peor caso razonable: las 16 voces a la vez, a velocity 127.
+  for (int n = 0; n < 16; n++)
+    engine.pushMidi(0, 0x90, 48 + n, 127);
+
+  std::vector<float> l(HEADROOM_BLOCK), r(HEADROOM_BLOCK);
+  const int blocks = (int)(HEADROOM_SECS * HEADROOM_HOST_RATE) / HEADROOM_BLOCK;
+  double peak = 0;
+  for (int b = 0; b < blocks; b++)
+  {
+    engine.render(l.data(), r.data(), HEADROOM_BLOCK);
+    for (int i = 0; i < HEADROOM_BLOCK; i++)
+    {
+      double a = fabs((double)l[i]);
+      if (a > peak)
+        peak = a;
+      a = fabs((double)r[i]);
+      if (a > peak)
+        peak = a;
+    }
+  }
+  return peak;
+}
+
+static int run_headroom(RomBank &roms)
+{
+  RdRomSet sets[ROMSET_COUNT];
+  for (int s = 0; s < ROMSET_COUNT; s++)
+  {
+    sets[s].ic5 = roms.get(romSetFiles[s][ROM_IC5], WAVE_ROM_SIZE);
+    sets[s].ic6 = roms.get(romSetFiles[s][ROM_IC6], WAVE_ROM_SIZE);
+    sets[s].ic7 = roms.get(romSetFiles[s][ROM_IC7], WAVE_ROM_SIZE);
+    sets[s].ic18 = roms.get(romSetFiles[s][ROM_IC18], WAVE_ROM_SIZE);
+  }
+  const u8 *prog = roms.get(PROG_ROM_FILE, PROG_ROM_SIZE);
+
+  printf("headroom: acorde de 16 notas a velocity 127, cadena seca con EQ,\n"
+         "          %.0f Hz. Objetivo: pico %.5f (%.1f dBFS)\n\n",
+         HEADROOM_HOST_RATE, (double)HEADROOM_TARGET_PEAK,
+         20.0 * log10((double)HEADROOM_TARGET_PEAK));
+  printf("%-3s %-22s %9s %8s %10s %10s %9s\n", "#", "parche", "ganancia",
+         "pico", "dBFS", "propuesta", "c/efx");
+
+  std::vector<double> proposed(NUM_PATCHES, 1.0);
+  double worstFx = 0;
+  for (int patch = 0; patch < NUM_PATCHES; patch++)
+  {
+    double peak = measure_headroom(patch, sets, prog, false, false);
+    double gain = patchOutputGain[patch];
+    proposed[patch] = peak > 0 ? gain * HEADROOM_TARGET_PEAK / peak : gain;
+
+    // La misma medida con los efectos puestos. El peor caso no es tenerlos
+    // todos: el phaser ATENÚA, así que chorus solo —que además es el ajuste de
+    // fábrica— pega más fuerte que chorus + phaser. Lo que este máximo saca
+    // por encima de la señal seca es el margen que la compensación tiene que
+    // dejar libre, porque no hay limitador detrás.
+    double fxPeak = measure_headroom(patch, sets, prog, true, false);
+    double fxBoth = measure_headroom(patch, sets, prog, true, true);
+    if (fxBoth > fxPeak)
+      fxPeak = fxBoth;
+    if (fxPeak > worstFx)
+      worstFx = fxPeak;
+
+    printf("%-3d %-22s %9.5f %8.4f %+10.2f %10.5f %9.4f\n", patch,
+           patchNames[patch], gain, peak, 20.0 * log10(peak > 0 ? peak : 1e-9),
+           proposed[patch], fxPeak);
+    fflush(stdout);
+  }
+
+  printf("\npeor caso con efectos: %.4f (%+.2f dBFS)\n", worstFx,
+         20.0 * log10(worstFx > 0 ? worstFx : 1e-9));
+
+  printf("\npara patches.h:\n");
+  for (int patch = 0; patch < NUM_PATCHES; patch++)
+    printf("    %.5ff, // %s\n", proposed[patch], patchNames[patch]);
+  return 0;
+}
+
 // ---------------------------------------------------------------- main
 
 int main(int argc, char **argv)
@@ -364,6 +481,7 @@ int main(int argc, char **argv)
   std::string goldenPath;
   std::string writeGoldenPath;
   int onlyPatch = -1;
+  bool headroom = false;
 
   for (int i = 1; i < argc; i++)
   {
@@ -380,11 +498,13 @@ int main(int argc, char **argv)
       writeGoldenPath = argv[++i];
     else if (arg == "--patch" && next)
       onlyPatch = atoi(argv[++i]);
+    else if (arg == "--headroom")
+      headroom = true;
     else
     {
       fprintf(stderr,
               "uso: %s [--roms DIR] [--patch N] [--wav-dir DIR]\n"
-              "        [--write-golden FILE] [--golden FILE]\n",
+              "        [--write-golden FILE] [--golden FILE] [--headroom]\n",
               argv[0]);
       return 2;
     }
@@ -399,6 +519,9 @@ int main(int argc, char **argv)
 
   RomBank roms;
   roms.dir = romsDir;
+
+  if (headroom)
+    return run_headroom(roms);
 
   std::map<int, u64> golden;
   if (!goldenPath.empty())

@@ -241,9 +241,9 @@ TEST_SUITE(engine_block_invariance)
   double levelWhole = rms(whole.l, 0, whole.l.size());
   double levelSplit = rms(split.l, 0, split.l.size());
   CHECK(levelWhole > 1e-2);
-  checks.add("bloque-mismo-nivel", fabs(levelSplit - levelWhole) < levelWhole * 0.005,
-             check_fmt("rms entero %.6g, troceado %.6g", levelWhole,
-                       levelSplit));
+  checks.add(
+      "bloque-mismo-nivel", fabs(levelSplit - levelWhole) < levelWhole * 0.005,
+      check_fmt("rms entero %.6g, troceado %.6g", levelWhole, levelSplit));
 
   // Determinismo: el mismo troceado dos veces tiene que dar exactamente lo
   // mismo. Aquí sí se exige bit a bit.
@@ -291,9 +291,9 @@ TEST_SUITE(engine_block_invariance)
     if (d > stepInside)
       stepInside = d;
   }
-  checks.add("bloque-misma-pendiente", stepInside <= stepWhole * 1.01,
-             check_fmt("pendiente entero %.6g, troceado %.6g", stepWhole,
-                       stepInside));
+  checks.add(
+      "bloque-misma-pendiente", stepInside <= stepWhole * 1.01,
+      check_fmt("pendiente entero %.6g, troceado %.6g", stepWhole, stepInside));
 
   // Caracterización del hueco descrito arriba: hoy son 23 muestras de silencio
   // exacto en 4.096 con una nota sonando. No se relaja; el día que el reparto
@@ -302,9 +302,9 @@ TEST_SUITE(engine_block_invariance)
   for (size_t i = 0; i < split.l.size(); i++)
     if (split.l[i] == 0.0f)
       dropouts++;
-  checks.add("bloque-huecos-conocidos", dropouts <= 32,
-             check_fmt("%d muestras de silencio exacto en %d", dropouts,
-                       TOTAL));
+  checks.add(
+      "bloque-huecos-conocidos", dropouts <= 32,
+      check_fmt("%d muestras de silencio exacto en %d", dropouts, TOTAL));
 
   delete a;
   delete b;
@@ -443,8 +443,7 @@ TEST_SUITE(engine_no_alloc_in_render)
   // El otro lado: libresample reserva con malloc, así que el contador de
   // arriba no lo ve. resample_open() cuesta 2,5 ms y 600 KB (AUDITORIA §2) y
   // no puede ocurrir con el bloque en marcha.
-  checks.add("render-sin-resample-open",
-             e->stats.resamplerOpens == opensBefore,
+  checks.add("render-sin-resample-open", e->stats.resamplerOpens == opensBefore,
              check_fmt("%lu aperturas", e->stats.resamplerOpens - opensBefore));
 
   delete e;
@@ -643,43 +642,98 @@ TEST_SUITE(engine_midi_timing)
 
 TEST_SUITE(engine_headroom)
 {
-  // Dieciséis voces a velocidad 127 con el escalado seco del plugin, que
-  // ahora está definido en un solo sitio (antes estaba en el plugin y copiado
-  // en e2e.cpp): el pico tiene que quedar por debajo de fondo de escala.
+  // Dieciséis voces a velocidad 127 con el escalado seco del plugin: el pico
+  // tiene que quedar por debajo de fondo de escala, y en el MISMO sitio para
+  // todos los parches.
+  //
+  // Hasta que se aplicó `patchOutputGain[]` esta comprobación fijaba el
+  // defecto —"recorta hoy", pico 2,82 en el parche 0 y hasta 4,83 en el
+  // E-Piano 1, FIABILIDAD §4 (N3, ALTO)— porque arreglarlo era un cambio de
+  // audio que había que escuchar. Ya está aplicado, así que ahora fija lo que
+  // de verdad importa: que los 16 parches están al MISMO nivel, el que dice
+  // `HEADROOM_TARGET_PEAK`.
+  //
+  // Lo que ya no fija es "no recorta": el objetivo de la tabla es +3 dBFS y
+  // pasa de fondo de escala a propósito, por nivel (patches.h). Lo que se
+  // comprueba en su lugar es que no se dispare muy por encima del objetivo,
+  // que es el fallo que esta suite tiene que ver.
   const int BLOCK = 512;
-  RdPianoEngine *e = make_engine(48000.0, BLOCK);
-  if (!e)
+
+  // El objetivo de la tabla, con el margen de lo que la medida se mueve al
+  // acortar la ventana (el harness mide 1,5 s; aquí son 0,64).
+  const double TARGET = (double)HEADROOM_TARGET_PEAK;
+
+  // Parche 0 y parche 6: el segundo era el más caliente de los 16 (+13,7 dBFS
+  // sin compensar), así que si los dos caen en el mismo pico la compensación
+  // está haciendo su trabajo y no es una ganancia global disfrazada.
+  const int probes[] = {0, 6};
+  for (int pi = 0; pi < 2; pi++)
   {
-    CHECK_MSG(false, "sin ROMs en %s", g_roms_dir.c_str());
-    return;
+    RdPianoEngine *e = make_engine(48000.0, BLOCK, probes[pi]);
+    if (!e)
+    {
+      CHECK_MSG(false, "sin ROMs en %s", g_roms_dir.c_str());
+      return;
+    }
+
+    // Sin efectos: lo que se mide es el headroom de la cadena seca.
+    e->params.chorusEnabled = false;
+    e->params.efxEnabled = false;
+    e->params.tremoloEnabled = false;
+    e->params.volume = 1.0f;
+
+    for (int n = 0; n < 16; n++)
+      e->pushMidi(0, 0x90, 48 + n, 127);
+
+    const int blocks[] = {BLOCK};
+    Stereo out = render_blocks(e, BLOCK * 60, blocks, 1);
+
+    double p = peak(out.l);
+    checks.add(check_fmt("headroom-suena-p%d", probes[pi]), p > 0.01,
+               check_fmt("pico %.4f", p));
+
+    checks.add(check_fmt("headroom-acotado-p%d (FIABILIDAD §4)", probes[pi]),
+               p < TARGET * 1.5, check_fmt("pico %.4f", p));
+
+    // Normalizado al objetivo de patches.h, no simplemente por debajo de 1.
+    checks.add(check_fmt("headroom-normalizado-p%d", probes[pi]),
+               p > TARGET * 0.9 && p < TARGET * 1.02,
+               check_fmt("pico %.4f, objetivo %.4f", p, TARGET));
+
+    delete e;
   }
 
-  // Sin efectos: lo que se mide es el headroom de la cadena seca.
-  e->params.chorusEnabled = false;
-  e->params.efxEnabled = false;
-  e->params.tremoloEnabled = false;
-  e->params.volume = 1.0f;
+  // El peor caso medido de toda la cadena: el parche 5 con el chorus a la
+  // profundidad de fábrica, que añade +4,9 dB sobre la señal seca. Con la seca
+  // a +3 dBFS eso son +7,9 dBFS (pico 2,47), y como no hay limitador detrás
+  // recorta en la salida del host: es el precio del nivel, aceptado y medido.
+  // Lo que aquí se fija es que ese peor caso no crezca sin que nadie lo note.
+  {
+    RdPianoEngine *e = make_engine(48000.0, BLOCK, 5);
+    if (!e)
+    {
+      CHECK_MSG(false, "sin ROMs en %s", g_roms_dir.c_str());
+      return;
+    }
 
-  for (int n = 0; n < 16; n++)
-    e->pushMidi(0, 0x90, 48 + n, 127);
+    e->params.chorusEnabled = true;
+    e->params.efxEnabled = false;
+    e->params.tremoloEnabled = false;
+    e->params.volume = 1.0f;
 
-  const int blocks[] = {BLOCK};
-  Stereo out = render_blocks(e, BLOCK * 60, blocks, 1);
+    for (int n = 0; n < 16; n++)
+      e->pushMidi(0, 0x90, 48 + n, 127);
 
-  double p = peak(out.l);
-  checks.add("headroom-suena", p > 0.01, check_fmt("pico %.4f", p));
+    const int blocks[] = {BLOCK};
+    Stereo out = render_blocks(e, BLOCK * 60, blocks, 1);
 
-  // El pico está POR ENCIMA de fondo de escala: ~2,8 con el parche 0. No es
-  // una sorpresa —es FIABILIDAD §4 (N3, ALTO): 8 de los 16 parches superan
-  // 0 dBFS con un acorde grande, antes del chorus y del EQ de +8 dB—, pero
-  // hasta ahora no había forma de medirlo sin abrir un DAW.
-  //
-  // No se arregla aquí: la compensación de ganancia por parche y el limitador
-  // de seguridad son un cambio de audio que hay que escuchar, y no están en la
-  // lista de la fase 2. Esta comprobación fija el valor de hoy para que el día
-  // que se arregle salte y haya que darle la vuelta.
-  checks.add("headroom-recorta-hoy (FIABILIDAD §4)", p > 1.0 && p < 4.0,
-             check_fmt("pico %.4f", p));
+    double p = peak(out.l);
+    if (peak(out.r) > p)
+      p = peak(out.r);
 
-  delete e;
+    checks.add("headroom-peor-caso-con-chorus", p < TARGET * 2.0,
+               check_fmt("pico %.4f (%.1f dBFS)", p, 20.0 * log10(p)));
+
+    delete e;
+  }
 }

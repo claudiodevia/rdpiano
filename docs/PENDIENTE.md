@@ -11,9 +11,10 @@ catalogados en [AUDITORIA.md](AUDITORIA.md) y [FIABILIDAD-DIRECTO.md](FIABILIDAD
 sólo aparecen los que quedaron pendientes *porque un paso del plan decidió no tocarlos*.
 
 **Suelo verificado hoy** (build limpio, sin ASan, Release):
-`ctest` verde — `unit` 2,84 s (38 suites, 427 comprobaciones, 0 fallidas) y `e2e` 2,48 s
+`ctest` verde — `unit` 2,40 s (38 suites, 432 comprobaciones, 0 fallidas) y `e2e` 2,16 s
 (16 parches, 0 comprobaciones fallidas, 0 hashes distintos del golden). Cualquier cosa de esta
-lista se mide contra eso.
+lista se mide contra eso. Las cinco comprobaciones nuevas respecto a las 427 de la primera
+redacción son las del headroom (§2.1), que ya está hecho.
 
 ---
 
@@ -29,7 +30,7 @@ distintos, y **conviene no mezclarlos**, porque sólo el primero es gratis.
 | 2 | `lsp_common.h`: tabla, utilidades e IRAM duplicadas | Limpieza | No (lo fija `test_lsp.cpp`) | Bajo | [REF §12](REFACTORIZACION.md#12-lsp-dos-transcripciones-con-la-misma-infraestructura) |
 | 3 | Escalado seco duplicado en el harness | Limpieza | No | Muy bajo | [REF §11](REFACTORIZACION.md#11-tablas-de-datos-duplicadas) |
 | 4 | LUT de IC10/IC11: opciones 2 y 3 (blob, signos en el bit 15) | Rendimiento | No (lo fija `test_sa_tables.cpp`) | Medio | [REF §4](REFACTORIZACION.md#4-320-kb-de-lut-deterministas-recalculadas-por-instancia) |
-| 5 | Headroom: pico 2,82 (≈ +9 dB sobre fondo de escala) | **Cambio de audio** | **Sí** | Medio | [FIAB §4](FIABILIDAD-DIRECTO.md) |
+| 5 | ~~Headroom: pico 2,82 (≈ +9 dB sobre fondo de escala)~~ **hecho** | **Cambio de audio** | **Sí, aplicado** | — | [FIAB §4](FIABILIDAD-DIRECTO.md) |
 | 6 | 23 huecos de silencio por troceado (búfer circular de salida) | **Cambio de audio** | **Sí** | Alto | [REF §17.6](REFACTORIZACION.md#176-lo-que-solo-se-puede-probar-con-un-motor-de-verdad) |
 | 7 | Ritmo del margen de arranque: motor 20 kHz, harness el del parche | **Cambio de audio** | **Sí** (5 parches) | Bajo | trampa 7 de [CLAUDE.md](../CLAUDE.md) |
 | 8 | MIDI que se descarta: program change, CC 120/123, canal, pitch bend | Comportamiento | Sí, donde hoy no suena nada | Medio | [FIAB §§2, 3, 9, 10](FIABILIDAD-DIRECTO.md) |
@@ -41,8 +42,8 @@ distintos, y **conviene no mezclarlos**, porque sólo el primero es gratis.
 | 14 | La UI no la prueba nadie | Prueba | — | Medio | fase 3 |
 | 15 | JUCE clavado en 8.0.1; acción de release sin fijar; sin firmar | Build | No | Bajo–Medio | fase 3, [AUD §17](AUDITORIA.md), [FIAB §15](FIABILIDAD-DIRECTO.md) |
 
-Los puntos 1–4 se pueden hacer hoy, en cualquier orden, y el golden lo prueba. Los 5–9 son
-decisiones de producto que hay que **escuchar** antes de dar por buenas. Los 11 y 12 son los únicos
+Los puntos 1–4 se pueden hacer hoy, en cualquier orden, y el golden lo prueba. El 5 ya está hecho
+(§2.1); los 6–9 son decisiones de producto que hay que **escuchar** antes de dar por buenas. Los 11 y 12 son los únicos
 que pueden mover la aritmética del emulador, y por eso van con el procedimiento de
 [REF §17.1](REFACTORIZACION.md#171-la-regla-caracterizar-antes-de-mover) o no van.
 
@@ -87,10 +88,14 @@ transcritos** ([REF §20](REFACTORIZACION.md#20-qué-no-tocar)).
 ### 1.3 El escalado seco, todavía en dos sitios
 
 La fase 2 lo dejó **una vez** en el motor (`kEmuInputShift`, `kEmuOutputShift`, `kOutputScaling` en
-[rd_engine.cpp:38-41](../librdpiano/src/rd_engine.cpp#L38-L41)), pero el harness conserva su copia:
-`plugin_scale()` en [e2e.cpp:100-104](../librdpiano/test/e2e.cpp#L100-L104), con el comentario "El
-plugin escala así la señal seca". Son dos líneas; el riesgo es que diverjan y los WAV de
-`--wav-dir` dejen de sonar como el plugin sin que nada lo diga.
+[rd_engine.cpp](../librdpiano/src/rd_engine.cpp)), pero el harness conserva su copia:
+`plugin_scale()` en [e2e.cpp](../librdpiano/test/e2e.cpp), con el comentario "El plugin escala así
+la señal seca". Son dos líneas; el riesgo es que diverjan y los WAV de `--wav-dir` dejen de sonar
+como el plugin sin que nada lo diga.
+
+El headroom (§2.1) subió la apuesta: la compensación por parche también tuvo que aplicarse a mano
+en `plugin_scale()` para que los WAV siguieran saliendo al nivel del producto. Es exactamente la
+divergencia que este punto anuncia, ya cobrada una vez.
 
 ### 1.4 Las LUT: opciones 2 y 3 — [REF §4](REFACTORIZACION.md#4-320-kb-de-lut-deterministas-recalculadas-por-instancia)
 
@@ -105,13 +110,43 @@ quieran.
 
 ## 2. Decisiones de comportamiento aplazadas (hay que escucharlas)
 
-### 2.1 Headroom — [FIABILIDAD §4](FIABILIDAD-DIRECTO.md)
+### 2.1 Headroom — [FIABILIDAD §4](FIABILIDAD-DIRECTO.md) · **hecho**
 
-`engine_headroom` mide hoy **pico 2,82** con 16 voces a velocity 127 y la cadena seca: casi 9 dB
-por encima de fondo de escala, 8 de 16 parches saturan. La comprobación
-[test_engine.cpp:681](../librdpiano/test/unit/test_engine.cpp#L681) fija el valor de hoy —"recorta
-hoy"— y **saltará cuando se arregle**, que es justo lo que se quiere. La compensación de ganancia
-por parche y/o un limitador de seguridad son un cambio de audio del producto.
+Estaba así: `engine_headroom` medía **pico 2,82** con 16 voces a velocity 127 y la cadena seca, casi
+9 dB por encima de fondo de escala. Medido después con el motor entero —EQ incluido, que es lo que
+de verdad sale del plugin— era peor de lo que decía FIABILIDAD: **los 16 parches** pasaban de fondo
+de escala, de +1,9 dBFS (Harpsichord) a **+13,7** (E-Piano 1), y entre el más flojo y el más
+caliente había casi **12 dB**. Cambiar de sonido cambiaba de nivel.
+
+Lo aplicado es el punto 1 de los tres que proponía FIABILIDAD: una **compensación por parche**,
+`patchOutputGain[]` en [patches.h](../librdpiano/include/patches.h), que normaliza los 16 al mismo
+pico. El motor la aplica en la salida
+([rd_engine.cpp](../librdpiano/src/rd_engine.cpp), junto a `kOutputScaling`), **después** del
+emulador y de `lsp/`: los dos son aritmética entera transcrita del hardware, así que el golden del
+e2e y los seis hashes de `test_lsp.cpp` siguen intactos. Verificado: `ctest` verde sin regenerar
+nada.
+
+El objetivo es **−6 dBFS**, no los −3 que sugería FIABILIDAD, y la razón es el punto 2 que **no** se
+ha aplicado: no hay limitador detrás. Medido, el chorus a la profundidad de fábrica añade hasta
+**+4,9 dB** sobre la señal seca —el phaser, al contrario, atenúa, así que el peor caso no es tener
+todos los efectos puestos sino sólo el chorus, que además es el ajuste de fábrica—; con la seca a
+−6 dBFS el peor caso de toda la cadena se queda en **−1,15 dBFS** y nada recorta. El punto 3
+(revisar el Q = 0,2 del EQ) tampoco se ha tocado: eso es timbre, no headroom.
+
+La medida vive en el harness, no en un script suelto: **`rdpiano_e2e --headroom`** mide el pico de
+cada parche con el motor entero y escribe la tabla corregida. Es idempotente —aplica la ganancia
+que ya está puesta y propone `actual × objetivo / medido`—, así que una segunda pasada devuelve los
+mismos números, y por eso la tabla se puede regenerar sin arrastrar el error de la anterior.
+
+`engine_headroom` ([test_engine.cpp](../librdpiano/test/unit/test_engine.cpp)) está dado la vuelta,
+que era justo lo que la comprobación anterior pedía: ya no fija "recorta hoy" sino que no recorta
+(parches 0 y 6, el que era más caliente, los dos al objetivo) y que el peor caso con chorus —el
+parche 5— se queda por debajo de fondo de escala.
+
+**Lo que hay que escuchar.** Es un cambio de audio y bastante grande: el nivel de salida baja entre
+8 y 17 dB según el parche, así que **las sesiones guardadas suenan más flojas** y el `volume` del
+plugin llega sólo a 1,0, sin margen para recuperarlo desde dentro. Los WAV de `--wav-dir` ya salen
+con la compensación puesta, para que lo que se escucha sea el nivel del producto.
 
 ### 2.2 Los 23 huecos por troceado — [REF §17.6](REFACTORIZACION.md#176-lo-que-solo-se-puede-probar-con-un-motor-de-verdad)
 
@@ -239,7 +274,7 @@ su **T** en rojo por otra razón que la que arregla.
 | 26 | **T** + tabla del editor cubierta (índices y cobertura de parámetros) | Barato, y es lo único de la UI que se puede probar sin abrir ventana |
 | 27 | **T** + MIDI: program change, CC 120/123, filtro de canal, pitch bend | Cada uno una línea en `sendMidiCmd`; N1 primero, que es el crítico |
 | 28 | **T** + cambio de parche y `masterTune` diferidos al principio de `render()` | Un solo mecanismo resuelve 2.5 y 2.6; habilita automatizar `masterTune` |
-| 29 | Headroom: compensación por parche y/o limitador | **Escuchar antes.** `engine_headroom` saltará: se actualiza *después* de oírlo |
+| ~~29~~ | ~~Headroom: compensación por parche~~ **hecho** (§2.1). Queda el limitador, si se quiere | Se hizo fuera de orden: no toca el emulador, así que el golden no lo tapa |
 | 30 | Búfer circular de salida | El más grande y el que más audio cambia; con el golden y los WAV delante |
 
 Los puntos 11 y 12 del resumen (§2.7) **no aparecen en la lista a propósito**: no son pasos de
