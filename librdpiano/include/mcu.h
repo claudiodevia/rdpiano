@@ -51,8 +51,7 @@ private:
   u8 latch_val = 0x00;
   u8 program_rom[0x2000];
   u8 params_rom[0x20000];
-  u8 params_rom_tmp[0x20000];
-  u8 ram[0x10000] = {0};
+  u8 ram[0x1000] = {0};   // el mapa solo direcciona 0x0000-0x0FFF
 
   // Generic CPU
   void take_trap();

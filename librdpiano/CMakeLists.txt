@@ -31,7 +31,8 @@ target_include_directories(rdpiano_e2e PRIVATE test)
 # suite unitaria: sin emular audio, tiene que terminar en menos de un segundo.
 # Lista explicita de fuentes, sin glob (REFACTORIZACION §17.2).
 add_executable(rdpiano_tests
-    test/unit/main.cpp)
+    test/unit/main.cpp
+    test/unit/test_board.cpp)
 target_link_libraries(rdpiano_tests librdpiano)
 target_include_directories(rdpiano_tests PRIVATE test test/unit)
 

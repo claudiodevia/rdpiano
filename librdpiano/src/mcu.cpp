@@ -447,7 +447,7 @@ u8 Mcu::read_byte(u16 addr)
 {
   // program rom
   if (addr >= 0xc000)
-    return program_rom[(addr - 0xc000) & 0xdfff];
+    return program_rom[(addr - 0xc000) & 0x1fff];
   
   // port 1 DATA
   else if (addr == 0x0002) {
@@ -606,18 +606,18 @@ void Mcu::sendMidiCmd(u8 data1, u8 data2, u8 data3)
 void Mcu::loadSounds(const u8 *temp_ic5, const u8 *temp_ic6, const u8 *temp_ic7, const u8 *temp_paramsrom, size_t from_addr)
 {
   sound_chip.load_samples(temp_ic5, temp_ic6, temp_ic7);
-  
-  for (size_t srcpos = 0x00; srcpos < 0x20000; srcpos++) {
-    params_rom_tmp[srcpos] = UNSCRAMBLE_DATA_CPUB(temp_paramsrom[UNSCRAMBLE_ADDR_PARAMS(srcpos)]);
-  }
 
   for (size_t srcpos = 0x00; srcpos < 0x20000; srcpos++) {
     params_rom[srcpos] = 0xff;
   }
-  
+
+  // Se desencripta solo la página que se va a mapear. UNSCRAMBLE_ADDR_PARAMS
+  // se aplica índice a índice, así que esto da byte a byte lo mismo que
+  // desencriptar los 0x20000 en un temporal y copiar la ventana de 0x8000.
   size_t from_addr_aligned = from_addr >> 15 << 15;
   for (size_t srcpos = 0x00; srcpos < 0x8000; srcpos++) {
-    params_rom[srcpos+0x8000] = params_rom_tmp[srcpos+from_addr_aligned];
+    params_rom[srcpos+0x8000] =
+      UNSCRAMBLE_DATA_CPUB(temp_paramsrom[UNSCRAMBLE_ADDR_PARAMS(srcpos+from_addr_aligned)]);
   }
 
   size_t target = (from_addr - from_addr_aligned) + 0x4000;
