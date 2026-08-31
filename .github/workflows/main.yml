@@ -7,31 +7,6 @@ on:
       - '**'
 
 jobs:
-  build-win:
-    runs-on: windows-2022
-    steps:
-    - uses: actions/checkout@v3.3.0
-      with:
-        fetch-depth: 0
-        submodules: recursive
-    - name: "Download Projucer"
-      run: |
-           cd rdpiano_juce
-           git clone -b 8.0.1 --depth 1 https://github.com/juce-framework/JUCE JUCE
-           bash -ex ./build/download-projucer.sh
-      shell: bash
-      env:
-        OS: windows
-    - name: "Build RdPiano"
-      run: sh -ex ./rdpiano_juce/build/build-win.sh
-      shell: bash
-    - name: Upload Artifact
-      uses: actions/upload-artifact@v4
-      with:
-        name: RdPiano-win
-        path: |
-              ./rdpiano_juce/Builds/VisualStudio2022/x64/Release/VST3/rdpiano_juce.vst3
-              ./rdpiano_juce/Builds/VisualStudio2022/x64/Release/Standalone Plugin/rdpiano_juce.exe
   build-osx:
     runs-on: macos-13
     steps:
@@ -39,14 +14,9 @@ jobs:
       with:
         fetch-depth: 0
         submodules: recursive
-    - name: "Download Projucer"
-      run: |
-           cd rdpiano_juce
-           git clone -b 8.0.1 --depth 1 https://github.com/juce-framework/JUCE JUCE
-           bash -ex ./build/download-projucer.sh
+    - name: "Download JUCE"
+      run: bash -ex ./rdpiano_juce/download-juce.sh
       shell: bash
-      env:
-        OS: osx
     - name: "Build macOS"
       run: sh -ex ./rdpiano_juce/build/build-osx.sh
       shell: bash
@@ -66,46 +36,11 @@ jobs:
               ./rdpiano_juce/Builds/MacOSX/build/Release/rdpiano_juce.vst3.macOS.zip
               ./rdpiano_juce/Builds/MacOSX/build/Release/rdpiano_juce.component.macOS.zip
               ./rdpiano_juce/Builds/MacOSX/build/Release/rdpiano_juce.app.macOS.zip
-  build-linux:
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@v3.3.0
-        with:
-          fetch-depth: 0
-          submodules: recursive
-      - name: "Install Dependencies"
-        run: sudo apt update && sudo apt install -y libasound2-dev libjack-jackd2-dev libfontconfig1-dev libfreetype-dev libxcursor-dev libxinerama-dev libxrandr-dev
-      - name: "Download Projucer"
-        run: |
-          cd rdpiano_juce
-          git clone -b 8.0.1 --depth 1 https://github.com/juce-framework/JUCE JUCE
-          bash -ex ./build/download-projucer.sh
-        shell: bash
-        env:
-          OS: linux
-      - name: "Build RdPiano"
-        run: sh -ex ./rdpiano_juce/build/build-linux.sh
-        shell: bash
-      - name: "Zip Artifacts"
-        run: |
-          cd ./rdpiano_juce/Builds/LinuxMakefile/build/
-          zip -r rdpiano_juce.vst3.Linux.zip rdpiano_juce.vst3
-          zip -r rdpiano_juce.lv2.Linux.zip rdpiano_juce.lv2
-          cd -
-        shell: bash
-      - name: "Upload Artifacts"
-        uses: actions/upload-artifact@v4
-        with:
-          name: RdPiano-linux
-          path: |
-            ./rdpiano_juce/Builds/LinuxMakefile/build/rdpiano_juce.vst3.Linux.zip
-            ./rdpiano_juce/Builds/LinuxMakefile/build/rdpiano_juce.lv2.Linux.zip
-            ./rdpiano_juce/Builds/LinuxMakefile/build/rdpiano_juce
 
   release:
     name: "Release"
-    needs: [build-win, build-osx, build-linux]
-    if: github.ref == 'refs/heads/main'
+    needs: [build-osx]
+    if: github.ref == 'refs/heads/master'
     runs-on: "ubuntu-latest"
     steps:
       - uses: actions/checkout@v3.3.0
@@ -122,5 +57,4 @@ jobs:
           automatic_release_tag: latest
           title: RdPiano Latest
           files: |
-                 rdpiano_juce/build/**/*
                  rdpiano_juce/build/**/*
