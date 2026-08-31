@@ -65,16 +65,13 @@ RdPiano_juceAudioProcessor::RdPiano_juceAudioProcessor()
               .withInput("Input", juce::AudioChannelSet::stereo(), true)
               .withOutput("Output", juce::AudioChannelSet::stereo(), true))
 {
-  mcu = new Mcu(
+  mcu = std::make_unique<Mcu>(
       romSetForPatch(0)->ic5, romSetForPatch(0)->ic6, romSetForPatch(0)->ic7,
       (const uint8_t *)BinaryData::RD200_B_bin, romSetForPatch(0)->ic18);
 
-  spaceD = new SpaceD();
-  phaser = new Phaser();
-
   mcuReset();
-  spaceD->reset();
-  phaser->reset();
+  spaceD.reset();
+  phaser.reset();
 
   sourceSampleRate = patchSampleRates[0];
 
@@ -142,16 +139,7 @@ RdPiano_juceAudioProcessor::RdPiano_juceAudioProcessor()
   efxPhaserDepth->addListener(this);
 }
 
-RdPiano_juceAudioProcessor::~RdPiano_juceAudioProcessor()
-{
-  // memset(mcu, 0, sizeof(Mcu));
-  delete mcu;
-  mcu = 0;
-  delete spaceD;
-  spaceD = 0;
-  delete phaser;
-  phaser = 0;
-}
+RdPiano_juceAudioProcessor::~RdPiano_juceAudioProcessor() {}
 
 //==============================================================================
 void RdPiano_juceAudioProcessor::parameterValueChanged(int parameterIndex,
@@ -281,15 +269,17 @@ void RdPiano_juceAudioProcessor::prepareToPlay(double sampleRate,
 {
   double ratio = sampleRate / 32000;
   emu_sample_buffer_size = ceil(samplesPerBlock * ratio);
-  emu_sample_bufferL = new float[emu_sample_buffer_size];
-  emu_sample_bufferR = new float[emu_sample_buffer_size];
-  emu_resampled_sample_bufferL = new float[samplesPerBlock];
-  emu_resampled_sample_bufferR = new float[samplesPerBlock];
+  // assign() y no new[]: si el host llama dos veces sin releaseResources de
+  // por medio, aquí no se fuga nada (AUDITORIA §12).
+  emu_sample_bufferL.assign(emu_sample_buffer_size, 0.0f);
+  emu_sample_bufferR.assign(emu_sample_buffer_size, 0.0f);
+  emu_resampled_sample_bufferL.assign(samplesPerBlock, 0.0f);
+  emu_resampled_sample_bufferR.assign(samplesPerBlock, 0.0f);
 
   mcuReset();
 
-  spaceD->reset();
-  phaser->reset();
+  spaceD.reset();
+  phaser.reset();
 
   juce::dsp::ProcessSpec spec;
   spec.sampleRate = sampleRate;
@@ -301,26 +291,11 @@ void RdPiano_juceAudioProcessor::prepareToPlay(double sampleRate,
 
 void RdPiano_juceAudioProcessor::releaseResources()
 {
-  if (emu_sample_bufferL)
-  {
-    delete[] emu_sample_bufferL;
-    emu_sample_bufferL = 0;
-  }
-  if (emu_sample_bufferR)
-  {
-    delete[] emu_sample_bufferR;
-    emu_sample_bufferR = 0;
-  }
-  if (emu_resampled_sample_bufferL)
-  {
-    delete[] emu_resampled_sample_bufferL;
-    emu_resampled_sample_bufferL = 0;
-  }
-  if (emu_resampled_sample_bufferR)
-  {
-    delete[] emu_resampled_sample_bufferR;
-    emu_resampled_sample_bufferR = 0;
-  }
+  emu_sample_bufferL.clear();
+  emu_sample_bufferR.clear();
+  emu_resampled_sample_bufferL.clear();
+  emu_resampled_sample_bufferR.clear();
+  emu_sample_buffer_size = 0;
 }
 
 bool RdPiano_juceAudioProcessor::isBusesLayoutSupported(
@@ -390,12 +365,12 @@ void RdPiano_juceAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer,
 
   bool mode32khz = sourceSampleRate == 32000;
 
-  spaceD->rate =
+  spaceD.rate =
       spaceDRateFromMs(1000.0f / chorusRateToMsPeriod[*chorusRate] / 4.0f);
-  spaceD->depth = spaceDDepth(*chorusDepth / 15.0f);
+  spaceD.depth = spaceDDepth(*chorusDepth / 15.0f);
 
-  phaser->rate = phaserRateTable[(int)floor(*efxPhaserRate * 0x7f)];
-  phaser->depth = phaserDepthTable[(int)floor(*efxPhaserDepth * 0x7f)];
+  phaser.rate = phaserRateTable[(int)floor(*efxPhaserRate * 0x7f)];
+  phaser.depth = phaserDepthTable[(int)floor(*efxPhaserDepth * 0x7f)];
 
   mcuLock.enter();
   for (int i = 0; i < renderBufferFrames; i++)
@@ -417,32 +392,32 @@ void RdPiano_juceAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer,
 
     int32_t sample = mcu->generate_next_sample(mode32khz);
 
-    spaceD->audioInL = sample << 5;
-    spaceD->audioInR = sample << 5;
+    spaceD.audioInL = sample << 5;
+    spaceD.audioInR = sample << 5;
     if (*chorusEnabled)
     {
-      spaceD->process();
+      spaceD.process();
     }
     else
     {
-      spaceD->audioOutL = spaceD->audioInL;
-      spaceD->audioOutR = spaceD->audioInR;
+      spaceD.audioOutL = spaceD.audioInL;
+      spaceD.audioOutR = spaceD.audioInR;
     }
-    spaceD->audioOutL >>= 6;
-    spaceD->audioOutR >>= 6;
+    spaceD.audioOutL >>= 6;
+    spaceD.audioOutR >>= 6;
 
     // if (*efxPhaserOnOff && *efxEnabled) {
     if (*efxEnabled)
     {
-      phaser->audioInL = spaceD->audioOutL << 5;
-      phaser->audioInR = spaceD->audioOutR << 5;
-      phaser->process();
-      spaceD->audioOutL = phaser->audioOutL >> 6;
-      spaceD->audioOutR = phaser->audioOutR >> 6;
+      phaser.audioInL = spaceD.audioOutL << 5;
+      phaser.audioInR = spaceD.audioOutR << 5;
+      phaser.process();
+      spaceD.audioOutL = phaser.audioOutL >> 6;
+      spaceD.audioOutR = phaser.audioOutR >> 6;
     }
 
-    emu_sample_bufferL[i] = spaceD->audioOutL / 65536.0f * *volume;
-    emu_sample_bufferR[i] = spaceD->audioOutR / 65536.0f * *volume;
+    emu_sample_bufferL[i] = spaceD.audioOutL / 65536.0f * *volume;
+    emu_sample_bufferR[i] = spaceD.audioOutR / 65536.0f * *volume;
   }
   mcuLock.exit();
 
@@ -452,21 +427,20 @@ void RdPiano_juceAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer,
   {
     savedDestSampleRate = destSampleRate;
     savedSourceSampleRate = sourceSampleRate;
-    if (resampleL)
-      resample_close(resampleL);
-    if (resampleR)
-      resample_close(resampleR);
-    resampleL = resample_open(1, ratio, ratio);
-    resampleR = resample_open(1, ratio, ratio);
+    // reset() cierra el handle anterior, si lo había
+    resampleL.reset(resample_open(1, ratio, ratio));
+    resampleR.reset(resample_open(1, ratio, ratio));
   }
 
   int inUsed = 0;
   int out = 0;
-  out = resample_process(resampleL, ratio, emu_sample_bufferL,
+  out = resample_process(resampleL.get(), ratio, emu_sample_bufferL.data(),
                          renderBufferFrames, false, &inUsed,
-                         emu_resampled_sample_bufferL, buffer.getNumSamples());
-  resample_process(resampleR, ratio, emu_sample_bufferR, renderBufferFrames,
-                   false, &inUsed, emu_resampled_sample_bufferR,
+                         emu_resampled_sample_bufferL.data(),
+                         buffer.getNumSamples());
+  resample_process(resampleR.get(), ratio, emu_sample_bufferR.data(),
+                   renderBufferFrames, false, &inUsed,
+                   emu_resampled_sample_bufferR.data(),
                    buffer.getNumSamples());
   samplesError += currentError;
   if (inUsed == 0)

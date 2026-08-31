@@ -26,6 +26,13 @@ class Mcu {
 public:
   Mcu(const u8 *temp_ic5, const u8 *temp_ic6, const u8 *temp_ic7, const u8 *temp_progrom, const u8 *temp_paramsrom);
   ~Mcu();
+
+  // 1,2 MB de estado: una copia accidental daría un emulador divergente en
+  // silencio. Nadie las copia hoy y nadie debería.
+  Mcu(const Mcu &) = delete;
+  Mcu &operator=(const Mcu &) = delete;
+  Mcu(Mcu &&) = delete;
+  Mcu &operator=(Mcu &&) = delete;
   
   typedef void (Mcu::*op_func)();
 

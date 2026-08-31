@@ -13,6 +13,20 @@
 #include "lsp/phaser.h"
 #include "resample/libresample.h"
 #include <JuceHeader.h>
+#include <memory>
+#include <vector>
+
+// Los handles del resampler son punteros de C que hay que cerrar; con esto los
+// cierra el destructor (AUDITORIA §9).
+struct ResampleHandleDeleter
+{
+  void operator()(void *handle) const
+  {
+    if (handle)
+      resample_close(handle);
+  }
+};
+typedef std::unique_ptr<void, ResampleHandleDeleter> ResampleHandle;
 
 //==============================================================================
 /**
@@ -79,19 +93,19 @@ public:
   int currentPatch = 0;
   int masterTune = 0;
 
-  Mcu *mcu = 0;
+  std::unique_ptr<Mcu> mcu;
 
-  void *resampleL = 0;
-  void *resampleR = 0;
+  ResampleHandle resampleL;
+  ResampleHandle resampleR;
   int savedDestSampleRate = 0;
   int sourceSampleRate = 0;
   int savedSourceSampleRate = 0;
   double samplesError = 0;
 
-  float *emu_sample_bufferL = 0;
-  float *emu_sample_bufferR = 0;
-  float *emu_resampled_sample_bufferL = 0;
-  float *emu_resampled_sample_bufferR = 0;
+  std::vector<float> emu_sample_bufferL;
+  std::vector<float> emu_sample_bufferR;
+  std::vector<float> emu_resampled_sample_bufferL;
+  std::vector<float> emu_resampled_sample_bufferR;
   size_t emu_sample_buffer_size = 0;
 
   unsigned long tremoloPhase = 0;
@@ -99,8 +113,8 @@ public:
   void setMasterTune(int16_t tune);
   void mcuReset();
 
-  SpaceD *spaceD = 0;
-  Phaser *phaser = 0;
+  SpaceD spaceD;
+  Phaser phaser;
 
   juce::dsp::ProcessorDuplicator<juce::dsp::IIR::Filter<float>,
                                  juce::dsp::IIR::Coefficients<float>>

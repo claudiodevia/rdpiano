@@ -8,6 +8,12 @@ class SoundChip {
 public:
   SoundChip(const u8 *temp_ic5, const u8 *temp_ic6, const u8 *temp_ic7);
 
+  // Ver Mcu: no copiable ni movible, por el mismo motivo.
+  SoundChip(const SoundChip &) = delete;
+  SoundChip &operator=(const SoundChip &) = delete;
+  SoundChip(SoundChip &&) = delete;
+  SoundChip &operator=(SoundChip &&) = delete;
+
   u8 read(size_t offset);
   void write(size_t offset, u8 data);
 
