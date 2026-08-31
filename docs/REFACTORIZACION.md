@@ -16,29 +16,34 @@ Todas las medidas de esta página se tomaron en esta máquina, con las ROM del r
 0 comprobaciones fallidas, 0 hashes distintos del golden, 3,5 s. Ese es el suelo contra el que se
 mide cualquier refactor de esta lista.
 
+**Estado: la [fase 0](#19-plan-por-fases) está hecha** (`limpieza`, `c1408e0..ff87048`). Los
+apartados que cubrió llevan una nota al principio diciendo qué cambió; el texto que sigue a la nota
+describe el estado anterior, que es lo que explica por qué se tocó. Los 16 hashes del golden no se
+movieron en ningún paso.
+
 ---
 
 ## 0. Resumen
 
-| # | Tema | Impacto | Esfuerzo | Ubicación |
-|---|---|---|---|---|
-| 1 | No existe frontera *motor de audio* ↔ *plugin*: toda la cadena vive dentro de `processBlock` | **Alto** — bloquea toda prueba automática de la cadena real | Alto | [PluginProcessor.cpp:367-575](../rdpiano_juce/Source/PluginProcessor.cpp#L367-L575) |
-| 2 | `Mcu` acumula cuatro responsabilidades (CPU, placa, protocolo, ROMs) | **Alto** — cambiar una toca las otras | Alto | [mcu.cpp](../librdpiano/src/mcu.cpp) |
-| 3 | El protocolo del firmware (`0x30/0x31/0xE0/0x50…`) está esparcido por tres capas vía `commands_queue` pública | **Alto** — 22 `push` de bytes crudos fuera del núcleo | Medio | [mcu.h:36](../librdpiano/include/mcu.h#L36) |
-| 4 | 320 KB de LUT deterministas se recalculan por instancia: **15,8 ms** y memoria duplicada | **Alto** | Bajo | [sound_chip.cpp:59-164](../librdpiano/src/sound_chip.cpp#L59-L164) |
-| 5 | `SoundChip::update()`: 135 líneas, tres bloques anónimos con estado compartido por variables sueltas | Medio — es el código más delicado del proyecto | Bajo | [sound_chip.cpp:213-351](../librdpiano/src/sound_chip.cpp#L213-L351) |
-| 6 | `loadSounds()` hace dos cosas: recargar wave ROM (2,06 ms) y reubicar el parche (0,8 ms) | Medio — el 72 % del coste sobra al cambiar de parche dentro del mismo set | Bajo | [mcu.cpp:617](../librdpiano/src/mcu.cpp#L617) |
-| 7 | 188 KB por instancia en buffers que no hacen falta (`ram` 16× sobredimensionada, `params_rom_tmp` temporal como miembro) | Medio | Bajo | [mcu.h:52-56](../librdpiano/include/mcu.h#L52-L56) |
-| 8 | `processBlock` hace ocho trabajos distintos en una función | Medio | Medio | [PluginProcessor.cpp:367](../rdpiano_juce/Source/PluginProcessor.cpp#L367) |
-| 9 | Parámetros a mano (punteros públicos + XML manual + `sendChangeMessage`) en vez de `APVTS` | Medio — ~120 líneas repetidas y estado que se puede desincronizar | Medio | [PluginProcessor.h:66-113](../rdpiano_juce/Source/PluginProcessor.h#L66-L113) |
-| 10 | `PluginEditor`: 17 botones y 6 modos de parámetro escritos a mano uno por uno | Medio — ~250 de 413 líneas son copia-pega | Medio | [PluginEditor.cpp](../rdpiano_juce/Source/PluginEditor.cpp) |
-| 11 | Tablas de datos duplicadas entre plugin, harness y editor (nombres, ROM sets, codificación de tune) | Medio — ya han divergido | Bajo | [patches.h](../librdpiano/include/patches.h) |
-| 12 | `lsp/`: `spaced` y `phaser` repiten tabla, utilidades y acceso a IRAM | Bajo | Bajo | [spaced.cpp](../rdpiano_juce/Source/lsp/spaced.cpp), [phaser.cpp](../rdpiano_juce/Source/lsp/phaser.cpp) |
-| 13 | Código muerto y campos vestigiales (`chorusRateToDepthChange`, `midiMessageCount`, `current_sample_rate`, bloques comentados) | Bajo — pero engaña al lector | Bajo | varios |
-| 14 | Propiedad manual: `new`/`delete` crudos, punteros públicos, tipos de 1,4 MB copiables por defecto | Medio | Bajo | [PluginProcessor.h:82-105](../rdpiano_juce/Source/PluginProcessor.h#L82-L105) |
-| 15 | El núcleo escribe en `stdout` desde la ruta de audio | Medio — impide usarlo en RT sin parchearlo | Bajo | [mcu.cpp:501,517](../librdpiano/src/mcu.cpp#L501) |
-| 16 | Dos sistemas de build sin relación; la CI compila pero **no ejecuta** el harness | **Alto** — el golden no protege nada en CI | Medio | [.jucer](../rdpiano_juce/rdpiano_juce.jucer), [main.yml](../.github/workflows/main.yml) |
-| 17 | No hay pruebas unitarias: la única red es un test agregado que necesita arrancar el firmware entero | **Alto** — ninguna clase nueva de esta lista nace con algo que la proteja | Medio | [test/](../librdpiano/test/) |
+| # | Tema | Impacto | Esfuerzo | Estado | Ubicación |
+|---|---|---|---|---|---|
+| 1 | No existe frontera *motor de audio* ↔ *plugin*: toda la cadena vive dentro de `processBlock` | **Alto** — bloquea toda prueba automática de la cadena real | Alto | Pendiente | [PluginProcessor.cpp:367-575](../rdpiano_juce/Source/PluginProcessor.cpp#L367-L575)  |
+| 2 | `Mcu` acumula cuatro responsabilidades (CPU, placa, protocolo, ROMs) | **Alto** — cambiar una toca las otras | Alto | Pendiente (la máscara `& 0x1fff`, hecha) | [mcu.cpp](../librdpiano/src/mcu.cpp)  |
+| 3 | El protocolo del firmware (`0x30/0x31/0xE0/0x50…`) está esparcido por tres capas vía `commands_queue` pública | **Alto** — 22 `push` de bytes crudos fuera del núcleo | Medio | Pendiente | [mcu.h:36](../librdpiano/include/mcu.h#L36)  |
+| 4 | 320 KB de LUT deterministas se recalculan por instancia: **15,8 ms** y memoria duplicada | **Alto** | Bajo | Pendiente | [sound_chip.cpp:59-164](../librdpiano/src/sound_chip.cpp#L59-L164)  |
+| 5 | `SoundChip::update()`: 135 líneas, tres bloques anónimos con estado compartido por variables sueltas | Medio — es el código más delicado del proyecto | Bajo | Pendiente | [sound_chip.cpp:213-351](../librdpiano/src/sound_chip.cpp#L213-L351)  |
+| 6 | `loadSounds()` hace dos cosas: recargar wave ROM (2,06 ms) y reubicar el parche (0,8 ms) | Medio — el 72 % del coste sobra al cambiar de parche dentro del mismo set | Bajo | Pendiente | [mcu.cpp:617](../librdpiano/src/mcu.cpp#L617)  |
+| 7 | 188 KB por instancia en buffers que no hacen falta (`ram` 16× sobredimensionada, `params_rom_tmp` temporal como miembro) | Medio | Bajo | **Hecho** (fase 0) | [mcu.h:52-56](../librdpiano/include/mcu.h#L52-L56)  |
+| 8 | `processBlock` hace ocho trabajos distintos en una función | Medio | Medio | Pendiente | [PluginProcessor.cpp:367](../rdpiano_juce/Source/PluginProcessor.cpp#L367)  |
+| 9 | Parámetros a mano (punteros públicos + XML manual + `sendChangeMessage`) en vez de `APVTS` | Medio — ~120 líneas repetidas y estado que se puede desincronizar | Medio | Pendiente | [PluginProcessor.h:66-113](../rdpiano_juce/Source/PluginProcessor.h#L66-L113)  |
+| 10 | `PluginEditor`: 17 botones y 6 modos de parámetro escritos a mano uno por uno | Medio — ~250 de 413 líneas son copia-pega | Medio | Pendiente | [PluginEditor.cpp](../rdpiano_juce/Source/PluginEditor.cpp)  |
+| 11 | Tablas de datos duplicadas entre plugin, harness y editor (nombres, ROM sets, codificación de tune) | Medio — ya han divergido | Bajo | Parcial (fase 0) | [patches.h](../librdpiano/include/patches.h)  |
+| 12 | `lsp/`: `spaced` y `phaser` repiten tabla, utilidades y acceso a IRAM | Bajo | Bajo | Parcial (fase 0) | [spaced.cpp](../rdpiano_juce/Source/lsp/spaced.cpp), [phaser.cpp](../rdpiano_juce/Source/lsp/phaser.cpp)  |
+| 13 | Código muerto y campos vestigiales (`chorusRateToDepthChange`, `midiMessageCount`, `current_sample_rate`, bloques comentados) | Bajo — pero engaña al lector | Bajo | **Hecho** (fase 0) | varios  |
+| 14 | Propiedad manual: `new`/`delete` crudos, punteros públicos, tipos de 1,4 MB copiables por defecto | Medio | Bajo | **Hecho** (fase 0) | [PluginProcessor.h:82-105](../rdpiano_juce/Source/PluginProcessor.h#L82-L105)  |
+| 15 | El núcleo escribe en `stdout` desde la ruta de audio | Medio — impide usarlo en RT sin parchearlo | Bajo | Pendiente | [mcu.cpp:501,517](../librdpiano/src/mcu.cpp#L501)  |
+| 16 | Dos sistemas de build sin relación; la CI compila pero **no ejecuta** el harness | **Alto** — el golden no protege nada en CI | Medio | Parcial (fase 0) | [.jucer](../rdpiano_juce/rdpiano_juce.jucer), [main.yml](../.github/workflows/main.yml)  |
+| 17 | No hay pruebas unitarias: la única red es un test agregado que necesita arrancar el firmware entero | **Alto** — ninguna clase nueva de esta lista nace con algo que la proteja | Medio | Parcial (fase 0) | [test/](../librdpiano/test/)  |
 
 Los números 1, 3, 16 y 17 son los que de verdad limitan el proyecto: mientras el motor no exista
 como objeto separado, no haya pruebas por unidad y la CI no ejecute nada, cada cambio se sigue
@@ -125,9 +130,10 @@ debe tocarse** ([CLAUDE.md](../CLAUDE.md), trampa 5); (3) es donde está la deud
 Lo importante no es el número de clases, sino que **el fichero que no hay que tocar quede separado
 del que sí**. Hoy quien edita el mapa de memoria está editando el mismo fichero que el core de MAME.
 
-Detalle menor del mismo fichero: [mcu.cpp:460](../librdpiano/src/mcu.cpp#L460) acota la ROM de
-programa con `& 0xdfff` sobre un array de `0x2000`. Funciona (para 0..0x3FFF, limpiar el bit 13 da
-0..0x1FFF), pero es una coincidencia aritmética que se lee como un error. Debería ser `& 0x1fff`.
+Detalle menor del mismo fichero: `read_byte` acotaba la ROM de programa con `& 0xdfff` sobre un
+array de `0x2000`. Funcionaba (para 0..0x3FFF, limpiar el bit 13 da 0..0x1FFF), pero era una
+coincidencia aritmética que se leía como un error. **Hecho en la fase 0** (`63f1cdd`): ahora es
+`& 0x1fff`, con la equivalencia fijada en `test_board.cpp`.
 
 ---
 
@@ -306,6 +312,10 @@ descifrado se puede hacer directamente sobre el destino, sin copia intermedia.
 
 ## 7. Memoria que no hace nada
 
+> **Hecho en la fase 0** (`63f1cdd`). `ram` pasó a `0x1000`; `params_rom_tmp` no se volvió un
+> temporal local sino que desapareció: `loadSounds` desencripta solo la página de 32 KB que va a
+> mapear, sin buffer intermedio y sin reservas. La instancia baja los 188 KB de este apartado.
+
 ```cpp
 u8 params_rom[0x20000];       // 128 KB — usado
 u8 params_rom_tmp[0x20000];   // 128 KB — temporal de loadSounds, vive para siempre
@@ -413,6 +423,13 @@ desaparece solo si el renderizado de la línea pasa por una función única que 
 
 ## 11. Tablas de datos duplicadas
 
+> **Parcial, fase 0** (`d2df9d9`, `3c29a66`). Hecho: `inline constexpr` en todas las tablas, y la
+> identidad de las ROMs (`romSetFiles`, `PROG_ROM_FILE`, tamaños) subida a `patches.h` — el harness
+> ya no tiene su propia lista. Los `static_assert` de coherencia y `test_patches.cpp` impiden que
+> las tablas paralelas se desalineen. **Sigue pendiente:** la fila única por parche, el
+> `displayPatchNames` del editor y las dos copias del escalado seco y de la codificación del
+> master tune, que tocan la UI y la cadena de audio.
+
 [patches.h](../librdpiano/include/patches.h) se creó para compartir la tabla de parches entre
 plugin y harness — buena decisión, pero se quedó a medio camino:
 
@@ -444,6 +461,12 @@ cabecera— ya está descrito en [AUDITORIA §18](AUDITORIA.md#18-carreras-de-da
 
 ## 12. `lsp/`: dos transcripciones con la misma infraestructura
 
+> **Parcial, fase 0** (`d2df9d9`). Las cinco tablas eran `int32_t x[]` globales mutables declaradas
+> `extern`; ahora son `inline constexpr` en sus cabeceras. Se hicieron ahí y no `static constexpr`
+> en los `.cpp` porque el processor lee `phaserRateTable`/`phaserDepthTable`: de enlace interno
+> habría dejado de compilar, y `inline` evita además una copia por unidad de traducción.
+> **Sigue pendiente** el `lsp_common.h` que unifique tabla, utilidades y acceso a IRAM.
+
 `spaced.cpp` (364 líneas) y `phaser.cpp` (485) son transcripciones máquina a máquina del DSP
 original: cientos de `accA_NNN` numerados por ciclo. **Ese cuerpo no se debe reescribir a mano** —
 igual que `mcu_ops.h`, es código derivado cuya corrección está en la transcripción literal.
@@ -468,6 +491,12 @@ las multiplicaciones), pero merece un comentario de una línea, porque la asimet
 
 ## 13. Código muerto y campos vestigiales
 
+> **Hecho en la fase 0** (`ef2ad5f`). Borrado todo lo de la tabla, incluido el recurso
+> `mks20_cpub_1.0.bin` del `.jucer`. Lo que era conocimiento está ahora en
+> [FIRMWARE.md](FIRMWARE.md): direcciones de handshake del firmware alternativo, por qué el bit de
+> sample rate del puerto 2 no sirve, y el bucle de ciclos con failsafe de `execute_run`. Los
+> `printf` de traza comentados **siguen ahí**: se van con `RD_TRACE` en la fase 1 ([§15](#15-el-núcleo-escribe-en-stdout)).
+
 Nada de esto rompe nada; todo desorienta a quien lee.
 
 | Elemento | Ubicación | Estado |
@@ -491,6 +520,12 @@ porque se abandonó o porque hará falta mañana.
 ---
 
 ## 14. Propiedad y ciclo de vida
+
+> **Hecho en la fase 0** (`a6a740a`). `Mcu` y `SoundChip` con copia y movimiento `= delete`; `mcu`
+> a `unique_ptr`; `spaceD` y `phaser` a miembros por valor; los cuatro buffers a `std::vector` con
+> `assign()`; los handles del resampler a `unique_ptr` con deleter, que cierra el anterior al
+> cambiar de tasa y el último en el destructor. Con ellos se fueron el `memset` comentado y las
+> fugas de [AUDITORIA §9](AUDITORIA.md) y [§12](AUDITORIA.md).
 
 ```cpp
 Mcu    *mcu    = 0;      // públicos, new en el constructor, delete en el destructor
@@ -544,6 +579,11 @@ Con eso, las diez trazas comentadas vuelven al código —donde son útiles— s
 ---
 
 ## 16. Build: dos sistemas sin relación, y una CI que no verifica nada
+
+> **Parcial, fase 0** (`c1408e0`, `1218db2`). Hecha la propuesta 1, y con `enable_testing()` la CI
+> corre `ctest --output-on-failure` (suite unitaria + harness) en un job propio del que ahora
+> depende `release`. **Pendientes** la propuesta 2 (job con ASan; verificado a mano que pasa
+> limpio, falta el YAML) y la 3 (`juce_add_plugin`), que es de la fase 3.
 
 ```
 librdpiano/CMakeLists.txt   → librdpiano + rdpiano_e2e + rdpiano_standalone
@@ -613,6 +653,12 @@ especial dureza a [§5](#5-soundchipupdate-tres-bloques-que-piden-ser-tres-funci
 refactor que puede mover el hash.
 
 ### 17.2 Infraestructura: 40 líneas, cero dependencias
+
+> **Hecho en la fase 0** (`1218db2`). El árbol es el de abajo, con `check.h` de 76 líneas
+> (Check/CheckRun + `CHECK`, `CHECK_MSG`, `CHECK_EQ`, `CHECK_NEAR`, `CHECK_HASH`) y un
+> `test/unit/unit_test.h` con el registro de suites: `TEST_SUITE(nombre)` se registra sola, y
+> `main.cpp` acepta `--roms`, `--filter` y `--list`. De las suites existen ya `test_board.cpp` y
+> `test_patches.cpp`; las demás llegan con el refactor al que acompañan.
 
 `librdpiano` no tiene dependencias y no debería ganarlas por esto: nada de GoogleTest ni Catch2. El
 propio `e2e.cpp` ya tiene el patrón (`struct Check { const char* name; bool ok; std::string detail; }`,
@@ -696,7 +742,10 @@ sin audio.
 instrucción: RAM por debajo de `0x1000`, `SoundChip` en `0x1000-0x1FFF`, latch en `0x2000-0x3FFF`,
 la página de params conmutando con `latch_val & 0b11`, y la ROM de programa en `0xC000-0xFFFF`.
 Un bucle sobre `0x0000-0x3FFF` comprobando que `& 0x1fff` y `& 0xdfff` coinciden documenta —y
-retira— la coincidencia aritmética señalada en [§2](#2-mcu-hace-cuatro-trabajos).
+retira— la coincidencia aritmética señalada en [§2](#2-mcu-hace-cuatro-trabajos). **Esa parte está
+hecha** (fase 0, `63f1cdd`): `test_board.cpp` existe ya con las dos suites de aritmética del bus
+—máscara de la ROM de programa y banco de la página de params—; lo que falta es escribir y leer de
+verdad, que necesita `RdBoard`.
 
 **`CommandPort`.** Aquí la prueba tiene además valor de descubrimiento:
 
@@ -822,12 +871,12 @@ Una suite unitaria verde con el golden roto es un cambio de audio no verificado,
 
 | Fichero | Líneas aprox. | Cuándo | Tiempo de ejecución |
 |---|---|---|---|
-| `check.h` | 40 | Fase 0 | — |
-| `test_patches.cpp` | 60 | Fase 0 | < 10 ms |
+| `check.h` | 40 → 78 reales | Fase 0 ✔ | — |
+| `test_patches.cpp` | 60 → 104 reales | Fase 0 ✔ | < 10 ms |
 | `test_rom_loader.cpp` | 150 | Fase 1 | ~50 ms |
 | `test_sa_tables.cpp` | 80 | Fase 1 | ~20 ms |
 | `test_command_port.cpp` | 150 | Fase 1 | < 10 ms |
-| `test_board.cpp` | 120 | Fase 1 | < 10 ms |
+| `test_board.cpp` | 120 | Fase 0 (aritmética del bus) + fase 1 (mapa completo) | < 10 ms |
 | `test_sound_chip_blocks.cpp` + vectores | 200 + datos | Fase 1 | ~30 ms |
 | `test_lsp.cpp`, `test_resampler.cpp` | 150 | Fase 2 | ~100 ms |
 | `test_engine.cpp` | 350 | Fase 2 | ~2 s |
@@ -860,16 +909,70 @@ Los pasos marcados **T** son de prueba. No son un apéndice de cada fase: van **
 al que acompañan, por la regla de [§17.1](#171-la-regla-caracterizar-antes-de-mover). Un paso de
 código cuyo **T** todavía no está verde no se empieza.
 
-**Fase 0 — sin riesgo de audio, sin tocar lógica** *(un par de tardes)* — **hecha**
-(rama `limpieza`, siete commits; el harness sigue con los 16 hashes intactos)
+**Fase 0 — sin riesgo de audio, sin tocar lógica** — **HECHA**, rama `limpieza`,
+`c1408e0..ff87048`, un commit por paso.
 
-1. Añadir `rdpiano_e2e` a la CI ([§16.1](#16-build-dos-sistemas-sin-relación-y-una-ci-que-no-verifica-nada)). Primero esto: es la red del resto.
-2. **T** — `check.h` extraído de `e2e.cpp`, esqueleto `rdpiano_tests`, `enable_testing()`, y los dos ejecutables corriendo por `ctest` en la CI ([§17.2](#172-infraestructura-40-líneas-cero-dependencias)).
-3. Borrar código muerto y convertir en documentación lo que es conocimiento ([§13](#13-código-muerto-y-campos-vestigiales)).
-4. `ram[0x1000]`, `params_rom_tmp` como temporal, `& 0x1fff` ([§7](#7-memoria-que-no-hace-nada), [§2](#2-mcu-hace-cuatro-trabajos)) — con `test_board.cpp` escrito antes del cambio de máscara ([§17.4](#174-núcleo-romloader-rdboard-commandport)).
-5. `inline constexpr` en `patches.h`; `static constexpr` en las tablas de `lsp/` ([§11](#11-tablas-de-datos-duplicadas), [§12](#12-lsp-dos-transcripciones-con-la-misma-infraestructura)).
-6. **T** — `test_patches.cpp` y los `static_assert` de coherencia de la tabla de parches ([§17.7](#177-datos-y-plugin)).
-7. Copia/movimiento `= delete` en `Mcu` y `SoundChip`; punteros crudos → miembros o `unique_ptr`; buffers → `std::vector` ([§14](#14-propiedad-y-ciclo-de-vida)).
+*Verificación de la fase entera:* los 16 hashes del golden idénticos después de cada paso; suite
+unitaria en 0,5 s y `ctest` completo en 3,2 s desde un build limpio; plugin compilado con
+`build-osx.sh` tras los pasos 3, 5 y 7 (`BUILD SUCCEEDED`, 0 errores); todo verde también con
+`-DRDPIANO_SANITIZE=ON`.
+
+| # | Paso | Commit |
+|---|---|---|
+| 1 | `rdpiano_e2e` en la CI | `c1408e0` |
+| 2 | **T** `check.h`, `rdpiano_tests`, `enable_testing()`, `ctest` | `1218db2` |
+| 3 | Código muerto fuera; el conocimiento a `docs/FIRMWARE.md` | `ef2ad5f` |
+| 4 | `ram[0x1000]`, sin `params_rom_tmp`, `& 0x1fff` (**T** `test_board.cpp` antes) | `63f1cdd` |
+| 5 | `inline constexpr` en `patches.h` y en las tablas de `lsp/` | `d2df9d9` |
+| 6 | **T** `static_assert` + `test_patches.cpp` | `3c29a66` |
+| 7 | `= delete` en `Mcu`/`SoundChip`; `unique_ptr` y `std::vector` en el plugin | `a6a740a` |
+| — | `CLAUDE.md` y este documento al día | `ff87048` |
+
+1. ✔ **CI** ([§16.1](#16-build-dos-sistemas-sin-relación-y-una-ci-que-no-verifica-nada)). Job
+   `test-core` en `macos-15`: configura sin ASan en Release, compila y ejecuta. `release` pasa a
+   depender de él, así que un cambio de audio no verificado ya no llega a un release rodante.
+2. ✔ **T** ([§17.2](#172-infraestructura-40-líneas-cero-dependencias)). `check.h` (78 líneas) con
+   `Check`/`CheckRun` y las macros; `test/unit/` con registro de suites, `--roms`, `--filter`,
+   `--list`; `enable_testing()` y los dos ejecutables como pruebas `unit` y `e2e`. `e2e.cpp` pasa a
+   usar `check.h` sin cambiar sus umbrales ni su salida.
+3. ✔ **Código muerto** ([§13](#13-código-muerto-y-campos-vestigiales)). Fuera
+   `chorusRateToDepthChange`, `midiMessageCount` (y con él `hasMidi`), `lastMidiMessageCount`,
+   `MidiMessageTimer`, los `efxReverb*` comentados, `Mcu::current_sample_rate` y el recurso
+   `mks20_cpub_1.0.bin` del `.jucer`. El conocimiento —firmware alternativo, bit de sample rate,
+   bucle con failsafe— pasa a [FIRMWARE.md](FIRMWARE.md), enlazado desde las trampas 1 y 2 de
+   `CLAUDE.md`.
+4. ✔ **Memoria** ([§7](#7-memoria-que-no-hace-nada), [§2](#2-mcu-hace-cuatro-trabajos)), con
+   `test_board.cpp` escrito antes y verde contra el código viejo, según la regla de
+   [§17.1](#171-la-regla-caracterizar-antes-de-mover). *Desviación del plan:* `params_rom_tmp` no
+   se convirtió en temporal local —128 KB reservados en cada cambio de parche— sino que se eliminó:
+   `loadSounds` desencripta directamente la ventana de 32 KB que va a mapear. Es byte a byte lo
+   mismo porque `UNSCRAMBLE_ADDR_PARAMS` se aplica índice a índice, y el hash lo confirma.
+5. ✔ **Tablas** ([§11](#11-tablas-de-datos-duplicadas),
+   [§12](#12-lsp-dos-transcripciones-con-la-misma-infraestructura)). `inline constexpr` en
+   `patches.h`, más la identidad de las ROMs (nombres canónicos, firmware, tamaños) que estaba
+   duplicada en `e2e.cpp`. En `lsp/`, las tablas van a las cabeceras como `inline constexpr` y no
+   `static constexpr` en los `.cpp`: el processor lee dos de ellas.
+6. ✔ **T** ([§17.7](#177-datos-y-plugin)). Diez `static_assert` en `patches.h` y tres suites
+   (56 comprobaciones, < 10 ms): ROMs presentes y con el tamaño exacto, páginas de params válidas,
+   nombres de parche sin repetir, y que cada fichero de la tabla esté empotrado en el `.jucer`.
+   Verificado que fallan: renombrar `MK80_IC5.bin` en la tabla enciende dos suites.
+7. ✔ **Propiedad** ([§14](#14-propiedad-y-ciclo-de-vida)). Además de lo previsto, los handles del
+   resampler pasan a `unique_ptr` con deleter, lo que cierra de paso la fuga de
+   [AUDITORIA §9](AUDITORIA.md), y `assign()` cierra la de [§12](AUDITORIA.md). Ninguna operación
+   aritmética de la cadena de audio cambia.
+
+**Lo que la fase 0 dejó fuera, a propósito:**
+
+- **El job de ASan** de [§16.2](#16-build-dos-sistemas-sin-relación-y-una-ci-que-no-verifica-nada):
+  se comprobó a mano que suite y harness pasan limpios con `-DRDPIANO_SANITIZE=ON`, pero el YAML no
+  está. Son ocho líneas y es el primer candidato para abrir la fase 1.
+- **`test_board.cpp` completo**: hoy solo fija la aritmética de direcciones, que es lo que
+  autorizaba el cambio de máscara. El mapa de memoria escribiendo y leyendo —RAM, `SoundChip`,
+  latch, página de params— necesita que `read_byte`/`write_byte` salgan de `Mcu`, es decir `RdBoard`
+  ([§17.4](#174-núcleo-romloader-rdboard-commandport)).
+- **La fila única por parche** de [§11](#11-tablas-de-datos-duplicadas) y el `lsp_common.h` de
+  [§12](#12-lsp-dos-transcripciones-con-la-misma-infraestructura): tocan la UI y los cuerpos
+  transcritos, y ninguna de las dos aparece en el plan como paso propio.
 
 **Fase 1 — estructura del núcleo** *(el hash no debe moverse)*
 
@@ -918,28 +1021,27 @@ código cuyo **T** todavía no está verde no se empieza.
 
 ## 21. Cómo reproducir las medidas
 
-**Línea base del harness** (lo que hay que ver verde antes y después de cada paso):
+**Línea base** (lo que hay que ver verde antes y después de cada paso). Desde la fase 0 las dos
+redes se lanzan juntas y es lo único que hay que recordar:
 
 ```bash
 cd librdpiano && cmake -B build -DRDPIANO_SANITIZE=OFF -DCMAKE_BUILD_TYPE=Release
-cmake --build build --target rdpiano_e2e
-cd .. && ./librdpiano/build/rdpiano_e2e --roms roms --golden librdpiano/test/golden.txt
-# → 16 parche(s), 0 comprobacion(es) fallida(s), 0 hash(es) distinto(s) del golden   (~3,5 s)
+cmake --build build --target rdpiano_tests rdpiano_e2e
+ctest --test-dir build --output-on-failure    # unit (0,5 s) + e2e (~2,7 s)
 ```
-
-**Suite unitaria** ([§17](#17-las-pruebas-que-faltan-una-por-clase)) — todavía no existe; una vez
-esté, con `enable_testing()` en el `CMakeLists.txt` las dos redes se lanzan juntas y es lo único que
-hay que recordar:
 
 ```bash
-cd librdpiano/build && ctest --output-on-failure       # unit (< 1 s) + e2e (~3,5 s)
-./rdpiano_tests --filter rom_loader                    # una sola suite, al iterar
+./build/rdpiano_tests --roms ../roms --filter board     # una sola suite, al iterar
+./build/rdpiano_e2e --roms ../roms --golden test/golden.txt --patch 0   # un parche, ~0,2 s
 ```
+
+El harness sigue diciendo lo mismo que antes de la fase 0: *16 parche(s), 0 comprobacion(es)
+fallida(s), 0 hash(es) distinto(s) del golden*.
 
 **Tamaño de instancia y coste de construcción** ([§4](#4-320-kb-de-lut-deterministas-recalculadas-por-instancia), [§6](#6-loadsounds-hace-dos-cosas-independientes), [§7](#7-memoria-que-no-hace-nada)) — programa de ~25 líneas contra el núcleo:
 
 ```cpp
-printf("%zu\n", sizeof(Mcu));                    // 1.455.216
+printf("%zu\n", sizeof(Mcu));                    // 1.262.704 (1.455.216 antes de la fase 0)
 printf("%zu\n", sizeof(SoundChip));              // 1.119.240
 // cronometrar: new SoundChip(...)               // 17,88 ms
 // cronometrar: sc->load_samples(...) x10 / 10   //  2,06 ms
