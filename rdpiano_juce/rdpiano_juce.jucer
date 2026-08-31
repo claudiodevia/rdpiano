@@ -100,7 +100,8 @@
     <XCODE_MAC targetFolder="Builds/MacOSX">
       <CONFIGURATIONS>
         <CONFIGURATION isDebug="1" name="Debug" targetName="rdpiano_juce"/>
-        <CONFIGURATION isDebug="0" name="Release" targetName="rdpiano_juce"/>
+        <CONFIGURATION isDebug="0" name="Release" targetName="rdpiano_juce"
+                       customXcodeFlags="ARCHS=arm64 x86_64, ONLY_ACTIVE_ARCH=NO"/>
       </CONFIGURATIONS>
       <MODULEPATHS>
         <MODULEPATH id="juce_core" path="./JUCE/modules"/>
