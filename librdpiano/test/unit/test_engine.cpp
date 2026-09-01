@@ -618,7 +618,7 @@ TEST_SUITE(engine_headroom)
 {
     // Dieciséis voces a velocidad 127: lo que se fija es que los 16 parches
     // queden al MISMO nivel, el de `HEADROOM_TARGET_PEAK`. No se fija "no
-    // recorta": el objetivo son +3 dBFS y pasa de fondo de escala a propósito
+    // recorta": el objetivo son +6 dBFS y pasa de fondo de escala a propósito
     // (patches.h); lo que no puede es dispararse muy por encima.
     const int BLOCK = 512;
 
@@ -664,7 +664,7 @@ TEST_SUITE(engine_headroom)
     }
 
     // El peor caso medido de toda la cadena: el parche 5 con el chorus de
-    // fábrica, +4,9 dB sobre la seca, o sea +7,9 dBFS. Recorta en la salida del
+    // fábrica, +4,8 dB sobre la seca, o sea +10,8 dBFS. Recorta en la salida del
     // host —no hay limitador— y se acepta; lo que se fija es que no crezca.
     {
         RdPianoEngine *e = make_engine(48000.0, BLOCK, 5);

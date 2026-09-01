@@ -62,7 +62,7 @@ inline constexpr int patchSampleRates[NUM_PATCHES] = {
     // MK80
     20000, 20000, 20000, 32000, 20000, 20000, 32000, 20000};
 
-// Compensación de ganancia por parche: normaliza los 16 al mismo pico (+3 dBFS)
+// Compensación de ganancia por parche: normaliza los 16 al mismo pico (+6 dBFS)
 // con el peor caso razonable —acorde de 16 notas a velocity 127 y `volume` a
 // tope—, medido con la cadena del motor a 48 kHz. Sin ella hay casi 12 dB entre
 // el parche más flojo y el más caliente.
@@ -71,31 +71,31 @@ inline constexpr int patchSampleRates[NUM_PATCHES] = {
 // emulador y de lsp/ queda intacta, así que ni el golden ni los hashes de
 // test_lsp.cpp se mueven.
 //
-// Detrás NO hay limitador y el chorus de fábrica añade hasta +4,9 dB: el peor
-// caso de toda la cadena llega a +7,9 dBFS. Para un objetivo que no recorte,
+// Detrás NO hay limitador y el chorus de fábrica añade hasta +4,8 dB: el peor
+// caso de toda la cadena llega a +10,8 dBFS. Para un objetivo que no recorte,
 // 0.5f (-6 dBFS). Se regenera con `rdpiano_e2e --headroom` (idempotente).
-inline constexpr float HEADROOM_TARGET_PEAK = 1.41254f; // +3 dBFS
+inline constexpr float HEADROOM_TARGET_PEAK = 1.99526f; // +6 dBFS
 
 inline constexpr float patchOutputGain[NUM_PATCHES] = {
     // MKS-20                 sin compensar     ya compensado, c/chorus
-    0.50135f, // Piano 1       2,82   +9,0 dBFS   1,40   +2,9 dBFS
-    0.87199f, // Piano 2       1,62   +4,2 dBFS   2,29   +7,2 dBFS
-    0.67421f, // Piano 3       2,10   +6,4 dBFS   1,77   +5,0 dBFS
-    1.13184f, // Harpsichord   1,25   +1,9 dBFS   2,10   +6,4 dBFS
-    0.73226f, // Clavi         1,93   +5,7 dBFS   1,82   +5,2 dBFS
-    1.08648f, // Vibraphone    1,30   +2,3 dBFS   2,47   +7,9 dBFS <- peor
-    0.29215f, // E-Piano 1     4,83  +13,7 dBFS   0,83   -1,6 dBFS
-    0.39838f, // E-Piano 2     3,55  +11,0 dBFS   1,10   +0,8 dBFS
+    0.70817f, // Piano 1       2,82   +9,0 dBFS  1,98   +5,9 dBFS
+    1.23172f, // Piano 2       1,62   +4,2 dBFS  3,23  +10,2 dBFS
+    0.93018f, // Piano 3       2,10   +6,4 dBFS  2,40   +7,6 dBFS
+    1.61771f, // Harpsichord   1,25   +1,9 dBFS  3,02   +9,6 dBFS
+    1.03435f, // Clavi         1,93   +5,7 dBFS  2,58   +8,2 dBFS
+    1.55132f, // Vibraphone    1,30   +2,3 dBFS  3,47  +10,8 dBFS <- peor
+    0.40819f, // E-Piano 1     4,83  +13,7 dBFS  1,18   +1,4 dBFS
+    0.55217f, // E-Piano 2     3,55  +11,0 dBFS  1,52   +3,7 dBFS
 
     // MK80
-    0.78134f, // Classic       1,81   +5,1 dBFS   1,94   +5,7 dBFS
-    0.48444f, // Special       2,92   +9,3 dBFS   1,24   +1,9 dBFS
-    0.48921f, // Blend         2,89   +9,2 dBFS   1,28   +2,1 dBFS
-    0.83507f, // Contemporary  1,69   +4,6 dBFS   2,03   +6,1 dBFS
-    0.48602f, // A. Piano 1    2,91   +9,3 dBFS   1,36   +2,7 dBFS
-    0.84343f, // A. Piano 2    1,67   +4,5 dBFS   1,99   +6,0 dBFS
-    1.03420f, // Clavi         1,37   +2,7 dBFS   2,02   +6,1 dBFS
-    0.72528f, // Vibraphone    1,95   +5,8 dBFS   1,42   +3,1 dBFS
+    1.13067f, // Classic       1,81   +5,1 dBFS  2,82   +9,0 dBFS
+    0.63764f, // Special       2,92   +9,3 dBFS  1,59   +4,0 dBFS
+    0.68827f, // Blend         2,89   +9,2 dBFS  1,81   +5,2 dBFS
+    1.15068f, // Contemporary  1,69   +4,6 dBFS  2,84   +9,1 dBFS
+    0.71207f, // A. Piano 1    2,91   +9,3 dBFS  1,98   +5,9 dBFS
+    1.31191f, // A. Piano 2    1,67   +4,5 dBFS  3,01   +9,6 dBFS
+    1.46084f, // Clavi         1,37   +2,7 dBFS  2,86   +9,1 dBFS
+    0.95056f, // Vibraphone    1,95   +5,8 dBFS  1,97   +5,9 dBFS
 };
 
 // Las cuatro ROMs de cada juego, en el orden de RomChip. El plugin las empotra

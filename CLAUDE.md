@@ -50,10 +50,10 @@ processBlock → RdPianoEngine::pushMidi/render
   den el mismo audio muestra a muestra lo fija `engine_patch_prepare` en `test_engine.cpp`.
 - El **protocolo del firmware** (0x30/0x31/0xE0/0x50…) solo en `command_port.h`; fuera se habla por
   intención (`boot()`, `selectPatch()`, `sendMidiCmd()`…). Cola = anillo fijo, cero reservas en RT.
-- `patchOutputGain[]` ([patches.h](librdpiano/include/patches.h)) normaliza los 16 parches a **+3
+- `patchOutputGain[]` ([patches.h](librdpiano/include/patches.h)) normaliza los 16 parches a **+6
   dBFS** con acorde de 16 notas a velocity 127. Se aplica en la salida, después del emulador y de
   `lsp/` (aritmética entera del hardware) → no mueve golden ni hashes de `test_lsp.cpp`. **No hay
-  limitador detrás**: con chorus de fábrica el peor caso medido llega a +7,9 dBFS. Se regenera con
+  limitador detrás**: con chorus de fábrica el peor caso medido llega a +10,8 dBFS. Se regenera con
   `rdpiano_e2e --headroom` (idempotente).
 - `RdBiquad` (EQ medio) replica `juce::dsp::IIR::Filter<float>` salvo `snapToZero` (no-op
   fuera de Intel).
