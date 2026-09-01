@@ -81,6 +81,12 @@ class RdBoard
     void prepareRomSet(const u8 *temp_ic5, const u8 *temp_ic6, const u8 *temp_ic7);
     void publishRomSet(const u8 *temp_paramsrom);
 
+    // Todo lo que cuelga del bus a estado de arranque: RAM, latch de banco, chip
+    // de sonido y la cola de comandos. Las ROM y la página de parámetros ya
+    // mapeada no se tocan: son la configuración, no el estado (por eso boot() no
+    // pierde el parche, trampa 8 de CLAUDE.md).
+    void reset();
+
     CommandPort &commandPort() { return command_port; }
     SoundChip &soundChip() { return sound_chip; }
 

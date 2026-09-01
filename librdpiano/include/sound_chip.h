@@ -21,6 +21,11 @@ class SoundChip
 
     s32 update();
 
+    // Estado de síntesis a cero: las 160 SA_Part y la IRQ pendiente. No toca las
+    // tablas de onda —son la ROM descifrada, no estado— ni el juego de reserva
+    // que espera publicación.
+    void reset();
+
     // Carga de las ROM de onda, partida en dos por coste. `decode_samples()` es
     // la parte cara (~2,9 ms) y escribe en el juego de reserva: no toca nada de
     // lo que lee `update()`, así que el integrador puede correrla fuera del

@@ -90,11 +90,15 @@ class Mcu : public RdBoardCpu
     // Generic CPU
     void take_trap();
     void check_irq_lines();
-    void eat_cycles();
+
+    // No-op: aquí no hay presupuesto de ciclos que agotar (ver FIRMWARE.md §4).
+    // Existe porque la llaman WAI y SLP en mcu_ops.h, que es código de MAME y no
+    // se reescribe (trampa 5 de CLAUDE.md).
+    void eat_cycles() {}
+
     u32 RM16(u32 Addr);
     void WM16(u32 Addr, PAIR *p);
     void enter_interrupt(const char *message, u16 irq_vector);
-    void increment_counter(int amount);
 
     PAIR m_ppc = {0, 0};     // Previous program counter
     PAIR m_pc = {0, 0};      // Program counter
@@ -116,8 +120,6 @@ class Mcu : public RdBoardCpu
     u8 tcsr_r();
     void tcsr_w(u8 data);
 
-    int m_icount = 0;
-
     static const u8 flags8i[256];
     static const u8 flags8d[256];
     enum
@@ -126,6 +128,9 @@ class Mcu : public RdBoardCpu
         M6800_SLP = 0x10 // HD63701 only
     };
 
+    // Los ciclos por opcode del 63701. Nadie los suma hoy —el reloj maestro es
+    // el audio, no la CPU—; se conservan como referencia para quien retome el
+    // modelo de ciclos (FIRMWARE.md §4).
     static const u8 cycles_63701[256];
 
     static const op_func hd63701_insn[256];

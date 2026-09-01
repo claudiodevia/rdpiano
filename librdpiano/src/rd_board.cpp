@@ -28,3 +28,13 @@ void RdBoard::loadRomSet(const u8 *temp_ic5, const u8 *temp_ic6, const u8 *temp_
 }
 
 void RdBoard::selectPatch(size_t from_addr) { decode_params_page(params_rom, params_rom_src, from_addr); }
+
+void RdBoard::reset()
+{
+    for (size_t i = 0; i < sizeof(ram); i++)
+        ram[i] = 0;
+
+    latch_val = 0x00;
+    command_port.queue().clear();
+    sound_chip.reset();
+}

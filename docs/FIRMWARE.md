@@ -77,7 +77,18 @@ do {
 ```
 
 Se abandonó porque el reloj maestro del emulador es el audio, no la CPU: quien decide cuánto corre
-la CPU es `generate_next_sample()`. Consecuencia que conviene tener presente: `m_icount` sigue
-existiendo y `increment_counter()` lo va restando, pero **nadie lo recarga**, así que se vuelve
-negativo en la primera instrucción y `eat_cycles()` deja de hacer nada. Los estados `WAI`/`SLP` se
-atraviesan ejecutando instrucciones, no esperando.
+la CPU es `generate_next_sample()`. Los estados `WAI`/`SLP` se atraviesan ejecutando instrucciones,
+no esperando.
+
+`m_icount` sobrevivió un tiempo a ese cambio: `increment_counter()` lo iba restando y nadie lo
+recargaba, así que se volvía negativo en la primera instrucción, `eat_cycles()` dejaba de hacer nada
+y a los ~5,9 minutos de audio cruzaba `INT_MIN` —desbordamiento con signo, es decir UB, que
+`-fsanitize=undefined` aborta (AUDITORIA §10)—. El campo y `increment_counter()` ya no existen;
+`eat_cycles()` se queda como no-op porque lo llaman `WAI` y `SLP` en `mcu_ops.h`, que es código de
+MAME y no se reescribe. La tabla `Mcu::cycles_63701[]` sí sigue ahí, como punto de partida para
+quien retome el modelo de ciclos.
+
+Ojo con retomarlo: `execute_run()` ejecuta **una instrucción** por llamada, no un ciclo, y a ~3,5
+ciclos por instrucción las 100 llamadas por muestra salen a ~6,1 MHz efectivos frente a los 2 MHz
+del chip real. Cerrar ese factor 3 cambia la temporización del firmware y con ella el sonido: movería
+los 16 hashes de `golden.txt`, y eso el harness lo detecta pero no lo juzga.

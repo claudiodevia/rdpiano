@@ -337,6 +337,19 @@ Mcu::Mcu(const u8 *temp_ic5, const u8 *temp_ic6, const u8 *temp_ic7, const u8 *t
 
 void Mcu::reset()
 {
+    // Todo el estado, no sólo los registros de la CPU: RAM, latch, chip de
+    // sonido y cola de comandos van con ellos. La cola era la peor de las que
+    // sobrevivían —el handshake la consume en direcciones fijas del firmware
+    // (trampa 1), así que un byte huérfano de antes del reset se entregaba en
+    // mitad de la nueva secuencia de arranque—. Las ROM y la página de
+    // parámetros ya mapeada no se tocan (trampa 8).
+    board.reset();
+
+    m_tcsr = 0;
+    m_counter.d = 0;
+    m_pending_tcsr = 0;
+    m_input_capture = 0;
+
     m_ppc.d = 0;
     m_pc.d = 0;
     m_s.d = 0;
@@ -397,12 +410,6 @@ void Mcu::check_irq_lines()
     }
 }
 
-void Mcu::eat_cycles()
-{
-    if (m_icount > 0)
-        increment_counter(m_icount);
-}
-
 u32 Mcu::RM16(u32 Addr)
 {
     u32 result = RM(Addr) << 8;
@@ -418,11 +425,8 @@ void Mcu::WM16(u32 Addr, PAIR *p)
 /* IRQ enter */
 void Mcu::enter_interrupt(const char *message, u16 irq_vector)
 {
-    int cycles_to_eat = 0;
-
     if (m_wai_state & M6800_WAI)
     {
-        cycles_to_eat = 4;
         m_wai_state &= ~M6800_WAI;
     }
     else
@@ -432,15 +436,10 @@ void Mcu::enter_interrupt(const char *message, u16 irq_vector)
         PUSHBYTE(A);
         PUSHBYTE(B);
         PUSHBYTE(CC);
-        cycles_to_eat = 12;
     }
     SEI;
     PCD = RM16(irq_vector);
-
-    increment_counter(cycles_to_eat);
 }
-
-void Mcu::increment_counter(int amount) { m_icount -= amount; }
 
 void Mcu::execute_set_input(int irqline, int state)
 {
@@ -494,7 +493,6 @@ void Mcu::execute_one()
     PC++;
     RD_TRACE("PC: %04x, ireg: %02x\n", PCD, ireg);
     (this->*hd63701_insn[ireg])();
-    increment_counter(cycles_63701[ireg]);
 }
 
 u8 Mcu::tcsr_r()

@@ -18,17 +18,41 @@ SoundChip::SoundChip(const u8 *temp_ic5, const u8 *temp_ic6, const u8 *temp_ic7)
 
 u8 SoundChip::read(size_t offset) { return m_irq_id; }
 
+void SoundChip::reset()
+{
+    for (size_t voiceI = 0; voiceI < NUM_VOICES; voiceI++)
+        for (size_t partI = 0; partI < PARTS_PER_VOICE_MEM; partI++)
+            m_parts[voiceI][partI] = SA_Part();
+
+    m_irq_id = 0;
+    m_irq_triggered = false;
+}
+
 void SoundChip::write(size_t offset, u8 data)
 {
-    uint8_t voiceI = offset / 0x100;
-    uint8_t partI = offset % 0x100 / 0x10;
-    uint8_t field = offset % 8;
+    // size_t y no u8: con un offset >= 0x10000 la división truncaba a 0 y la
+    // escritura se colaba como si fuera de la voz 0.
+    const size_t voiceI = offset / 0x100;
+    const size_t partI = offset % 0x100 / 0x10;
+    const size_t field = offset % 0x10;
 
-    if (voiceI >= NUM_VOICES || partI >= PARTS_PER_VOICE_MEM || field >= 8)
+    if (voiceI >= NUM_VOICES || partI >= PARTS_PER_VOICE_MEM)
     {
-        RD_TRACE("ERROR: received invalid SA write %02x %02x %02x %02x\n", voiceI, partI, field, data);
+        RD_TRACE("ERROR: received invalid SA write %02x %02x %02x %02x\n", (unsigned)voiceI, (unsigned)partI,
+                 (unsigned)field, data);
         return;
     }
+
+    // Cada part ocupa 16 bytes del mapa pero sólo tiene 8 registros. Antes el
+    // campo se sacaba con `offset % 8`, así que +8..+F se plegaban en silencio
+    // sobre +0..+7. Con el firmware RD200 daba igual: las únicas escrituras a
+    // esa mitad son el borrado de arranque (16 voces × 16 parts, todas 0x00 en
+    // la muestra 0) y plegadas volvían a poner a cero registros que ya nacen a
+    // cero. Se ignoran explícitamente en vez de por accidente aritmético: otro
+    // firmware (MKS-20, MK-80) que escriba datos reales ahí corrompía la
+    // síntesis sin avisar.
+    if (field >= 8)
+        return;
 
     SA_Part &part = m_parts[voiceI][partI];
 

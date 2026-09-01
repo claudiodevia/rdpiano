@@ -77,6 +77,12 @@ el PC y escribir en puerto 2 baja TIN. Las ROMs vienen con líneas permutadas en
 con los `unscramble_*` de [rom_loader.h](librdpiano/include/rom_loader.h) — **no tocar sin
 verificar audio**.
 
+`Mcu::reset()` reinicia **todo** el estado: sus registros y temporizador, y vía `RdBoard::reset()`
+la RAM, el latch, la cola de comandos y las 160 `SA_Part` del `SoundChip`. Lo que no es estado —las
+dos ROM, la página de params ya mapeada, las tablas de onda descifradas— sobrevive: de ahí la
+trampa 8. Cada part del chip ocupa 16 bytes del mapa pero solo tiene 8 registros; +8..+F se
+descartan (el firmware RD200 solo escribe ahí ceros de arranque).
+
 ## Trampas — leer antes de modificar
 
 1. **Handshake atado a direcciones fijas del firmware RD200**: `RdBoard::read` compara el PC contra
@@ -140,7 +146,7 @@ ctest --test-dir build/core --output-on-failure
   nota, acorde, extinción tras note-off (detector de voces colgadas), polifonía 16, rango de pico y
   **hash bit-exacto por parche** contra `test/golden.txt`. `--patch N` para iterar (~0,2 s).
   Cambios en `sound_chip.cpp`, `unscramble_*` o el MCU mueven el hash.
-- **Unitario** (`test/unit/`, 39 suites, 435 checks, 2,6 s): `test_board`, `test_patches`,
+- **Unitario** (`test/unit/`, 41 suites, 450 checks, 2,6 s): `test_board`, `test_patches`,
   `test_sa_tables`, `test_rom_loader`, `test_command_port`, `test_sound_chip_blocks` (2.256
   vectores), `test_lsp` (respuesta a impulso congelada), `test_resampler`, `test_engine`.
   Se añade con `TEST_SUITE(nombre)` + una línea en el CMakeLists; andamiaje = `test/check.h`.

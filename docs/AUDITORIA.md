@@ -8,17 +8,21 @@ Cada hallazgo marcado **[verificado]** se comprobó ejecutando el núcleo del em
 reales del repositorio, compilado con ASan/UBSan e instrumentado. El apartado
 [§20](#20-cómo-reproducir-las-mediciones) explica cómo reproducirlo.
 
-> **Estado a 2026-09-01 — los tres CRÍTICOS y los seis ALTOS están resueltos.** Las líneas que cita
-> el informe son las del commit auditado; desde entonces la cadena de audio se sacó del plugin a
-> `RdPianoEngine` ([librdpiano/src/rd_engine.cpp](../librdpiano/src/rd_engine.cpp)), así que los
-> enlaces a `PluginProcessor.cpp` ya no apuntan a donde estaba el problema. Ver
+> **Estado a 2026-09-01 — los tres CRÍTICOS, los seis ALTOS y los siete MEDIOS están resueltos.**
+> Las líneas que cita el informe son las del commit auditado; desde entonces la cadena de audio se
+> sacó del plugin a `RdPianoEngine` ([librdpiano/src/rd_engine.cpp](../librdpiano/src/rd_engine.cpp)),
+> así que los enlaces a `PluginProcessor.cpp` ya no apuntan a donde estaba el problema. Ver
 > [§1](#1-crítico--silencio-total-por-debajo-de-32-khz),
 > [§2](#2-crítico--el-resampler-se-construye-dentro-del-hilo-de-audio--verificado) y
 > [§3](#3-crítico--loadsounds-bajo-spinlock-desde-el-hilo-de-ui--verificado).
 >
-> Los ALTOS §4, §5, §8 y §9 cayeron con esa misma extracción; §6, §7 y §16 se cerraron después y
-> llevan su propia nota al pie de cada apartado. Lo que queda abierto son los MEDIOS (§10–§15, §17)
-> y los detalles de §18.
+> Los ALTOS §4, §5, §8 y §9 cayeron con esa misma extracción, que se llevó por delante también los
+> MEDIOS §11 y §12; §6, §7 y §16 se cerraron después. §13 cayó al pasar el LCD a un búfer de bytes.
+> §10, §14, §15 y §17 se cerraron el 2026-09-01 y llevan su propia nota al pie. Lo único que queda
+> abierto son los detalles de §18.
+>
+> **Ninguno de los MEDIOS movió el audio**: los 16 hashes de `golden.txt` y los 2.256 vectores de
+> `ic_blocks.txt` siguen en verde sin tocarlos, con y sin ASan.
 
 ---
 
@@ -35,14 +39,14 @@ reales del repositorio, compilado con ASan/UBSan e instrumentado. El apartado
 | 7 | ~~**ALTO**~~ **RESUELTO** | `printf()` + `fflush()` en el hilo de audio (emulador y plugin) | [mcu.cpp:501](librdpiano/src/mcu.cpp#L501), [PluginProcessor.cpp:413](rdpiano_juce/Source/PluginProcessor.cpp#L413) |
 | 8 | ~~**ALTO**~~ **RESUELTO** | `return` temprano en `processBlock` sin limpiar el buffer de salida | [PluginProcessor.cpp:411-423](rdpiano_juce/Source/PluginProcessor.cpp#L411-L423) |
 | 9 | ~~**ALTO**~~ **RESUELTO** | Fuga de ~1,2 MB por instancia: los resamplers nunca se cierran | [PluginProcessor.cpp:210](rdpiano_juce/Source/PluginProcessor.cpp#L210) |
-| 10 | **MEDIO** | Desbordamiento de entero con signo en `m_icount` a los ~5,9 min de reproducción | [mcu.cpp:372](librdpiano/src/mcu.cpp#L372) |
-| 11 | **MEDIO** | Coeficientes IIR reasignados (con `malloc`) en cada bloque de audio | [PluginProcessor.cpp:541](rdpiano_juce/Source/PluginProcessor.cpp#L541) |
-| 12 | **MEDIO** | Fuga en `prepareToPlay()` si el host no intercala `releaseResources()` | [PluginProcessor.cpp:339-342](rdpiano_juce/Source/PluginProcessor.cpp#L339-L342) |
-| 13 | **MEDIO** | `Lcd::setText()` copia 34 bytes fijos de una `juce::String` arbitraria; `"\xff"` genera UTF-8 inválido | [Lcd.cpp:21](rdpiano_juce/Source/lcd/Lcd.cpp#L21) |
-| 14 | **MEDIO** | Decodificación de registros del chip: `offset % 8` pliega los bytes +8..+F sobre +0..+7 | [sound_chip.cpp:175](librdpiano/src/sound_chip.cpp#L175) |
-| 15 | **MEDIO** | `Mcu::reset()` no reinicia el `SoundChip`, la RAM, el latch, el timer ni la cola de comandos | [mcu.cpp:262](librdpiano/src/mcu.cpp#L262) |
+| 10 | ~~**MEDIO**~~ **RESUELTO** | Desbordamiento de entero con signo en `m_icount` a los ~5,9 min de reproducción | [mcu.cpp:372](librdpiano/src/mcu.cpp#L372) |
+| 11 | ~~**MEDIO**~~ **RESUELTO** | Coeficientes IIR reasignados (con `malloc`) en cada bloque de audio | [PluginProcessor.cpp:541](rdpiano_juce/Source/PluginProcessor.cpp#L541) |
+| 12 | ~~**MEDIO**~~ **RESUELTO** | Fuga en `prepareToPlay()` si el host no intercala `releaseResources()` | [PluginProcessor.cpp:339-342](rdpiano_juce/Source/PluginProcessor.cpp#L339-L342) |
+| 13 | ~~**MEDIO**~~ **RESUELTO** | `Lcd::setText()` copia 34 bytes fijos de una `juce::String` arbitraria; `"\xff"` genera UTF-8 inválido | [Lcd.cpp:21](rdpiano_juce/Source/lcd/Lcd.cpp#L21) |
+| 14 | ~~**MEDIO**~~ **RESUELTO** | Decodificación de registros del chip: `offset % 8` pliega los bytes +8..+F sobre +0..+7 | [sound_chip.cpp:175](librdpiano/src/sound_chip.cpp#L175) |
+| 15 | ~~**MEDIO**~~ **RESUELTO** | `Mcu::reset()` no reinicia el `SoundChip`, la RAM, el latch, el timer ni la cola de comandos | [mcu.cpp:262](librdpiano/src/mcu.cpp#L262) |
 | 16 | ~~**ALTO** (standalone)~~ **RESUELTO** | Carrera de datos y *use-after-free* en `test/standalone.cpp` | [standalone.cpp:131,204](librdpiano/test/standalone.cpp#L131) |
-| 17 | **MEDIO** | CI: acción de release de terceros archivada y sin fijar (`@latest`) con `GITHUB_TOKEN` | [.github/workflows/main.yml](.github/workflows/main.yml) |
+| 17 | ~~**MEDIO**~~ **RESUELTO** | CI: acción de release de terceros archivada y sin fijar (`@latest`) con `GITHUB_TOKEN` | [.github/workflows/main.yml](.github/workflows/main.yml) |
 
 ---
 
@@ -464,6 +468,22 @@ un factor 3× en toda la temporización del firmware (servicio de envolventes, h
 Puede ser un ajuste deliberado «de oído», pero el comentario y el nombre de la variable afirman lo
 contrario y `m_icount` existe precisamente para hacerlo bien.
 
+> **RESUELTO** por la segunda vía, que es la que describe lo que el código hace de verdad:
+> `m_icount` e `increment_counter()` ya no existen. `execute_one()` y `enter_interrupt()` dejan de
+> restar, `eat_cycles()` se queda como no-op —lo llaman `WAI` y `SLP` en `mcu_ops.h`, que es código
+> de MAME y no se reescribe (trampa 5)— y la tabla `Mcu::cycles_63701[]` se conserva como punto de
+> partida para quien retome el modelo de ciclos. Como el campo no lo leía nadie, quitarlo **no mueve
+> el audio**: los 16 hashes de `golden.txt` siguen en verde.
+>
+> Comprobado con la sonda de [§20](#20-cómo-reproducir-las-mediciones) —`-fsanitize=undefined
+> -fno-sanitize-recover=all`, **400 s** de audio, o sea 8 M de muestras, contra los ~352 s a los que
+> el código anterior cruzaba `INT_MIN`—: termina sin un solo diagnóstico.
+>
+> La observación de precisión **sigue en pie a propósito**, y ahora está escrita en
+> [docs/FIRMWARE.md §4](FIRMWARE.md): cerrar el factor 3× cambiaría la temporización efectiva del
+> firmware y con ella el sonido. Eso no es una corrección de UB, es un cambio de audio que el golden
+> detecta pero no juzga.
+
 ---
 
 ## 11. MEDIO — Coeficientes IIR reconstruidos en cada bloque
@@ -481,6 +501,13 @@ const float gainDB = 8;
 por bloque de audio**, para producir siempre los mismos coeficientes. Debe calcularse una vez en
 `prepareToPlay()`.
 
+> **RESUELTO** con la extracción del motor. El EQ medio es ahora `RdBiquad`
+> ([rd_engine.h](../librdpiano/include/rd_engine.h)), un struct de siete `float` sin montículo
+> detrás: `setPeak()` calcula los coeficientes **una vez** en `RdPianoEngine::prepare()` y `render()`
+> sólo llama a `process()`. Replica `juce::dsp::IIR::Filter<float>` salvo su `snapToZero`, que fuera
+> de Intel es un no-op. La suite `engine_no_alloc_in_render` de `test_engine.cpp` fija que no quede
+> ninguna reserva en el camino de audio.
+
 ---
 
 ## 12. MEDIO — Fuga en `prepareToPlay()`
@@ -489,6 +516,11 @@ por bloque de audio**, para producir siempre los mismos coeficientes. Debe calcu
 float[]` sin liberar los anteriores. El contrato de JUCE no garantiza un `releaseResources()`
 intercalado entre dos `prepareToPlay()`, y hay hosts que llaman a `prepareToPlay` repetidamente al
 cambiar el tamaño de bloque. Usar `std::unique_ptr<float[]>` o `juce::HeapBlock` resuelve el caso.
+
+> **RESUELTO** con la extracción del motor: el plugin ya no reserva nada. `RdPianoEngine::prepare()`
+> empieza llamando a `release()`, que libera los cuatro búferes y cierra los dos resamplers, así que
+> dos `prepareToPlay()` seguidos no fugan; el destructor del motor llama a lo mismo. `test_engine.cpp`
+> encadena `prepare()` a distintas tasas y tamaños de bloque, y la CI lo corre bajo ASan.
 
 ---
 
@@ -523,6 +555,13 @@ marcador, mapeándolo al glifo 0xFF dentro de `LCD_FontRenderStandard`.
 
 *(No hay problema en `lcd_font[240][10]`: la guarda `if (ch < 16) return;` con `ch` de tipo `uint8_t`
 acota el índice a 0..239, exactamente el tamaño de la tabla.)*
+
+> **RESUELTO** por la raíz: la línea del LCD ya no pasa por `juce::String`. `Lcd::setText()` recibe
+> `const uint8_t (&)[Lcd::kChars]` —una referencia a array, así que el tamaño lo comprueba el
+> compilador y el `memcpy` no puede leer de más— y el editor construye esa línea de bytes con
+> `lcdPut()`, que se acota a las 34 columnas. El marcador vuelve a ser el byte `0xff` del juego de
+> caracteres del display, sin UTF-8 de por medio: no hay `jassert` que saltar ni longitud en
+> caracteres que deje de corresponder con la de bytes.
 
 ---
 
@@ -561,6 +600,22 @@ modelar el espejo si se confirma en el silicio), en lugar de plegar por accident
 *(Nota defensiva: `uint8_t voiceI = offset / 0x100` trunca. El único llamante acota `offset < 0x1000`,
 pero con un offset de 0x10000 el truncamiento daría `voiceI = 0` y pasaría la guarda.)*
 
+> **RESUELTO.** `SoundChip::write()` decodifica `field = offset % 0x10` y descarta explícitamente
+> +8..+F, con el porqué escrito al lado: con el firmware RD200 las únicas escrituras a esa mitad son
+> el borrado de arranque (256, todas `0x00`, todas en la muestra 0) y plegadas volvían a poner a cero
+> registros que —desde [§6](#6-alto--campos-de-sa_part-sin-inicializar--índice-de-wave-rom-fuera-de-rango--verificado)—
+> ya nacen a cero. Por eso **no mueve el audio**: los 16 hashes de `golden.txt` y los 2.256 vectores
+> de `ic_blocks.txt` siguen en verde sin tocarlos. La guarda muerta desaparece y con ella la
+> equivalencia por accidente: un firmware distinto (MKS-20, MK-80) que escriba datos reales en +8..+F
+> ya no corrompe la síntesis en silencio.
+>
+> La nota defensiva también: `voiceI` y `partI` son `size_t`, así que un offset de 0x10000 deja de
+> truncarse a la voz 0 y lo para la guarda.
+>
+> Lo fija la suite `board_sound_chip_part_fields` de `test_board.cpp`: arma una voz, hashea 256
+> muestras del chip y comprueba que escribir en +0 y +3 mueve la salida mientras que +8 y +B —que se
+> plegaban justo sobre ésos— la dejan idéntica. Con el `% 8` de antes, las dos comprobaciones fallan.
+
 ---
 
 ## 15. MEDIO — `Mcu::reset()` deja estado sucio
@@ -578,6 +633,25 @@ reset se entrega en el punto equivocado de la nueva secuencia de arranque. `mcuR
 llama a `reset()` y acto seguido empuja el handshake completo, así que la cola sucia se mezcla con él.
 
 **Corrección.** Vaciar `commands_queue`, poner `sound_chip` en estado conocido y limpiar RAM/latch/timer.
+
+> **RESUELTO**, las cuatro cosas. `Mcu::reset()` limpia ahora sus propios registros de temporizador
+> (`m_tcsr`, `m_counter`, `m_pending_tcsr`, `m_input_capture`) y delega el resto en `RdBoard::reset()`,
+> nuevo: RAM a cero, `latch_val` a 0, `commandPort().queue().clear()` y `SoundChip::reset()`, que
+> devuelve las 160 `SA_Part` y la IRQ pendiente a su estado de construcción.
+>
+> Lo que **no** se toca, a propósito, es lo que no es estado: las dos ROM y la página de parámetros
+> ya mapeada. Por eso `boot()` sigue sin perder el parche (trampa 8 de CLAUDE.md), y por eso las
+> tablas de onda descifradas —incluido el juego de reserva que espera publicación— sobreviven al
+> reset.
+>
+> **No mueve el audio**: en el camino nominal el reset ocurre sobre un objeto recién construido, donde
+> todo eso ya estaba a cero, así que los 16 hashes de `golden.txt` siguen en verde. Lo que cambia es
+> el segundo `boot()` en adelante —el que hace un `prepareToPlay()` repetido—, que ya no arranca con
+> voces colgadas ni con bytes huérfanos en la cola.
+>
+> Lo fija la suite `board_reset` de `test_board.cpp`: ensucia RAM, latch, cola y registros del chip,
+> resetea, y comprueba que todo vuelve a cero, que el chip da las mismas muestras que uno recién
+> construido y que la params ROM y la ROM de programa siguen en pie.
 
 ---
 
@@ -636,6 +710,22 @@ una decisión del proyecto, pero conviene que sea consciente: distribuir el bina
 Las licencias de código sí son compatibles entre sí (GPL del proyecto, BSD-3 de `mcu_ops.h`/MAME,
 LGPL/BSD de libresample).
 
+> **RESUELTO**, los tres puntos:
+>
+> - La acción de release va fijada al **SHA** `919008cf3f741b179569b7a6fb4d8860689ab7f0` (v1.2.1) y
+>   no a una etiqueta. Sigue archivada y sin versión más alta a la que subir, pero ya no es un
+>   puntero que su autor —o quien se haga con la cuenta— pueda reapuntar: `@v1.2.1` era tan mutable
+>   como `@latest`. Migrar a `softprops/action-gh-release` es lo que toca algún día, pero cambia la
+>   semántica del release rodante (ésta reescribe el tag `latest` en cada ejecución y aquélla no lo
+>   mueve si ya existe), así que es un cambio de comportamiento, no de seguridad.
+> - El workflow declara `permissions: contents: read` en la raíz y el job `release` se sube a
+>   `contents: write` por su cuenta: el mínimo para cada job, en vez de heredar los permisos por
+>   omisión del repositorio.
+> - `actions/checkout` está en `v7.0.1` (y `upload-artifact` en `v7.0.1`, `download-artifact` en
+>   `v8.0.1`): Node 16 ya no aparece por ningún lado.
+>
+> La nota legal **sigue en pie**: es una decisión del proyecto, no un defecto que se cierre.
+
 ---
 
 ## 18. Carreras de datos menores, para completar el cuadro
@@ -664,18 +754,24 @@ LGPL/BSD de libresample).
 ~~§2 y §3 (dropout garantizado al cambiar patch)~~ · ~~§5 (temporización MIDI)~~ ·
 ~~§8 (basura en la salida)~~ · ~~§9 (fuga de 1,2 MB)~~ — **todos resueltos**.
 
-**A continuación** (UB latente y robustez): ~~§4~~ · ~~§6~~ · ~~§7~~ — **resueltos**; quedan
-§12 · §15.
+**A continuación** (UB latente y robustez): ~~§4~~ · ~~§6~~ · ~~§7~~ · ~~§12~~ · ~~§15~~ —
+**todos resueltos**.
 
-**Cuando se toque esa zona:** §10 · §11 · §13 · §14 · ~~§16~~ (**resuelto**) · §17.
+**Cuando se toque esa zona:** ~~§10~~ · ~~§11~~ · ~~§13~~ · ~~§14~~ · ~~§16~~ · ~~§17~~ —
+**todos resueltos**. Queda §18.
 
 > **Advertencia del propio proyecto.** Cuando se escribió esto no existía suite de tests y la
 > verificación era auditiva; hoy la red son los 16 hashes de `golden.txt` y los 2.256 vectores de
 > `ic_blocks.txt`. §6 ya se corrigió con esa red puesta y no movió ni un hash, como se esperaba: el
-> camino nominal nunca pasaba por la parte rota. §14 sigue tocando `sound_chip.cpp` y §10 el modelo
-> de temporización de la CPU. §10, además, **cambiaría la temporización efectiva del firmware y con
-> ella el sonido**: no es una simple corrección de UB, y el golden lo detectaría pero no lo
-> juzgaría — ahí hace falta oído.
+> camino nominal nunca pasaba por la parte rota. §14 y §15 tocan `sound_chip.cpp` y tampoco lo
+> movieron, por el mismo motivo: los caminos que arreglan sólo se recorren con valores que ya eran
+> cero.
+>
+> De §10 se hizo **la mitad**, y a propósito. Quitar `m_icount` cierra el UB sin tocar nada que se
+> lea. Lo otro que señalaba ese apartado —que `execute_run()` ejecuta una instrucción y no un ciclo,
+> y que la CPU emulada corre a ~6,1 MHz en vez de 2— **sí cambiaría el sonido**, y el golden lo
+> detectaría pero no lo juzgaría: ahí hace falta oído, no una suite. Está escrito en
+> [docs/FIRMWARE.md §4](FIRMWARE.md) para quien lo retome.
 
 ---
 
@@ -695,6 +791,8 @@ clang++ -std=c++17 -O1 -fsanitize=undefined -fno-sanitize-recover=signed-integer
   reciclada) y generar 64 muestras: UBSan reporta los índices fuera de rango y las cargas de `bool`
   inválidas.
 - **§10** — generar 20 000 × 600 muestras (10 min de audio); el desbordamiento salta a los ~352 s.
+  Tras la corrección, 400 s (8 M de muestras) con `-fno-sanitize-recover=all` terminan sin un solo
+  diagnóstico.
 - **§3** — cronometrar `mcu->loadSounds(...)` en bucle con `std::chrono::high_resolution_clock`.
 - **§2** — compilar `Source/resample/*.c` sueltos y cronometrar `resample_open(1, 1.5, 1.5)`.
 - **§14** — instrumentar `SoundChip::write()` con un histograma de `offset & 0xF`.

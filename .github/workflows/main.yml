@@ -6,6 +6,12 @@ on:
     branches: 
       - '**'
 
+# El mínimo para todo el workflow; el job `release` se sube a `contents: write`
+# por su cuenta. Sin este bloque, cada job heredaba los permisos por omisión del
+# repositorio (AUDITORIA §17).
+permissions:
+  contents: read
+
 jobs:
   test-core:
     name: "Núcleo: pruebas (ctest)"
@@ -90,6 +96,9 @@ jobs:
     needs: [test-core, test-core-asan, build-osx]
     if: github.ref == 'refs/heads/master'
     runs-on: "ubuntu-latest"
+    # Publicar la release rodante es lo único que necesita escribir.
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v7.0.1
       - name: Retrieve artifacts
@@ -99,12 +108,14 @@ jobs:
           pattern: "*"
           merge-multiple: true
       # Archivada desde 2024 y con runtime node12: no hay versión más alta a
-      # la que subir. Se fija a la última etiqueta en vez de `@latest`, que
-      # era la única dependencia sin pinear del workflow. Migrar a
+      # la que subir. Va fijada al SHA de v1.2.1, no a una etiqueta: `@latest`
+      # —y también `@v1.2.1`— es un puntero mutable en un repositorio de
+      # terceros, y este paso corre con permiso de escritura sobre las
+      # releases que descargan los usuarios (AUDITORIA §17). Migrar a
       # `softprops/action-gh-release` es lo que toca, pero cambia la semántica
       # del release rodante: ésta reescribe el tag `latest` en cada ejecución
       # y aquélla no lo mueve si ya existe.
-      - uses: "marvinpinto/action-automatic-releases@v1.2.1"
+      - uses: "marvinpinto/action-automatic-releases@919008cf3f741b179569b7a6fb4d8860689ab7f0" # v1.2.1
         with:
           repo_token: "${{ secrets.GITHUB_TOKEN }}"
           prerelease: true

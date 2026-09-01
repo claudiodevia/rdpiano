@@ -379,3 +379,115 @@ TEST_SUITE(board_sound_chip_window)
     CHECK_EQ(board.read(0x0fff), 0x11);
     CHECK_EQ(board.bankLatch(), 0x00);
 }
+
+// AUDITORIA §14. Cada part ocupa 16 bytes del mapa, pero sólo tiene 8
+// registros: `offset % 8` plegaba +8..+F sobre +0..+7 en silencio. La red es la
+// respuesta del propio chip —armar una voz y hashear 256 muestras—, porque los
+// registros no se pueden releer.
+TEST_SUITE(board_sound_chip_part_fields)
+{
+    const Fixture &f = fixture();
+    if (!f.ok)
+        return;
+
+    FakeCpu cpu;
+    RdBoard board(f.ic5.data(), f.ic6.data(), f.ic7.data(), f.prog.data(), f.ic18.data());
+    board.attach(&cpu);
+
+    // Voz 0, part 0 en marcha, desde cero.
+    auto arm = [&]() {
+        board.reset();
+        board.write(0x1000, 0x20); // +0 pitch_lut_i alto
+        board.write(0x1001, 0x00); // +1 pitch_lut_i bajo
+        board.write(0x1002, 0x00); // +2 wave_addr_loop
+        board.write(0x1003, 0x10); // +3 wave_addr_high
+        board.write(0x1005, 0x40); // +5 env_speed
+        board.write(0x1007, 0x20); // +7 env_offset
+        board.write(0x1004, 0x60); // +4 env_dest
+        board.write(0x1006, 0x03); // +6 flags
+    };
+
+    auto hash256 = [&]() {
+        Fnv1a h;
+        for (int i = 0; i < 256; i++)
+            h.i32(board.soundChip().update());
+        return h.h;
+    };
+
+    auto armAndHash = [&](int offset, u8 value) {
+        arm();
+        if (offset >= 0)
+            board.write((u16)(0x1000 + offset), value);
+        return hash256();
+    };
+
+    const unsigned long long armed = armAndHash(-1, 0);
+
+    // La mitad baja son registros de verdad: mueven la salida.
+    CHECK(armAndHash(0x0, 0x40) != armed);
+    CHECK(armAndHash(0x3, 0x3f) != armed);
+
+    // La alta ya no. Con el plegado, +8 caía en +0 y +B en +3, así que estos dos
+    // habrían dado exactamente los hashes de las dos líneas anteriores.
+    CHECK_HASH("+8 no escribe en +0", armAndHash(0x8, 0x40), armed);
+    CHECK_HASH("+B no escribe en +3", armAndHash(0xb, 0x3f), armed);
+
+    // Y la guarda de voz: `uint8_t voiceI = offset / 0x100` truncaba, así que un
+    // offset de 0x10000 se colaba como voz 0. La ventana del bus lo enmascara a
+    // 16 bits, pero el chip es alcanzable por su cuenta.
+    arm();
+    board.soundChip().write(0x10000 + 0x3, 0x3f);
+    CHECK_HASH("offset 0x10000 descartado", hash256(), armed);
+}
+
+// AUDITORIA §15. `reset()` reiniciaba los registros de la CPU y nada más: RAM,
+// latch, chip de sonido y cola de comandos sobrevivían. La cola era la peor —el
+// handshake la consume en direcciones fijas del firmware, trampa 1—, y las ROM
+// y la página de params sí tienen que sobrevivir (trampa 8).
+TEST_SUITE(board_reset)
+{
+    const Fixture &f = fixture();
+    if (!f.ok)
+        return;
+
+    FakeCpu cpu;
+    RdBoard board(f.ic5.data(), f.ic6.data(), f.ic7.data(), f.prog.data(), f.ic18.data());
+    board.attach(&cpu);
+
+    const u8 paramsBefore = board.read(0x4000);
+    const u8 progBefore = board.read(0xc000);
+
+    board.write(0x0020, 0x5a);
+    board.write(0x0fff, 0xa5);
+    board.write(0x2000, 0x03);
+    board.commandPort().programChange(5);
+    board.commandPort().masterTune(0);
+    board.write(0x1003, 0x3f); // deja la voz 0 con wave_addr_high sucio
+
+    CHECK_EQ(board.read(0x0020), 0x5a);
+    CHECK_EQ(board.bankLatch(), 0x03);
+    CHECK_EQ(board.commandPort().queue().size(), 4);
+
+    board.reset();
+
+    CHECK_EQ(board.read(0x0020), 0x00);
+    CHECK_EQ(board.read(0x0fff), 0x00);
+    CHECK_EQ(board.bankLatch(), 0x00);
+    CHECK(board.commandPort().queue().empty());
+
+    // El chip de sonido, en el estado con el que nace: mismas muestras.
+    Fnv1a fresh;
+    for (int i = 0; i < 64; i++)
+        fresh.i32(board.soundChip().update());
+
+    RdBoard virgin(f.ic5.data(), f.ic6.data(), f.ic7.data(), f.prog.data(), f.ic18.data());
+    virgin.attach(&cpu);
+    Fnv1a reference;
+    for (int i = 0; i < 64; i++)
+        reference.i32(virgin.soundChip().update());
+    CHECK_HASH("chip de sonido reiniciado", fresh.h, reference.h);
+
+    // Lo que no es estado sigue en pie: las dos ROM y la página ya mapeada.
+    CHECK_EQ(board.read(0x4000), paramsBefore);
+    CHECK_EQ(board.read(0xc000), progBefore);
+}
