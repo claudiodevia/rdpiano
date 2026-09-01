@@ -629,6 +629,13 @@ void Mcu::loadRomSet(const u8 *temp_ic5, const u8 *temp_ic6, const u8 *temp_ic7,
 
 void Mcu::selectPatch(size_t from_addr) { board.selectPatch(from_addr); }
 
+void Mcu::prepareRomSet(const u8 *temp_ic5, const u8 *temp_ic6, const u8 *temp_ic7)
+{
+    board.prepareRomSet(temp_ic5, temp_ic6, temp_ic7);
+}
+
+void Mcu::publishRomSet(const u8 *temp_paramsrom) { board.publishRomSet(temp_paramsrom); }
+
 void Mcu::loadSounds(const u8 *temp_ic5, const u8 *temp_ic6, const u8 *temp_ic7, const u8 *temp_paramsrom,
                      size_t from_addr)
 {

@@ -29,6 +29,12 @@ processBlock → RdPianoEngine::pushMidi/render
 - `RdPianoEngine` ([rd_engine.h](librdpiano/include/rd_engine.h)) es la frontera motor/plugin, sin
   JUCE. Contrato: `prepare()` reserva todo; `render()` no reserva, no bloquea, no imprime;
   `setPatch()`/`setMasterTune()` corren el emulador y los serializa `mcuLock` (`juce::SpinLock`).
+- **Disciplina del cerrojo** (docs/AUDITORIA.md §3): el hilo de audio nunca lo espera sin límite.
+  `processBlock` usa `acquireEngineLock()` —`tryEnter()` y reintentos con `Thread::yield()` hasta un
+  cuarto del bloque— y si se agota devuelve silencio sumando `blocksPreempted`; el MIDI ya está en la
+  cola del motor, así que el siguiente `render()` lo entrega. Del otro lado, lo caro se hace **fuera**
+  del cerrojo: `setCurrentProgram` llama a `engine->prepareRomSetFor(n)` antes de tomarlo. Nada nuevo
+  bajo `mcuLock` que dure más que `setMasterTune` (~0,36 ms), o el plazo deja de cubrirlo.
 - **Reloj maestro = audio**: 1 muestra → 100 ciclos de CPU (62 si el parche es de 32 kHz). No hay
   bucle de CPU independiente. `SoundChip::update()` = 16 voces × 10 partes por los tres bloques
   (`tick_ic19/ic9/ic8`, inline en `sa_blocks.h`; LUT IC10/IC11 compartidas en `sa_tables.h`).
@@ -36,6 +42,12 @@ processBlock → RdPianoEngine::pushMidi/render
   pasos por coste:
    `loadRomSet()` (caro) + `selectPatch()` (barato, reubica página alta de params y parchea bytes
   0x00–0x02). `loadSounds()` = ambos.
+- `loadRomSet()` está a su vez partido: `SoundChip` guarda **dos** juegos de tablas de onda (768 KB
+  cada uno), `decode_samples()` descifra contra el de reserva —que `update()` no lee— y
+  `publish_samples()` lo activa intercambiando el puntero. Sube como `prepareRomSet`/`publishRomSet`
+  por `RdBoard` y `Mcu` hasta `RdPianoEngine::prepareRomSetFor()`. Es lo que deja los ~2,9 ms fuera
+  del cerrojo; `setPatch()` sigue valiendo sola (descifra ella si nadie preparó). Que las dos rutas
+  den el mismo audio muestra a muestra lo fija `engine_patch_prepare` en `test_engine.cpp`.
 - El **protocolo del firmware** (0x30/0x31/0xE0/0x50…) solo en `command_port.h`; fuera se habla por
   intención (`boot()`, `selectPatch()`, `sendMidiCmd()`…). Cola = anillo fijo, cero reservas en RT.
 - `patchOutputGain[]` ([patches.h](librdpiano/include/patches.h)) normaliza los 16 parches a **+3
@@ -128,7 +140,7 @@ ctest --test-dir build/core --output-on-failure
   nota, acorde, extinción tras note-off (detector de voces colgadas), polifonía 16, rango de pico y
   **hash bit-exacto por parche** contra `test/golden.txt`. `--patch N` para iterar (~0,2 s).
   Cambios en `sound_chip.cpp`, `unscramble_*` o el MCU mueven el hash.
-- **Unitario** (`test/unit/`, 38 suites, 427 checks, 2,6 s): `test_board`, `test_patches`,
+- **Unitario** (`test/unit/`, 39 suites, 435 checks, 2,6 s): `test_board`, `test_patches`,
   `test_sa_tables`, `test_rom_loader`, `test_command_port`, `test_sound_chip_blocks` (2.256
   vectores), `test_lsp` (respuesta a impulso congelada), `test_resampler`, `test_engine`.
   Se añade con `TEST_SUITE(nombre)` + una línea en el CMakeLists; andamiaje = `test/check.h`.

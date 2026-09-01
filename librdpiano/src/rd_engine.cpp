@@ -170,10 +170,18 @@ void RdPianoEngine::prepare(double newHostRate, int newMaxBlock)
 
 // ---------------------------------------------------------------- control
 
-void RdPianoEngine::reloadRomsFor(int patch)
+void RdPianoEngine::prepareRomSetFor(int patch)
 {
-    const RdRomSet &set = romSets[patchToRomSetId[patch]];
-    mcu->loadRomSet(set.ic5, set.ic6, set.ic7, set.ic18);
+    if (patch < 0 || patch >= NUM_PATCHES)
+        return;
+
+    const int romSet = patchToRomSetId[patch];
+    if (romSet == patchToRomSetId[currentPatch] || romSet == preparedRomSet)
+        return;
+
+    const RdRomSet &set = romSets[romSet];
+    mcu->prepareRomSet(set.ic5, set.ic6, set.ic7);
+    preparedRomSet = romSet;
 }
 
 void RdPianoEngine::setPatch(int patch)
@@ -181,8 +189,14 @@ void RdPianoEngine::setPatch(int patch)
     if (patch < 0 || patch >= NUM_PATCHES)
         return;
 
-    if (patchToRomSetId[patch] != patchToRomSetId[currentPatch])
-        reloadRomsFor(patch);
+    const int romSet = patchToRomSetId[patch];
+    if (romSet != patchToRomSetId[currentPatch])
+    {
+        // No-op si el integrador ya lo preparó fuera del cerrojo.
+        prepareRomSetFor(patch);
+        mcu->publishRomSet(romSets[romSet].ic18);
+        preparedRomSet = -1;
+    }
 
     mcu->selectPatch(patchToOffset[patch]);
     currentPatch = patch;

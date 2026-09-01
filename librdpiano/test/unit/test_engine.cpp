@@ -695,3 +695,76 @@ TEST_SUITE(engine_headroom)
         delete e;
     }
 }
+
+// ------------------------------------------------- carga de ROM en dos fases
+
+TEST_SUITE(engine_patch_prepare)
+{
+    // `prepareRomSetFor()` saca de `setPatch()` la parte cara —descifrar las
+    // tres ROM de onda, ~2,9 ms— para que el integrador la corra FUERA del
+    // cerrojo que serializa con render(). Lo que hay que fijar es que partirlo
+    // no cambie NADA: la misma secuencia de parches tiene que dar el mismo
+    // audio, muestra a muestra, se prepare antes o no.
+    const int BLOCK = 256;
+
+    // Cruza los tres juegos de ROM y vuelve: 0 y 2 comparten juego (preparar
+    // ahí no tiene nada que hacer), 3 y 8 lo cambian.
+    const int sequence[] = {0, 2, 3, 8, 11, 0};
+
+    Stereo direct, split;
+
+    for (int pass = 0; pass < 2; pass++)
+    {
+        RdPianoEngine *e = make_engine(48000.0, BLOCK);
+        if (!e)
+        {
+            CHECK_MSG(false, "sin ROMs en %s", g_roms_dir.c_str());
+            return;
+        }
+
+        Stereo &out = pass == 0 ? direct : split;
+        std::vector<float> l(BLOCK, 0.0f), r(BLOCK, 0.0f);
+
+        for (int patch : sequence)
+        {
+            if (pass == 1)
+            {
+                // Lo que haría el hilo de UI antes de tomar el cerrojo. Repetido
+                // a propósito: preparar dos veces, o preparar el juego que ya
+                // está puesto, tiene que ser inocuo.
+                e->prepareRomSetFor(patch);
+                e->prepareRomSetFor(patch);
+            }
+            e->setPatch(patch);
+
+            e->pushMidi(0, 0x90, 60, 100);
+            for (int b = 0; b < 8; b++)
+            {
+                e->render(l.data(), r.data(), BLOCK);
+                out.l.insert(out.l.end(), l.begin(), l.end());
+                out.r.insert(out.r.end(), r.begin(), r.end());
+            }
+
+            e->pushMidi(0, 0x80, 60, 0);
+            for (int b = 0; b < 4; b++)
+                e->render(l.data(), r.data(), BLOCK);
+        }
+
+        delete e;
+    }
+
+    checks.add("preparar-misma-longitud", direct.l.size() == split.l.size() && !direct.l.empty(),
+               check_fmt("%zu vs %zu", direct.l.size(), split.l.size()));
+
+    if (direct.l.size() == split.l.size())
+    {
+        size_t diff = 0;
+        for (size_t i = 0; i < direct.l.size(); i++)
+            if (direct.l[i] != split.l[i] || direct.r[i] != split.r[i])
+                diff++;
+
+        checks.add("preparar-bit-exacto", diff == 0, check_fmt("%zu muestras distintas de %zu", diff, direct.l.size()));
+    }
+
+    checks.add("preparar-suena", rms(direct.l, 0, direct.l.size()) > 1e-4, "la secuencia salió muda");
+}

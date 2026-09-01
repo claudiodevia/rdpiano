@@ -75,6 +75,12 @@ class RdBoard
     void loadRomSet(const u8 *temp_ic5, const u8 *temp_ic6, const u8 *temp_ic7, const u8 *temp_paramsrom);
     void selectPatch(size_t from_addr);
 
+    // `loadRomSet` partido a su vez en la fase cara y la barata: `prepareRomSet`
+    // descifra contra el juego de reserva del chip y no toca nada que el
+    // emulador lea, así que corre fuera del cerrojo del integrador.
+    void prepareRomSet(const u8 *temp_ic5, const u8 *temp_ic6, const u8 *temp_ic7);
+    void publishRomSet(const u8 *temp_paramsrom);
+
     CommandPort &commandPort() { return command_port; }
     SoundChip &soundChip() { return sound_chip; }
 

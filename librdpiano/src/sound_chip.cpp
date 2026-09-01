@@ -81,8 +81,8 @@ s32 SoundChip::update()
             const Ic19Out ic19 = tick_ic19(part, partFlags);
             const Ic9Out ic9 = tick_ic9(part, partFlags, tables);
             const s32 exp_val =
-                tick_ic8(part, ic19, ic9, samples_exp[ic9.waverom_addr], samples_exp_sign[ic9.waverom_addr],
-                         samples_delta[ic9.waverom_addr], samples_delta_sign[ic9.waverom_addr], tables);
+                tick_ic8(part, ic19, ic9, waves->exp[ic9.waverom_addr], waves->exp_sign[ic9.waverom_addr],
+                         waves->delta[ic9.waverom_addr], waves->delta_sign[ic9.waverom_addr], tables);
 
             // hack to prevent voices ringing when env value is 0, investigate
             if (part.env_value != 0)
@@ -101,8 +101,26 @@ s32 SoundChip::update()
 
 void SoundChip::load_samples(const u8 *temp_ic5, const u8 *temp_ic6, const u8 *temp_ic7)
 {
+    decode_samples(temp_ic5, temp_ic6, temp_ic7);
+    publish_samples();
+}
+
+void SoundChip::publish_samples()
+{
+    if (!waves_pending)
+        return;
+
+    WaveTables *t = waves;
+    waves = waves_back;
+    waves_back = t;
+    waves_pending = false;
+}
+
+void SoundChip::decode_samples(const u8 *temp_ic5, const u8 *temp_ic6, const u8 *temp_ic7)
+{
     // Se descifra byte a byte en el sitio: sin los 384 KB de temporales que
     // costaría descifrar las tres ROM enteras primero.
+    WaveTables &out = *waves_back;
 
     // Wave rom values
     for (size_t i = 0; i < 0x20000; i++)
@@ -124,14 +142,16 @@ void SoundChip::load_samples(const u8 *temp_ic5, const u8 *temp_ic6, const u8 *t
              ((b7 >> 2) & 1) << 5 | ((b7 >> 1) & 1) << 4 | ((~b5 >> 1) & 1) << 3 | ((b5 >> 3) & 1) << 2 |
              ((b6 >> 5) & 1) << 1 | ((~b6 >> 7) & 1) << 0);
         bool exp_sign = (~b7 >> 3) & 1;
-        samples_exp[i] = exp_sample;
-        samples_exp_sign[i] = exp_sign;
+        out.exp[i] = exp_sample;
+        out.exp_sign[i] = exp_sign;
 
         uint16_t delta_sample = (((~b7 >> 6) & 1) << 8 | ((b5 >> 4) & 1) << 7 | ((b7 >> 0) & 1) << 6 |
                                  ((~b6 >> 3) & 1) << 5 | ((b5 >> 2) & 1) << 4 | ((~b5 >> 6) & 1) << 3 |
                                  ((b6 >> 6) & 1) << 2 | ((b7 >> 5) & 1) << 1 | ((~b6 >> 7) & 1) << 0);
         bool delta_sign = (b6 >> 1) & 1;
-        samples_delta[i] = delta_sample;
-        samples_delta_sign[i] = delta_sign;
+        out.delta[i] = delta_sample;
+        out.delta_sign[i] = delta_sign;
     }
+
+    waves_pending = true;
 }

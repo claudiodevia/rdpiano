@@ -76,8 +76,22 @@ class RdPiano_juceAudioProcessor : public juce::AudioProcessor,
     // corren el emulador (trampa 4 de CLAUDE.md).
     juce::SpinLock mcuLock;
 
+    // Bloques que el hilo de audio devolvió en silencio por no conseguir
+    // `mcuLock` dentro del plazo. Diagnóstico: si no es cero, algo está
+    // ocupando el cerrojo más de lo que dura un cuarto de bloque.
+    std::atomic<unsigned long> blocksPreempted{0};
+
   private:
     void syncParamsToEngine();
+
+    // Toma `mcuLock` desde el hilo de audio sin quedarse colgado: lo intenta
+    // durante `mcuLockTimeoutTicks` y devuelve false si no lo consigue.
+    bool acquireEngineLock();
+
+    // El plazo de acquireEngineLock(), un cuarto del periodo del bloque. Lo
+    // escribe prepareToPlay y lo lee el hilo de audio: atómico para no repetir
+    // la carrera benigna que el propio informe señala en §18.
+    std::atomic<juce::int64> mcuLockTimeoutTicks{0};
 
     // Valores de los parámetros, resueltos una vez en el constructor: buscar por
     // id desde el hilo de audio sería una búsqueda de cadena por bloque.

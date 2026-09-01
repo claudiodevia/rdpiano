@@ -117,6 +117,13 @@ class RdPianoEngine
     // Libera los búferes. `prepare()` la puede volver a llamar.
     void release();
 
+    // La parte cara de `setPatch()`: descifrar las tres ROM de onda del juego
+    // del parche, ~2,9 ms. Escribe en el juego de reserva del chip, que
+    // `render()` no lee, así que va FUERA del cerrojo del integrador; después
+    // `setPatch()` sólo tiene que publicarlo (~0,03 ms). Es opcional: si nadie
+    // la llamó, `setPatch()` hace el descifrado por su cuenta.
+    void prepareRomSetFor(int patch);
+
     // Cambia de parche. Sólo recarga el juego de ROM si cambia de verdad; dentro
     // del mismo juego es remapear una página.
     void setPatch(int patch);
@@ -143,8 +150,6 @@ class RdPianoEngine
     RdEngineStats stats;
 
   private:
-    void reloadRomsFor(int patch);
-
     const RdRomSet *romSets = nullptr;
     const u8 *programRom = nullptr;
 
@@ -165,6 +170,10 @@ class RdPianoEngine
     int sourceRate = 20000;
     int currentPatch = 0;
     int16_t currentMasterTune = 0;
+
+    // Juego de ROM que `prepareRomSetFor()` dejó descifrado y sin publicar, o
+    // -1 si no hay nada esperando.
+    int preparedRomSet = -1;
 
     // Búferes del emulador (a `sourceRate`) y su salida remuestreada (a
     // `hostRate`). Se reservan en `prepare()` y en ningún otro sitio.

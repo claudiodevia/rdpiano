@@ -8,15 +8,23 @@ Cada hallazgo marcado **[verificado]** se comprobó ejecutando el núcleo del em
 reales del repositorio, compilado con ASan/UBSan e instrumentado. El apartado
 [§20](#20-cómo-reproducir-las-mediciones) explica cómo reproducirlo.
 
+> **Estado a 2026-09-01 — los tres CRÍTICOS están resueltos.** Las líneas que cita el informe son
+> las del commit auditado; desde entonces la cadena de audio se sacó del plugin a
+> `RdPianoEngine` ([librdpiano/src/rd_engine.cpp](../librdpiano/src/rd_engine.cpp)), así que los
+> enlaces a `PluginProcessor.cpp` ya no apuntan a donde estaba el problema. Ver
+> [§1](#1-crítico--silencio-total-por-debajo-de-32-khz),
+> [§2](#2-crítico--el-resampler-se-construye-dentro-del-hilo-de-audio--verificado) y
+> [§3](#3-crítico--loadsounds-bajo-spinlock-desde-el-hilo-de-ui--verificado).
+
 ---
 
 ## 0. Resumen
 
 | # | Severidad | Problema | Ubicación |
 |---|---|---|---|
-| 1 | **CRÍTICO** | Silencio total del plugin a cualquier frecuencia de muestreo < 32 kHz (buffer mal dimensionado) | [PluginProcessor.cpp:337](rdpiano_juce/Source/PluginProcessor.cpp#L337) |
-| 2 | **CRÍTICO** | `resample_open()` (2,5–3,2 ms × 2 + ~1,2 MB de `malloc`) se ejecuta en el hilo de audio | [PluginProcessor.cpp:497](rdpiano_juce/Source/PluginProcessor.cpp#L497) |
-| 3 | **CRÍTICO** | `loadSounds()` (1,7–2,7 ms) corre desde el hilo de UI con un **spinlock** que bloquea al hilo de audio | [PluginProcessor.cpp:250-259](rdpiano_juce/Source/PluginProcessor.cpp#L250-L259) |
+| 1 | ~~**CRÍTICO**~~ **RESUELTO** | Silencio total del plugin a cualquier frecuencia de muestreo < 32 kHz (buffer mal dimensionado) | [PluginProcessor.cpp:337](rdpiano_juce/Source/PluginProcessor.cpp#L337) |
+| 2 | ~~**CRÍTICO**~~ **RESUELTO** | `resample_open()` (2,5–3,2 ms × 2 + ~1,2 MB de `malloc`) se ejecuta en el hilo de audio | [PluginProcessor.cpp:497](rdpiano_juce/Source/PluginProcessor.cpp#L497) |
+| 3 | ~~**CRÍTICO**~~ **RESUELTO** | `loadSounds()` (1,7–2,7 ms) corre desde el hilo de UI con un **spinlock** que bloquea al hilo de audio | [PluginProcessor.cpp:250-259](rdpiano_juce/Source/PluginProcessor.cpp#L250-L259) |
 | 4 | **ALTO** | Desbordamiento de escritura si `buffer.getNumSamples() > samplesPerBlock` | [PluginProcessor.cpp:428](rdpiano_juce/Source/PluginProcessor.cpp#L428) |
 | 5 | **ALTO** | Toda la temporización MIDI se colapsa al inicio del bloque (condición invertida) + `O(n²)` con `std::vector` en el hilo de audio | [PluginProcessor.cpp:433-457](rdpiano_juce/Source/PluginProcessor.cpp#L433-L457) |
 | 6 | **ALTO** | `SA_Part` sin inicializar → índice de wave ROM fuera de rango (0x52FEC sobre un array de 0x20000) | [sound_chip.h:38-45](librdpiano/include/sound_chip.h#L38-L45), [sound_chip.cpp:284](librdpiano/src/sound_chip.cpp#L284) |
@@ -69,6 +77,12 @@ frecuencia, AUv3 en iOS y modos de bajo consumo.
 **Corrección.** `double ratio = 32000.0 / sampleRate;` — y dimensionar `emu_resampled_*` con el
 tamaño real de bloque, no con `samplesPerBlock` (ver [§4](#4-alto--desbordamiento-de-escritura-en-los-búferes-de-salida)).
 
+> **RESUELTO.** `RdPianoEngine::prepare()` dimensiona el búfer del emulador con
+> `worstRatio = 32000.0 / hostRate` —el factor en el sentido bueno, y por el peor caso de 32 kHz,
+> porque el parche cambia sin volver a preparar— y el de salida por el tamaño de bloque preparado,
+> con la guarda `blockTooLarge` de `render()` para el bloque que se pase (eso cierra también §4 y
+> §8: los retornos tempranos limpian la salida). `test_engine.cpp` barre de 22 a 96 kHz.
+
 ---
 
 ## 2. CRÍTICO — El resampler se construye dentro del hilo de audio  **[verificado]**
@@ -102,6 +116,11 @@ Ocurre en el primer bloque y **cada vez que el usuario cambia entre un patch de 
 **Corrección.** Abrir los dos resamplers en `prepareToPlay()` con `minFactor`/`maxFactor` que cubran
 todo el rango (`hostSR/32000` … `hostSR/20000`) y no volver a tocarlos; `resample_process()` ya acepta
 un `factor` variable dentro de ese rango.
+
+> **RESUELTO** exactamente así: los dos `resample_open(1, hostRate/32000, hostRate/20000)` viven en
+> `RdPianoEngine::prepare()` y `release()` los cierra (eso cierra también §9, la fuga de 1,2 MB).
+> `render()` no los vuelve a abrir; la suite `engine_no_alloc_in_render` lo vigila con
+> `stats.resamplerOpens`, porque libresample usa `malloc` y el `operator new` sustituido no lo vería.
 
 ---
 
@@ -142,6 +161,29 @@ misma forma más suave: **0,18 ms × 2 = 0,36 ms** de emulación bajo el mismo s
 puntero atómico (doble búfer), o hacer el trabajo pesado en un hilo de fondo y entregarlo al hilo de
 audio por una FIFO sin bloqueo. Si se conserva un cerrojo, debe ser `tryEnter()` desde el lado de
 audio con un camino de repliegue, nunca una espera activa.
+
+> **RESUELTO** por la primera vía —doble búfer— más el repliegue del lado de audio:
+>
+> 1. **La parte cara sale del cerrojo.** `SoundChip` tiene ahora dos juegos de tablas de onda:
+>    `decode_samples()` descifra contra el de reserva, que `update()` no lee, y `publish_samples()`
+>    lo activa intercambiando el puntero. Eso sube por `RdBoard::prepareRomSet`/`publishRomSet` y
+>    `Mcu` hasta `RdPianoEngine::prepareRomSetFor()`, que `setCurrentProgram` llama **antes** de
+>    tomar el cerrojo. Bajo cerrojo quedan el intercambio de punteros, `selectPatch()` y
+>    `reloadPatch()`: de ~2,9 ms a ~0,03 ms. Cuesta 768 KB por instancia.
+> 2. **El hilo de audio ya no hace espera activa sin límite.** `processBlock` usa
+>    `acquireEngineLock()`: `tryEnter()` y, si falla, reintentos con `Thread::yield()` hasta un
+>    plazo de **un cuarto del bloque**; agotado el plazo devuelve silencio y suma
+>    `blocksPreempted`. La inversión de prioridad deja de ser ilimitada, y el plazo cubre de sobra
+>    al único que puede tener el cerrojo un rato (`setMasterTune`, ~0,36 ms), así que en uso normal
+>    no se pierde ningún bloque. Los eventos MIDI ya están encolados en el motor cuando esto pasa:
+>    el siguiente `render()` los entrega, no se pierden.
+> 3. **El dial deja de martillear.** `setCurrentProgram` y `setMasterTune` salen antes si el valor
+>    no cambia: el dial del panel los dispara en cada evento de arrastre y la mayoría repetían el
+>    valor puesto.
+>
+> Los 384 KB de pila de `loadSounds` ya no existen: `decode_samples()` descifra byte a byte, sin
+> temporales. La suite `engine_patch_prepare` de `test_engine.cpp` fija que partir la carga en dos
+> fases dé el **mismo audio muestra a muestra** que hacerla de una.
 
 ---
 
@@ -556,9 +598,9 @@ LGPL/BSD de libresample).
 
 ## 19. Prioridad sugerida
 
-**Antes de la próxima release** (rompen el producto en uso normal):
-§1 (mudo <32 kHz) · §2 y §3 (dropout garantizado al cambiar patch) · §5 (temporización MIDI) ·
-§8 (basura en la salida) · §9 (fuga de 1,2 MB).
+**Antes de la próxima release** (rompen el producto en uso normal): ~~§1 (mudo <32 kHz)~~ ·
+~~§2 y §3 (dropout garantizado al cambiar patch)~~ · ~~§5 (temporización MIDI)~~ ·
+~~§8 (basura en la salida)~~ · ~~§9 (fuga de 1,2 MB)~~ — **todos resueltos**.
 
 **A continuación** (UB latente y robustez): §4 · §6 · §7 · §12 · §15.
 
