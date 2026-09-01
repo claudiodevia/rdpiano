@@ -1,4 +1,13 @@
-# RdPiano [![RdPiano](https://github.com/giulioz/rdpiano/actions/workflows/main.yml/badge.svg)](https://github.com/giulioz/rdpiano/actions/workflows/main.yml)
+# RdPiano
+
+[![CI](https://github.com/giulioz/rdpiano/actions/workflows/main.yml/badge.svg)](https://github.com/giulioz/rdpiano/actions/workflows/main.yml)
+[![C++23](https://img.shields.io/badge/C%2B%2B-23-00599C?logo=cplusplus&logoColor=white)](https://en.cppreference.com/w/cpp/23)
+[![C23](https://img.shields.io/badge/C-23-A8B9CC?logo=c&logoColor=black)](https://en.cppreference.com/w/c/23)
+[![JUCE 9.0.1](https://img.shields.io/badge/JUCE-9.0.1-8DC63F)](https://juce.com/)
+[![CMake](https://img.shields.io/badge/CMake-3.22%2B-064F8C?logo=cmake&logoColor=white)](https://cmake.org/)
+[![macOS](https://img.shields.io/badge/macOS-11%2B%20universal-000000?logo=apple&logoColor=white)](#descargas)
+[![Formatos](https://img.shields.io/badge/formatos-VST3%20%7C%20AU%20%7C%20AUv3%20%7C%20LV2%20%7C%20Standalone-orange)](#descargas)
+[![Licencia GPLv3](https://img.shields.io/badge/licencia-GPLv3-blue)](LICENSE)
 
 Emulador de los pianos digitales de síntesis SA de Roland: **MKS-20**, **RD-1000** y el piano
 eléctrico **Rhodes MK-80**.
