@@ -10,8 +10,6 @@ Primera versión con número propio. El plugin ya se puede usar en un concierto.
 
 - Los dieciséis sonidos suenan ahora al mismo nivel: antes unos se quedaban
   cortos y otros saturaban al cambiar de uno a otro.
-- Cambiar de sonido mientras se toca ya no da un chasquido: el volumen baja y
-  vuelve a subir solo, en un abrir y cerrar de ojos.
 - El chorus y el phaser ya no sueltan un ruido con lo último que sonó cuando se
   los enciende después de un rato apagados.
 - Encender o apagar un efecto se hace con una transición suave, sin salto.
@@ -19,8 +17,6 @@ Primera versión con número propio. El plugin ya se puede usar en un concierto.
 
 ### Uso en directo
 
-- El plugin ya no se queda esperando: cambiar de sonido o de afinación no
-  interrumpe el audio ni provoca cortes, aunque se haga en mitad de una nota.
 - El dial de sonidos enseña el nombre mientras se gira y cambia el sonido al
   soltarlo, así no se pasa por los quince de en medio.
 - El plugin le dice al programa anfitrión cuánto tarda en responder, para que
