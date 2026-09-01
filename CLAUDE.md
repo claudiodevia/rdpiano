@@ -174,6 +174,9 @@ decírselo al usuario**.
   (`rd_trace.h`), no-op sin `-DRDPIANO_TRACE`.
 - Tipos MAME (`u8/s16/u32`) en el núcleo, tipos JUCE en el plugin.
 - `HACK:` / `TODO:` marcan comportamiento conocido-incorrecto: son contexto, no ruido.
+- **Documentación de clases: breve y concisa.** Una o dos líneas sobre qué es y por qué existe;
+  el detalle que no se deduce del código (contratos de RT, trampas) va aquí en CLAUDE.md, no en
+  comentarios largos sobre la declaración.
 - `patches.h` (offsets, sample rates, nombres, ROM set, headroom) lo comparten plugin y harness.
 
 ## Git: no commitear

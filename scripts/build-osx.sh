@@ -60,12 +60,25 @@ if [ ! -f "$ROOT/build/juce/CMakeLists.txt" ]; then
   exit 1
 fi
 
+ARTEFACTS="$BUILD/rdpiano_juce/rdpiano_juce_artefacts/Release"
+
+# Se borra el producto anterior antes de compilar: Xcode actualiza el bundle in
+# situ y no limpia lo que sobra dentro, así que un .component/.vst3/.app viejo a
+# medio regenerar es indistinguible de uno recién hecho al probarlo en un DAW.
+if [ "$FORMAT" = All ]; then
+  VIEJO="$ARTEFACTS"
+else
+  VIEJO="$ARTEFACTS/$FORMAT"
+fi
+if [ -e "$VIEJO" ]; then
+  echo "Borrando el producto anterior: $VIEJO"
+  rm -rf "$VIEJO"
+fi
+
 cmake -S "$ROOT" -B "$BUILD" -G Xcode \
       -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64"
 
 cmake --build "$BUILD" --config Release --target "rdpiano_juce_$FORMAT"
-
-ARTEFACTS="$BUILD/rdpiano_juce/rdpiano_juce_artefacts/Release"
 
 echo
 if [ "$FORMAT" = All ]; then
