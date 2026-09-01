@@ -1,119 +1,90 @@
-/*
-  ==============================================================================
-
-    This file contains the basic framework code for a JUCE plugin processor.
-
-  ==============================================================================
-*/
-
 #pragma once
 
-#include "../../librdpiano/include/mcu.h"
-#include "lsp/spaced.h"
-#include "lsp/phaser.h"
-#include "resample/libresample.h"
 #include <JuceHeader.h>
+#include <memory>
+
+#include "PluginParams.h"
+#include "rd_engine.h"
 
 //==============================================================================
 /**
+ * El plugin: parámetros, presets y el puente con JUCE. La cadena de audio vive
+ * en `RdPianoEngine` y los parámetros son un `AudioProcessorValueTreeState`
+ * construido desde la tabla de `PluginParams.h`.
  */
-class RdPiano_juceAudioProcessor
-    : public juce::AudioProcessor,
-      public juce::ChangeBroadcaster,
-      public juce::AudioProcessorParameter::Listener {
-public:
-  //==============================================================================
-  RdPiano_juceAudioProcessor();
-  ~RdPiano_juceAudioProcessor() override;
+class RdPiano_juceAudioProcessor : public juce::AudioProcessor,
+                                   public juce::ChangeBroadcaster,
+                                   public juce::Timer,
+                                   public juce::AudioProcessorValueTreeState::Listener
+{
+  public:
+    //==============================================================================
+    RdPiano_juceAudioProcessor();
+    ~RdPiano_juceAudioProcessor() override;
 
-  //==============================================================================
-  void parameterValueChanged(int parameterIndex, float newValue) override;
-  void parameterGestureChanged(int parameterIndex,
-                               bool gestureIsStarting) override;
+    //==============================================================================
+    void parameterChanged(const juce::String &parameterID, float newValue) override;
 
-  //==============================================================================
-  void prepareToPlay(double sampleRate, int samplesPerBlock) override;
-  void releaseResources() override;
+    // El motor puede cambiar de parche sin pasar por aquí: un program change
+    // MIDI lo hace. El temporizador corre en el hilo de mensajes y sólo lee un
+    // atómico; el hilo de audio no toca la interfaz.
+    void timerCallback() override;
 
-  bool isBusesLayoutSupported(const BusesLayout &layouts) const override;
+    //==============================================================================
+    void prepareToPlay(double sampleRate, int samplesPerBlock) override;
+    void releaseResources() override;
 
-  void processBlock(juce::AudioBuffer<float> &, juce::MidiBuffer &) override;
+    bool isBusesLayoutSupported(const BusesLayout &layouts) const override;
 
-  //==============================================================================
-  juce::AudioProcessorEditor *createEditor() override;
-  bool hasEditor() const override;
+    void processBlock(juce::AudioBuffer<float> &, juce::MidiBuffer &) override;
 
-  //==============================================================================
-  const juce::String getName() const override;
+    //==============================================================================
+    juce::AudioProcessorEditor *createEditor() override;
+    bool hasEditor() const override;
 
-  bool acceptsMidi() const override;
-  bool producesMidi() const override;
-  bool isMidiEffect() const override;
-  double getTailLengthSeconds() const override;
+    //==============================================================================
+    const juce::String getName() const override;
 
-  //==============================================================================
-  int getNumPrograms() override;
-  int getCurrentProgram() override;
-  void setCurrentProgram(int index) override;
-  const juce::String getProgramName(int index) override;
-  void changeProgramName(int index, const juce::String &newName) override;
+    bool acceptsMidi() const override;
+    bool producesMidi() const override;
+    bool isMidiEffect() const override;
+    double getTailLengthSeconds() const override;
 
-  //==============================================================================
-  void getStateInformation(juce::MemoryBlock &destData) override;
-  void setStateInformation(const void *data, int sizeInBytes) override;
+    //==============================================================================
+    int getNumPrograms() override;
+    int getCurrentProgram() override;
+    void setCurrentProgram(int index) override;
+    const juce::String getProgramName(int index) override;
+    void changeProgramName(int index, const juce::String &newName) override;
 
-  //==============================================================================
+    //==============================================================================
+    void getStateInformation(juce::MemoryBlock &destData) override;
+    void setStateInformation(const void *data, int sizeInBytes) override;
 
-  juce::AudioParameterFloat *volume;
-  juce::AudioParameterBool *chorusEnabled;
-  juce::AudioParameterInt *chorusRate;
-  juce::AudioParameterInt *chorusDepth;
-  juce::AudioParameterBool *tremoloEnabled;
-  juce::AudioParameterInt *tremoloRate;
-  juce::AudioParameterInt *tremoloDepth;
-  juce::AudioParameterBool *efxEnabled;
-  // juce::AudioParameterBool *efxPhaserOnOff;
-  juce::AudioParameterFloat *efxPhaserRate;
-  juce::AudioParameterFloat *efxPhaserDepth;
-  // juce::AudioParameterBool *efxReverbOnOff;
-  // juce::AudioParameterInt *efxReverbType;
-  // juce::AudioParameterFloat *efxReverbBalance;
+    //==============================================================================
 
-  int currentPatch = 0;
-  int masterTune = 0;
+    // Los parámetros, con el acceso por índice de tabla que usa el editor.
+    juce::AudioProcessorValueTreeState apvts;
 
-  Mcu *mcu = 0;
+    juce::RangedAudioParameter &param(RdParamId id) const;
+    float paramValue(RdParamId id) const;
+    void setParamValue(RdParamId id, float value);
 
-  void *resampleL = 0;
-  void *resampleR = 0;
-  int savedDestSampleRate = 0;
-  int sourceSampleRate = 0;
-  int savedSourceSampleRate = 0;
-  double samplesError = 0;
+    // Espejos de lo que el motor ya sabe, para el editor y para los presets.
+    int currentPatch = 0;
+    int masterTune = 0;
 
-  float *emu_sample_bufferL = 0;
-  float *emu_sample_bufferR = 0;
-  float *emu_resampled_sample_bufferL = 0;
-  float *emu_resampled_sample_bufferR = 0;
-  size_t emu_sample_buffer_size = 0;
+    std::unique_ptr<RdPianoEngine> engine;
 
-  unsigned long tremoloPhase = 0;
+    void setMasterTune(int16_t tune);
 
-  unsigned long midiMessageCount = 0;
+  private:
+    void syncParamsToEngine();
 
-  void setMasterTune(int16_t tune);
-  void mcuReset();
+    // Valores de los parámetros, resueltos una vez en el constructor: buscar por
+    // id desde el hilo de audio sería una búsqueda de cadena por bloque.
+    std::atomic<float> *paramValues[kNumRdParams] = {};
 
-  SpaceD *spaceD = 0;
-  Phaser *phaser = 0;
-
-  juce::dsp::ProcessorDuplicator<juce::dsp::IIR::Filter<float>,
-                                 juce::dsp::IIR::Coefficients<float>>
-      midEQ;
-
-  juce::SpinLock mcuLock;
-
-private:
-  //==============================================================================
-  JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(RdPiano_juceAudioProcessor)
+    //==============================================================================
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(RdPiano_juceAudioProcessor)
 };

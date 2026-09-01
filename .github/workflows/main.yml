@@ -6,121 +6,120 @@ on:
     branches: 
       - '**'
 
+# El mínimo para todo el workflow; el job `release` se sube a `contents: write`
+# por su cuenta. Sin este bloque, cada job heredaba los permisos por omisión del
+# repositorio (AUDITORIA §17).
+permissions:
+  contents: read
+
 jobs:
-  build-win:
-    runs-on: windows-2022
+  test-core:
+    name: "Núcleo: pruebas (ctest)"
+    runs-on: macos-26
     steps:
-    - uses: actions/checkout@v3.3.0
-      with:
-        fetch-depth: 0
-        submodules: recursive
-    - name: "Download Projucer"
-      run: |
-           cd rdpiano_juce
-           git clone -b 8.0.1 --depth 1 https://github.com/juce-framework/JUCE JUCE
-           bash -ex ./build/download-projucer.sh
+    - uses: actions/checkout@v7.0.1
+    - name: "Configurar librdpiano"
+      run: cmake -S librdpiano -B build/core -DRDPIANO_SANITIZE=OFF -DCMAKE_BUILD_TYPE=Release
       shell: bash
-      env:
-        OS: windows
-    - name: "Build RdPiano"
-      run: sh -ex ./rdpiano_juce/build/build-win.sh
+    - name: "Compilar las pruebas"
+      run: cmake --build build/core --target rdpiano_tests rdpiano_e2e
       shell: bash
-    - name: Upload Artifact
-      uses: actions/upload-artifact@v4
-      with:
-        name: RdPiano-win
-        path: |
-              ./rdpiano_juce/Builds/VisualStudio2022/x64/Release/VST3/rdpiano_juce.vst3
-              ./rdpiano_juce/Builds/VisualStudio2022/x64/Release/Standalone Plugin/rdpiano_juce.exe
+    # `unit` es la suite por unidades; `e2e` compara un hash bit-exacto por
+    # parche contra el golden versionado. Si el audio cambia sin querer, esto
+    # lo para antes de que llegue a un release.
+    - name: "ctest"
+      run: ctest --test-dir build/core --output-on-failure
+      shell: bash
+
+  test-core-asan:
+    name: "Núcleo: pruebas con ASan"
+    runs-on: macos-26
+    steps:
+    - uses: actions/checkout@v7.0.1
+    # La misma red, con AddressSanitizer. El harness tarda ~40 s en vez de ~3,
+    # pero es lo que caza los desbordes que un hash idéntico no ve
+    # (REFACTORIZACION §16.2).
+    - name: "Configurar librdpiano con ASan"
+      run: cmake -S librdpiano -B build/core-asan -DRDPIANO_SANITIZE=ON -DCMAKE_BUILD_TYPE=RelWithDebInfo
+      shell: bash
+    - name: "Compilar las pruebas"
+      run: cmake --build build/core-asan --target rdpiano_tests rdpiano_e2e
+      shell: bash
+    - name: "ctest"
+      run: ctest --test-dir build/core-asan --output-on-failure
+      shell: bash
+
   build-osx:
-    runs-on: macos-13
+    runs-on: macos-26
     steps:
-    - uses: actions/checkout@v3.3.0
+    - uses: actions/checkout@v7.0.1
       with:
         fetch-depth: 0
         submodules: recursive
-    - name: "Download Projucer"
-      run: |
-           cd rdpiano_juce
-           git clone -b 8.0.1 --depth 1 https://github.com/juce-framework/JUCE JUCE
-           bash -ex ./build/download-projucer.sh
+    - name: "Download JUCE"
+      run: sh ./scripts/download-juce.sh
       shell: bash
-      env:
-        OS: osx
+    # Desde la fase 3 el plugin sale del CMakeLists de la raíz, no del
+    # Projucer (REFACTORIZACION §16.3). El script sigue siendo el mismo punto
+    # de entrada; ALL son los cinco formatos —el script exige el argumento, no
+    # tiene defecto.
     - name: "Build macOS"
-      run: sh -ex ./rdpiano_juce/build/build-osx.sh
+      run: sh ./scripts/build-osx.sh ALL
+      shell: bash
+    # La ida y vuelta de presets: es una app de consola del mismo build, así
+    # que aquí ya está compilada la mitad de lo que necesita.
+    - name: "Pruebas del plugin"
+      run: |
+           cmake --build build/plugin --config Release --target rdpiano_plugin_tests
+           ctest --test-dir build/plugin -C Release -R plugin_state --output-on-failure
       shell: bash
     - name: "zip macOS"
       run: |
-           cd ./rdpiano_juce/Builds/MacOSX/build/Release/
-           zip -r rdpiano_juce.vst3.macOS.zip rdpiano_juce.vst3
-           zip -r rdpiano_juce.component.macOS.zip rdpiano_juce.component
-           zip -r rdpiano_juce.app.macOS.zip rdpiano_juce.app
-           cd -
+           # Cada bundle en la raíz de su zip, como antes de la fase 3: la
+           # API CMake de JUCE los deja en un subdirectorio por formato.
+           OUT=$PWD/build/plugin/rdpiano_juce/rdpiano_juce_artefacts/Release
+           (cd "$OUT/VST3" && zip -r "$OUT/rdpiano_juce.vst3.macOS.zip" rdpiano_juce.vst3)
+           (cd "$OUT/AU" && zip -r "$OUT/rdpiano_juce.component.macOS.zip" rdpiano_juce.component)
+           (cd "$OUT/Standalone" && zip -r "$OUT/rdpiano_juce.app.macOS.zip" rdpiano_juce.app)
       shell: bash
     - name: Upload Artifact
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v7.0.1
       with:
         name: RdPiano-osx
         path: |
-              ./rdpiano_juce/Builds/MacOSX/build/Release/rdpiano_juce.vst3.macOS.zip
-              ./rdpiano_juce/Builds/MacOSX/build/Release/rdpiano_juce.component.macOS.zip
-              ./rdpiano_juce/Builds/MacOSX/build/Release/rdpiano_juce.app.macOS.zip
-  build-linux:
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@v3.3.0
-        with:
-          fetch-depth: 0
-          submodules: recursive
-      - name: "Install Dependencies"
-        run: sudo apt update && sudo apt install -y libasound2-dev libjack-jackd2-dev libfontconfig1-dev libfreetype-dev libxcursor-dev libxinerama-dev libxrandr-dev
-      - name: "Download Projucer"
-        run: |
-          cd rdpiano_juce
-          git clone -b 8.0.1 --depth 1 https://github.com/juce-framework/JUCE JUCE
-          bash -ex ./build/download-projucer.sh
-        shell: bash
-        env:
-          OS: linux
-      - name: "Build RdPiano"
-        run: sh -ex ./rdpiano_juce/build/build-linux.sh
-        shell: bash
-      - name: "Zip Artifacts"
-        run: |
-          cd ./rdpiano_juce/Builds/LinuxMakefile/build/
-          zip -r rdpiano_juce.vst3.Linux.zip rdpiano_juce.vst3
-          zip -r rdpiano_juce.lv2.Linux.zip rdpiano_juce.lv2
-          cd -
-        shell: bash
-      - name: "Upload Artifacts"
-        uses: actions/upload-artifact@v4
-        with:
-          name: RdPiano-linux
-          path: |
-            ./rdpiano_juce/Builds/LinuxMakefile/build/rdpiano_juce.vst3.Linux.zip
-            ./rdpiano_juce/Builds/LinuxMakefile/build/rdpiano_juce.lv2.Linux.zip
-            ./rdpiano_juce/Builds/LinuxMakefile/build/rdpiano_juce
+              ./build/plugin/rdpiano_juce/rdpiano_juce_artefacts/Release/rdpiano_juce.vst3.macOS.zip
+              ./build/plugin/rdpiano_juce/rdpiano_juce_artefacts/Release/rdpiano_juce.component.macOS.zip
+              ./build/plugin/rdpiano_juce/rdpiano_juce_artefacts/Release/rdpiano_juce.app.macOS.zip
 
   release:
     name: "Release"
-    needs: [build-win, build-osx, build-linux]
-    if: github.ref == 'refs/heads/main'
+    needs: [test-core, test-core-asan, build-osx]
+    if: github.ref == 'refs/heads/master'
     runs-on: "ubuntu-latest"
+    # Publicar la release rodante es lo único que necesita escribir.
+    permissions:
+      contents: write
     steps:
-      - uses: actions/checkout@v3.3.0
+      - uses: actions/checkout@v7.0.1
       - name: Retrieve artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8.0.1
         with:
-          path: ./rdpiano_juce/build
+          path: ./build/release
           pattern: "*"
           merge-multiple: true
-      - uses: "marvinpinto/action-automatic-releases@latest"
+      # Archivada desde 2024 y con runtime node12: no hay versión más alta a
+      # la que subir. Va fijada al SHA de v1.2.1, no a una etiqueta: `@latest`
+      # —y también `@v1.2.1`— es un puntero mutable en un repositorio de
+      # terceros, y este paso corre con permiso de escritura sobre las
+      # releases que descargan los usuarios (AUDITORIA §17). Migrar a
+      # `softprops/action-gh-release` es lo que toca, pero cambia la semántica
+      # del release rodante: ésta reescribe el tag `latest` en cada ejecución
+      # y aquélla no lo mueve si ya existe.
+      - uses: "marvinpinto/action-automatic-releases@919008cf3f741b179569b7a6fb4d8860689ab7f0" # v1.2.1
         with:
           repo_token: "${{ secrets.GITHUB_TOKEN }}"
           prerelease: true
           automatic_release_tag: latest
           title: RdPiano Latest
           files: |
-                 rdpiano_juce/build/**/*
-                 rdpiano_juce/build/**/*
+                 build/release/**/*

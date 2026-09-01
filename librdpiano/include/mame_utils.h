@@ -9,23 +9,28 @@
 
 #define LSB_FIRST
 
-template <typename T, typename U> constexpr T make_bitmask(U n)
+template <typename T, typename U>
+constexpr T make_bitmask(U n)
 {
 	return T((n < (8 * sizeof(T)) ? (std::make_unsigned_t<T>(1) << n) : std::make_unsigned_t<T>(0)) - 1);
 }
-template <typename T, typename U> constexpr T BIT(T x, U n) noexcept { return (x >> n) & T(1); }
-template <typename T, typename U, typename V> constexpr T BIT(T x, U n, V w)
+template <typename T, typename U>
+constexpr T BIT(T x, U n) noexcept { return (x >> n) & T(1); }
+template <typename T, typename U, typename V>
+constexpr T BIT(T x, U n, V w)
 {
 	return (x >> n) & make_bitmask<T>(w);
 }
-template <typename T, typename U, typename... V> constexpr T bitswap(T val, U b, V... c) noexcept
+template <typename T, typename U, typename... V>
+constexpr T bitswap(T val, U b, V... c) noexcept
 {
 	if constexpr (sizeof...(c) > 0U)
 		return (BIT(val, b) << sizeof...(c)) | bitswap(val, c...);
 	else
 		return BIT(val, b);
 }
-template <unsigned B, typename T, typename... U> constexpr T bitswap(T val, U... b) noexcept
+template <unsigned B, typename T, typename... U>
+constexpr T bitswap(T val, U... b) noexcept
 {
 	static_assert(sizeof...(b) == B, "wrong number of bits");
 	static_assert((sizeof(std::remove_reference_t<T>) * 8) >= B, "return type too small for result");
@@ -45,15 +50,39 @@ using u64 = std::uint64_t;
 union PAIR
 {
 #ifdef LSB_FIRST
-	struct { u8 l,h,h2,h3; } b;
-	struct { u16 l,h; } w;
-	struct { s8 l,h,h2,h3; } sb;
-	struct { s16 l,h; } sw;
+	struct
+	{
+		u8 l, h, h2, h3;
+	} b;
+	struct
+	{
+		u16 l, h;
+	} w;
+	struct
+	{
+		s8 l, h, h2, h3;
+	} sb;
+	struct
+	{
+		s16 l, h;
+	} sw;
 #else
-	struct { u8 h3,h2,h,l; } b;
-	struct { s8 h3,h2,h,l; } sb;
-	struct { u16 h,l; } w;
-	struct { s16 h,l; } sw;
+	struct
+	{
+		u8 h3, h2, h, l;
+	} b;
+	struct
+	{
+		s8 h3, h2, h, l;
+	} sb;
+	struct
+	{
+		u16 h, l;
+	} w;
+	struct
+	{
+		s16 h, l;
+	} sw;
 #endif
 	u32 d;
 	s32 sd;
@@ -61,16 +90,16 @@ union PAIR
 
 enum line_state
 {
-	CLEAR_LINE = 0,             // clear (a fired or held) line
-	ASSERT_LINE,                // assert an interrupt immediately
-	HOLD_LINE                   // hold interrupt line until acknowledged
+	CLEAR_LINE = 0, // clear (a fired or held) line
+	ASSERT_LINE,	// assert an interrupt immediately
+	HOLD_LINE		// hold interrupt line until acknowledged
 };
 
 // I/O line definitions
 enum
 {
 	// input lines
-	MAX_INPUT_LINES = 64+3,
+	MAX_INPUT_LINES = 64 + 3,
 	INPUT_LINE_IRQ0 = 0,
 	INPUT_LINE_IRQ1 = 1,
 	INPUT_LINE_IRQ2 = 2,

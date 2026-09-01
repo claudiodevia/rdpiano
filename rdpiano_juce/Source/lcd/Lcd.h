@@ -13,25 +13,31 @@
 #include <JuceHeader.h>
 
 //==============================================================================
-/*
- */
-class Lcd : public juce::Component {
-public:
-  Lcd();
-  ~Lcd() override;
+// El display de dos filas del panel, con el juego de caracteres del original.
+class Lcd : public juce::Component
+{
+  public:
+    Lcd();
+    ~Lcd() override;
 
-  void paint(juce::Graphics &) override;
+    void paint(juce::Graphics &) override;
 
-  void setText(const juce::String &text);
+    // Dos filas de 17 caracteres, en el juego del display: bytes, no texto de
+    // JUCE. Con una `juce::String` el marcador 0xff de la barra de parámetros
+    // salía en UTF-8 de dos bytes y descuadraba la fila.
+    static constexpr int kColumns = 17;
+    static constexpr int kRows = 2;
+    static constexpr int kChars = kColumns * kRows;
 
-  void setScale(float scale);
+    void setText(const uint8_t (&chars)[kChars]);
 
-private:
-  JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(Lcd)
+    void setScale(float scale);
 
-  void LCD_FontRenderStandard(int32_t x, int32_t y, uint8_t ch,
-                              juce::Graphics &g);
+  private:
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(Lcd)
 
-  uint8_t LCD_Data[80];
-  float scale = 1;
+    void LCD_FontRenderStandard(int32_t x, int32_t y, uint8_t ch, juce::Graphics &g);
+
+    uint8_t LCD_Data[kChars];
+    float scale = 1;
 };
