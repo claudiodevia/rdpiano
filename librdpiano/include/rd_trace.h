@@ -1,20 +1,12 @@
 #ifndef RD_TRACE_H
 #define RD_TRACE_H
 
-// Punto único de salida de traza del núcleo (REFACTORIZACION §15).
-//
-// `librdpiano` se define como "sin dependencias", pero conocía `stdio`: había
-// cuatro `printf` activos en rutas que corren **desde el hilo de audio**, y un
-// printf toma el lock de stdio y puede bloquear (AUDITORIA §7). El problema de
-// fondo no era el coste, era que el núcleo decidía por su cuenta a dónde iba
-// la traza.
-//
-// Ahora no decide: en release RD_TRACE no compila a nada —los argumentos ni
-// siquiera se evalúan— y en un build con -DRDPIANO_TRACE la salida va a donde
-// diga el que integra la librería.
+// Punto único de salida de traza del núcleo: el núcleo no decide a dónde va.
+// En release RD_TRACE no compila a nada —ni se evalúan los argumentos—; con
+// -DRDPIANO_TRACE la salida va donde diga quien integra la librería.
 
-// Compilando sin RDPIANO_TRACE, `sink` no se usa; la función existe igual para
-// que el llamante no tenga que compilarse condicionalmente.
+// Sin RDPIANO_TRACE `sink` no se usa, pero la función existe igual para que el
+// llamante no tenga que compilarse condicionalmente.
 typedef void (*RdTraceSink)(const char *message);
 
 // Instala el destino de la traza. `nullptr` descarta. Sin instalar nada, un

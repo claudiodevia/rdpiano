@@ -512,9 +512,9 @@ void Mcu::tcsr_w(u8 data)
     check_irq_lines();
 }
 
-// Los registros internos del chip que caen dentro de 0x0000-0x001F. La placa
-// se queda con los dos puertos del bus de comandos y le pasa el resto a esto;
-// lo que la CPU no reconoce vale 0xFF, igual que antes de partir el mapa.
+// Los registros internos del chip dentro de 0x0000-0x001F: la placa se queda
+// con los dos puertos del bus de comandos y pasa el resto aquí. Lo que la CPU
+// no reconoce vale 0xFF.
 u8 Mcu::readCpuRegister(u16 addr)
 {
     // tcsr

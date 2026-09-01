@@ -196,13 +196,9 @@ static PatchResult run_patch(int patch, RomBank &roms, std::vector<float> *wav)
     Mcu *mcu = new Mcu(ic5, ic6, ic7, prog, ic18);
     mcu->loadSounds(ic5, ic6, ic7, ic18, patchToOffset[patch]);
 
-    // El arranque de verdad, no una copia: hasta la fase 1 estas ocho líneas
-    // reimplementaban mcuReset() a mano, así que un arreglo del arranque en el
-    // plugin dejaba el golden verde sin que se enterase nadie
-    // (REFACTORIZACION §3). Ahora las dos capas llaman a lo mismo.
-    //
-    // El harness calienta al ritmo del parche y el plugin siempre a 20 kHz: esa
-    // divergencia sigue ahí, y por eso boot() obliga a decir cuál se usa.
+    // El mismo arranque que el plugin, no una copia. El harness calienta al
+    // ritmo del parche y el plugin siempre a 20 kHz: por esa divergencia
+    // (trampa 7 de CLAUDE.md) boot() obliga a decir cuál se usa.
     mcu->boot(0, rate32);
 
     PatchResult r;
@@ -346,21 +342,14 @@ static void write_golden(const std::string &path, const std::map<int, PatchResul
 
 // ---------------------------------------------------------------- headroom
 //
-// Lo que autoriza `patchOutputGain[]` (FIABILIDAD §4 · N3). No es una
-// comprobación: no falla nunca y no entra en el ctest. Es la medida —una sola,
-// reproducible— de la que sale la tabla, y por eso vive aquí y no en un script
-// de usar y tirar.
+// De aquí sale `patchOutputGain[]`. No es una comprobación: no falla nunca y no
+// entra en el ctest.
 //
-// Mide el motor entero, no el emulador desnudo: el pico que importa es el que
-// sale del plugin, con el EQ de +8 dB incluido. Normaliza sobre la cadena seca
-// (sin chorus, sin phaser, sin trémolo) porque el chorus modula y su pico
-// depende de la fase del LFO. Lo que el chorus añade por encima NO lo recoge
-// ningún limitador —no hay— y por eso se mide aparte, en la columna `c/efx`:
-// no entra en la corrección, pero sí dice a cuánto llega el peor caso real.
-//
-// Es idempotente: aplica la ganancia que ya está en la tabla y propone
-// `ganancia_actual x objetivo / pico_medido`, así que una segunda pasada sobre
-// la tabla corregida devuelve los mismos números.
+// Mide el motor entero (EQ incluido), no el emulador desnudo, y normaliza sobre
+// la cadena seca porque el chorus modula y su pico depende de la fase del LFO;
+// lo que el chorus añade va aparte, en la columna `c/efx`. Es idempotente:
+// aplica la ganancia que ya está en la tabla y propone
+// `ganancia_actual x objetivo / pico_medido`.
 
 static const double HEADROOM_HOST_RATE = 48000.0;
 static const int HEADROOM_BLOCK = 512;
@@ -426,11 +415,9 @@ static int run_headroom(RomBank &roms)
         double gain = patchOutputGain[patch];
         proposed[patch] = peak > 0 ? gain * HEADROOM_TARGET_PEAK / peak : gain;
 
-        // La misma medida con los efectos puestos. El peor caso no es tenerlos
-        // todos: el phaser ATENÚA, así que chorus solo —que además es el ajuste de
-        // fábrica— pega más fuerte que chorus + phaser. Lo que este máximo saca
-        // por encima de la señal seca es el margen que la compensación tiene que
-        // dejar libre, porque no hay limitador detrás.
+        // La misma medida con efectos. El peor caso no es tenerlos todos: el
+        // phaser ATENÚA, así que chorus solo —el ajuste de fábrica— pega más
+        // fuerte que chorus + phaser.
         double fxPeak = measure_headroom(patch, sets, prog, true, false);
         double fxBoth = measure_headroom(patch, sets, prog, true, true);
         if (fxBoth > fxPeak)

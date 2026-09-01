@@ -1,15 +1,7 @@
-// Congela las dos transcripciones del DSP original: SpaceD (chorus) y Phaser.
-//
-// Los cuerpos `accA_NNN` de spaced.cpp y phaser.cpp son transcripción ciclo a
-// ciclo y no se deben reescribir (REFACTORIZACION §20). Lo que sí se va a
-// tocar es el andamiaje repetido —tabla, clamp_24, writeMemOffs/readMemOffs—
-// que §12 quiere unificar en un lsp_common.h. Esta suite existe para que ese
-// día el cuerpo esté fijado: un hash de la respuesta a un impulso y a un
-// barrido, por efecto y por juego de parámetros.
-//
-// Es la prueba del paso 14 de la fase 2, escrita antes de tocar nada
-// (REFACTORIZACION §17.1). Si un hash se mueve, el andamiaje dejó de ser
-// neutro: no se regenera, se revierte.
+// Congela las dos transcripciones del DSP original —SpaceD (chorus) y Phaser—
+// con un hash de la respuesta a un impulso y a un barrido, por efecto y por
+// juego de parámetros. Los cuerpos `accA_NNN` son transcripción ciclo a ciclo y
+// no se reescriben; si un hash se mueve, no se regenera: se revierte.
 
 #include <string.h>
 
@@ -92,8 +84,8 @@ static unsigned long long hash_of(const std::vector<float> &v)
 
 TEST_SUITE(lsp_tables)
 {
-    // Lo que §21 comprobaba con un `diff` a mano entre spaced.cpp y phaser.cpp
-    // pasa a ser una comprobación del compilador: son la misma tabla.
+    // Las tablas de rate de spaced.cpp y phaser.cpp son la misma: que lo
+    // compruebe el compilador y no un `diff` a mano.
     static_assert(sizeof(spaceDRateTable) == sizeof(phaserRateTable), "las dos tablas de rate tienen que ser la misma");
     CHECK_EQ(sizeof(spaceDRateTable) / sizeof(spaceDRateTable[0]), 128);
     CHECK_EQ(sizeof(spaceDDepthTable) / sizeof(spaceDDepthTable[0]), 128);
@@ -132,8 +124,8 @@ TEST_SUITE(lsp_tables)
 
 TEST_SUITE(lsp_spaced)
 {
-    // Hashes capturados del código tal y como estaba al abrir la fase 2, antes
-    // de tocar el andamiaje común. No se regeneran para poner algo en verde.
+    // Hashes capturados del código original. No se regeneran para poner algo en
+    // verde.
     const int N = 2048;
 
     std::vector<float> impulseDefault = impulse_response_spaced(spaceDRateTable[8], spaceDDepthTable[0x7f], N, false);

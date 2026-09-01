@@ -1,8 +1,5 @@
-// El protocolo del firmware (REFACTORIZACION §3, §17.4).
-//
-// Estas pruebas no necesitan ROMs ni CPU: el puerto es una cola de bytes con
-// nombres. Lo que fijan es la única definición de cada mensaje, después de que
-// la fase 1 la recogiera de las tres capas por las que estaba repartida.
+// El protocolo del firmware: fija los bytes de cada mensaje. No hacen falta
+// ROMs ni CPU, el puerto es una cola de bytes con nombres.
 
 #include <string>
 #include <vector>
@@ -74,8 +71,7 @@ TEST_SUITE(command_port_messages)
 }
 
 // ---------------------------------------------------------------------------
-// La codificación del master tune, que estaba duplicada literal en dos sitios
-// del plugin sin un solo comentario. La tabla es la de §17.4.
+// La codificación del master tune, valor a valor.
 
 TEST_SUITE(command_port_master_tune)
 {
@@ -86,8 +82,7 @@ TEST_SUITE(command_port_master_tune)
         u8 lsb;
     };
 
-    // Valores calculados con las mismas cuatro líneas del plugin anterior a la
-    // fase 1: 16 pasos de 4, tope 0x3c, negativos con MSB 0x7f y LSB +0x48.
+    // 16 pasos de 4, tope 0x3c, negativos con MSB 0x7f y LSB +0x48.
     const Case cases[] = {
         {0, 0x00, 0x00},      {1, 0x00, 0x00},      {2047, 0x00, 0x00},   {2048, 0x00, 0x04}, {16383, 0x00, 0x1c},
         {16384, 0x00, 0x20},  {32766, 0x00, 0x3c},  {32767, 0x00, 0x3c},  {-1, 0x7f, 0x48},   {-2048, 0x7f, 0x4c},
@@ -129,10 +124,8 @@ TEST_SUITE(command_port_master_tune)
 }
 
 // ---------------------------------------------------------------------------
-// El arranque. Hasta la fase 1 el harness reimplementaba estos bytes a mano en
-// vez de llamar al mismo sitio que el plugin, así que un arreglo del arranque
-// dejaba el golden verde sin enterarse nadie. Esto fija la secuencia; que las
-// dos capas la ejecuten es cosa de Mcu::boot().
+// El arranque: esto fija la secuencia de bytes; que las dos capas la ejecuten
+// —y no la reimplementen— es cosa de Mcu::boot().
 
 TEST_SUITE(command_port_boot_sequence)
 {
@@ -154,8 +147,7 @@ TEST_SUITE(command_port_boot_sequence)
 }
 
 // ---------------------------------------------------------------------------
-// Pánico. Antes de la fase 1 no existía y no había dónde ponerlo
-// (FIABILIDAD §3). Esta suite es su especificación.
+// Pánico: esta suite es su especificación.
 
 TEST_SUITE(command_port_all_notes_off)
 {
@@ -196,9 +188,8 @@ TEST_SUITE(command_port_all_notes_off)
 }
 
 // ---------------------------------------------------------------------------
-// El anillo. Sustituye a un std::queue que reservaba memoria desde el hilo de
-// audio (FIABILIDAD §12); lo que hay que fijar es que sea FIFO y que su
-// comportamiento al desbordar esté decidido, no sea accidental.
+// El anillo: que sea FIFO y que su comportamiento al desbordar esté decidido,
+// no sea accidental.
 
 TEST_SUITE(command_port_ring)
 {

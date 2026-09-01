@@ -1,21 +1,12 @@
 #ifndef RD_BOARD_H
 #define RD_BOARD_H
 
-// La placa: el mapa de memoria que ve la CPU (REFACTORIZACION §2, fase 3).
+// La placa: todo lo que cuelga del bus —RAM, chip de sonido, latch de banco,
+// ROMs y los dos puertos del bus de comandos—. Lo que está dentro del chip es
+// de `Mcu`.
 //
-// Hasta la fase 2, `read_byte`/`write_byte` —RAM, chip de sonido, latch de
-// banco, página de params y los dos puertos del bus de comandos— vivían dentro
-// de `mcu.cpp`, en el mismo fichero que el core HD63701 derivado de MAME. Son
-// dos cosas que cambian por razones distintas: el core **no se toca** (trampa 5
-// de CLAUDE.md) y el mapa sí. Quien editaba el mapa estaba editando el fichero
-// que no hay que editar.
-//
-// El reparto es el del hardware: aquí está todo lo que cuelga del bus, y en
-// `Mcu` lo que está dentro del chip —el temporizador, la captura de entrada y
-// las líneas de interrupción—. Las dos direcciones en las que los dos se
-// acoplan pasan por `RdBoardCpu`, y son las mismas dos del bus real: el
-// handshake mira el contador de programa, y escribir en el puerto 2 baja la
-// línea TIN.
+// Los dos únicos acoples, vía `RdBoardCpu`, son los del bus real: el handshake
+// mira el contador de programa y escribir en el puerto 2 baja la línea TIN.
 
 #include "command_port.h"
 #include "mame_utils.h"
@@ -40,10 +31,9 @@ enum
     M6801_LINE_MAX
 };
 
-// Lo que la placa necesita de la CPU. Son tres cosas y ninguna está en el bus:
-// el contador de programa (que el handshake compara contra direcciones fijas
-// del firmware, trampa 1), las líneas de interrupción y los registros internos
-// del chip que caen dentro de 0x0000-0x001F.
+// Lo que la placa necesita de la CPU: el contador de programa (que el handshake
+// compara contra direcciones fijas del firmware, trampa 1), las líneas de
+// interrupción y los registros del chip dentro de 0x0000-0x001F.
 class RdBoardCpu
 {
   public:
@@ -53,8 +43,7 @@ class RdBoardCpu
     virtual void setInputLine(int line, int state) = 0;
 
     // Los registros de 0x0000-0x001F que son del chip y no de la placa
-    // (temporizador y captura de entrada). Lo que la CPU no reconoce devuelve
-    // 0xFF, que es lo que devolvía el mapa antes de partirlo.
+    // (temporizador y captura de entrada). Lo no reconocido devuelve 0xFF.
     virtual u8 readCpuRegister(u16 addr) = 0;
     virtual void writeCpuRegister(u16 addr, u8 data) = 0;
 };
@@ -75,20 +64,14 @@ class RdBoard
     // La CPU que cuelga de este bus. Se fija una vez, al construir el Mcu.
     void attach(RdBoardCpu *cpu) { this->cpu = cpu; }
 
-    // El mapa de memoria. `inline` a propósito: es el camino caliente del
-    // emulador —dos o tres accesos por instrucción, cien instrucciones por
-    // muestra— y partirlo en otra unidad de traducción sin dejarlo visible
-    // costaría una llamada por acceso.
+    // El mapa de memoria. `inline` a propósito: camino caliente del emulador,
+    // dos o tres accesos por instrucción y cien instrucciones por muestra.
     u8 read(u16 addr);
     void write(u16 addr, u8 data);
 
-    // Carga de ROM, partida en dos por coste (REFACTORIZACION §6):
-    //
-    //   loadRomSet()  ~2,9 ms  depende del ROM SET (tres en total)
-    //   selectPatch() ~0,03 ms depende del PARCHE  (dieciseis)
-    //
-    // Las ROM que se pasan a loadRomSet tienen que sobrevivir a la placa: se
-    // guarda el puntero de la params para poder remapear la página.
+    // Carga de ROM, partida en dos por coste (~2,9 ms el juego de ROM, ~0,03 ms
+    // el parche). Las ROM tienen que sobrevivir a la placa: se guarda el puntero
+    // de la params para remapear la página.
     void loadRomSet(const u8 *temp_ic5, const u8 *temp_ic6, const u8 *temp_ic7, const u8 *temp_paramsrom);
     void selectPatch(size_t from_addr);
 
@@ -113,9 +96,8 @@ class RdBoard
 };
 
 // ---------------------------------------------------------------------------
-// El mapa, byte a byte. Es una copia literal del que estaba en `mcu.cpp`: el
-// orden de las ramas y cada máscara se conservan, porque el golden del harness
-// mide exactamente esto.
+// El mapa, byte a byte. El orden de las ramas y cada máscara son los del
+// hardware: el golden del harness mide exactamente esto.
 //
 //   0x0000-0x001F  registros del MCU (puerto1=0x02 datos, puerto2=0x03 control)
 //   0x0000-0x0FFF  RAM

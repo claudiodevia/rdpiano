@@ -1,20 +1,10 @@
 /*
   ==============================================================================
 
-    Los diez parámetros del plugin, declarados una sola vez
-    (REFACTORIZACION §9).
-
-    Hasta la fase 2 la misma información vivía en tres sitios: once
-    `addParameter` en el constructor, un XML escrito atributo a atributo en
-    `getStateInformation`, y una lista de validaciones en `setStateInformation`
-    con un segundo juego de valores por defecto que **no coincidía** con el del
-    constructor (`chorusRate` arrancaba en 5 y se restauraba a 1). Cargar una
-    sesión antigua cambiaba el sonido.
-
-    Aquí la declaración es una tabla y el valor por defecto de cada parámetro
-    sale de `RdEngineParams`, que es el POD que lee el motor: plugin y núcleo no
-    pueden discrepar sobre qué es "de fábrica". El resto —serialización,
-    validación de rango— lo hace `juce::AudioProcessorValueTreeState`.
+    Los diez parámetros del plugin, declarados una sola vez como tabla. El valor
+    por defecto de cada uno sale de `RdEngineParams`, el POD que lee el motor:
+    plugin y núcleo no pueden discrepar sobre qué es "de fábrica". La
+    serialización y la validación de rango las hace el APVTS.
 
   ==============================================================================
 */

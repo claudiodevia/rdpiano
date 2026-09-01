@@ -1,11 +1,9 @@
-// libresample: lo que el motor necesita saber de él.
+// libresample: lo que el motor necesita saber de él —longitud de salida por
+// ratio, ausencia de NaN en los bordes, y que abrir y cerrar mil veces no
+// acumule handles.
 //
-// Del resampler interesan tres cosas (REFACTORIZACION §17.6): la longitud de
-// salida para cada ratio, la ausencia de NaN en los bordes, y que abrir y
-// cerrar mil veces no acumule handles — la fuga de AUDITORIA §9.
-//
-// El código de resample/ es de terceros (libresample, BSD/LGPL) y no se toca:
-// esto congela cómo lo usa el motor, no cómo está escrito.
+// El código de resample/ es de terceros y no se toca: esto congela cómo lo usa
+// el motor, no cómo está escrito.
 
 #include <math.h>
 
@@ -16,11 +14,9 @@
 #define RD_CAN_MEASURE_RSS 1
 #endif
 
-// Bajo AddressSanitizer el pico de RSS lo domina la instrumentación —redzones
-// y cuarentena de liberados—, no lo que reserve el código: mil ciclos
-// correctos crecen 204 MB. La medida sólo tiene sentido en el build sin ASan,
-// que es el que la CI corre en Release; con ASan el bucle se ejecuta igual
-// (que es lo que detectaría un uso después de cerrar) pero no se mide.
+// Bajo AddressSanitizer el pico de RSS lo domina la instrumentación, no el
+// código: mil ciclos correctos crecen 204 MB. Con ASan el bucle se ejecuta
+// igual —eso detecta un uso después de cerrar— pero no se mide.
 #if defined(__has_feature)
 #if __has_feature(address_sanitizer)
 #undef RD_CAN_MEASURE_RSS
@@ -140,12 +136,9 @@ TEST_SUITE(resampler_finite)
 
 TEST_SUITE(resampler_no_leak)
 {
-    // AUDITORIA §9: cada handle con highQuality=1 reserva ~600 KB. Mil abiertos
-    // sin cerrar son ~600 MB; mil abiertos y cerrados no deben mover el pico de
-    // memoria del proceso.
-    //
-    // ru_maxrss es un pico: nunca baja, así que si el bucle filtrase, el delta
-    // lo delataría aunque el sistema recuperase la memoria después.
+    // Cada handle con highQuality=1 reserva ~600 KB: mil sin cerrar son ~600 MB,
+    // mil abiertos y cerrados no deben mover el pico del proceso. `ru_maxrss`
+    // nunca baja, así que una fuga se vería en el delta.
 #ifdef RD_CAN_MEASURE_RSS
     struct rusage before;
     getrusage(RUSAGE_SELF, &before);

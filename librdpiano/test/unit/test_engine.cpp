@@ -1,14 +1,8 @@
 // El simulador de host: RdPianoEngine instanciado, no copiado.
 //
-// FIABILIDAD §17.1 proponía escribir una prueba que "reprodujera literalmente
-// las líneas 382-513 de PluginProcessor.cpp". Copiar 130 líneas de lógica a un
-// test era el síntoma de que esa lógica no tenía casa. Ahora la tiene
-// (REFACTORIZACION §1) y esto la instancia.
-//
-// Cada suite de aquí cubre una fila de la tabla de §17.6: invariancia de
-// bloque, bloques de borde, tasas del host, cero reservas en render(),
-// finitud, cambio de parche en caliente, temporización del MIDI y headroom.
-// Ninguna necesita JUCE ni un DAW.
+// Una suite por riesgo: invariancia de bloque, bloques de borde, tasas del
+// host, cero reservas en render(), finitud, cambio de parche en caliente,
+// temporización del MIDI y headroom. Ninguna necesita JUCE ni un DAW.
 
 #include <math.h>
 #include <stdio.h>
@@ -193,21 +187,15 @@ static Stereo render_blocks(RdPianoEngine *e, int total, const int *blocks, int 
 
 TEST_SUITE(engine_block_invariance)
 {
-    // El mismo stream, pedido de una vez y pedido a trozos irregulares.
+    // El mismo stream, pedido de una vez y pedido a trozos irregulares. No es
+    // bit a bit el mismo y no puede serlo: `renderBufferFrames` se redondea
+    // hacia arriba y el corrector de deriva resta hasta numFrames/4, así que el
+    // troceado cambia cuántas muestras genera el emulador (con algún hueco
+    // corto audible como clic; defecto conocido, docs/REFACTORIZACION.md §19).
     //
-    // §17.6 pedía que fuera bit a bit el mismo. No lo es, y no puede serlo con
-    // esta arquitectura: `renderBufferFrames` se redondea hacia arriba en cada
-    // bloque y el corrector de deriva le resta hasta numFrames/4, así que el
-    // número de muestras que el emulador genera depende del troceado. Medido:
-    // el nivel coincide al 0,01 %, pero de vez en cuando el resampler devuelve
-    // menos muestras de las pedidas y la cola del bloque se queda en silencio
-    // —un hueco corto, audible como clic. Es un defecto real que sólo se ve
-    // ahora que hay un motor al que se le pueden pedir bloques raros; queda
-    // fuera de la lista de la fase 2 y está anotado en REFACTORIZACION §19.
-    //
-    // Lo que sí se fija aquí: misma longitud, mismo nivel, mismo rango de
-    // pendientes dentro de los bloques —que es lo que se rompería si algo del
-    // estado viviera en una variable local del bloque— y determinismo exacto.
+    // Lo que sí se fija: misma longitud, mismo nivel, mismo rango de pendientes
+    // —que es lo que rompería un estado guardado en una variable local del
+    // bloque— y determinismo exacto.
     const int TOTAL = 4096;
 
     RdPianoEngine *a = make_engine(20000.0, TOTAL);
@@ -322,8 +310,8 @@ TEST_SUITE(engine_edge_blocks)
     e->pushMidi(0, 0x90, 60, 100);
 
     // Un bloque mayor que el preparado: el contrato de JUCE no garantiza que
-    // maximumExpectedSamplesPerBlock sea un máximo (AUDITORIA §4). Se pide con
-    // un búfer de verdad de ese tamaño para que ASan vea cualquier desborde.
+    // maximumExpectedSamplesPerBlock lo sea. El búfer es de verdad de ese
+    // tamaño para que ASan vea cualquier desborde.
     const int sizes[] = {0, 1, 2, 7, MAXB - 1, MAXB, MAXB + 1, MAXB * 2};
     bool finite = true;
     for (int n : sizes)
@@ -380,8 +368,8 @@ TEST_SUITE(engine_host_rates)
                       total);
             CHECK_MSG(all_finite(out.l) && all_finite(out.r), "%.0f Hz parche %d", hostRate, patch);
 
-            // Suena: es la comprobación que caza AUDITORIA §1 (silencio total por
-            // debajo de 32 kHz, con el búfer intermedio dimensionado al revés).
+            // Suena: caza el silencio total por debajo de 32 kHz que da un
+            // búfer intermedio dimensionado al revés.
             double level = rms(out.l, out.l.size() / 4, out.l.size());
             CHECK_MSG(level > 1e-4, "%.0f Hz parche %d: rms %.3g", hostRate, patch, level);
 
@@ -432,8 +420,8 @@ TEST_SUITE(engine_no_alloc_in_render)
     checks.add("render-sin-operator-new", g_allocCount == 0, check_fmt("%ld reservas en 32 bloques", g_allocCount));
 
     // El otro lado: libresample reserva con malloc, así que el contador de
-    // arriba no lo ve. resample_open() cuesta 2,5 ms y 600 KB (AUDITORIA §2) y
-    // no puede ocurrir con el bloque en marcha.
+    // arriba no lo ve. resample_open() cuesta 2,5 ms y 600 KB y no puede
+    // ocurrir con el bloque en marcha.
     checks.add("render-sin-resample-open", e->stats.resamplerOpens == opensBefore,
                check_fmt("%lu aperturas", e->stats.resamplerOpens - opensBefore));
 
@@ -568,10 +556,9 @@ TEST_SUITE(engine_patch_change)
 
 TEST_SUITE(engine_midi_timing)
 {
-    // pushMidi(frame, ...) -> la nota tiene que empezar a sonar en ese frame,
-    // no al principio del bloque. Es la prueba que fija AUDITORIA §5: con la
-    // comparación invertida, el bloque entero de MIDI se consume en la primera
-    // muestra y toda la resolución intra-bloque se pierde.
+    // pushMidi(frame, ...) -> la nota tiene que empezar a sonar en ese frame, no
+    // al principio del bloque: con la comparación invertida, el bloque entero de
+    // MIDI se consume en la primera muestra.
     const int BLOCK = 2048;
     const double HOST = 48000.0;
 
@@ -629,21 +616,10 @@ TEST_SUITE(engine_midi_timing)
 
 TEST_SUITE(engine_headroom)
 {
-    // Dieciséis voces a velocidad 127 con el escalado seco del plugin: el pico
-    // tiene que quedar por debajo de fondo de escala, y en el MISMO sitio para
-    // todos los parches.
-    //
-    // Hasta que se aplicó `patchOutputGain[]` esta comprobación fijaba el
-    // defecto —"recorta hoy", pico 2,82 en el parche 0 y hasta 4,83 en el
-    // E-Piano 1, FIABILIDAD §4 (N3, ALTO)— porque arreglarlo era un cambio de
-    // audio que había que escuchar. Ya está aplicado, así que ahora fija lo que
-    // de verdad importa: que los 16 parches están al MISMO nivel, el que dice
-    // `HEADROOM_TARGET_PEAK`.
-    //
-    // Lo que ya no fija es "no recorta": el objetivo de la tabla es +3 dBFS y
-    // pasa de fondo de escala a propósito, por nivel (patches.h). Lo que se
-    // comprueba en su lugar es que no se dispare muy por encima del objetivo,
-    // que es el fallo que esta suite tiene que ver.
+    // Dieciséis voces a velocidad 127: lo que se fija es que los 16 parches
+    // queden al MISMO nivel, el de `HEADROOM_TARGET_PEAK`. No se fija "no
+    // recorta": el objetivo son +3 dBFS y pasa de fondo de escala a propósito
+    // (patches.h); lo que no puede es dispararse muy por encima.
     const int BLOCK = 512;
 
     // El objetivo de la tabla, con el margen de lo que la medida se mueve al
@@ -678,8 +654,7 @@ TEST_SUITE(engine_headroom)
         double p = peak(out.l);
         checks.add(check_fmt("headroom-suena-p%d", probes[pi]), p > 0.01, check_fmt("pico %.4f", p));
 
-        checks.add(check_fmt("headroom-acotado-p%d (FIABILIDAD §4)", probes[pi]), p < TARGET * 1.5,
-                   check_fmt("pico %.4f", p));
+        checks.add(check_fmt("headroom-acotado-p%d", probes[pi]), p < TARGET * 1.5, check_fmt("pico %.4f", p));
 
         // Normalizado al objetivo de patches.h, no simplemente por debajo de 1.
         checks.add(check_fmt("headroom-normalizado-p%d", probes[pi]), p > TARGET * 0.9 && p < TARGET * 1.02,
@@ -688,11 +663,9 @@ TEST_SUITE(engine_headroom)
         delete e;
     }
 
-    // El peor caso medido de toda la cadena: el parche 5 con el chorus a la
-    // profundidad de fábrica, que añade +4,9 dB sobre la señal seca. Con la seca
-    // a +3 dBFS eso son +7,9 dBFS (pico 2,47), y como no hay limitador detrás
-    // recorta en la salida del host: es el precio del nivel, aceptado y medido.
-    // Lo que aquí se fija es que ese peor caso no crezca sin que nadie lo note.
+    // El peor caso medido de toda la cadena: el parche 5 con el chorus de
+    // fábrica, +4,9 dB sobre la seca, o sea +7,9 dBFS. Recorta en la salida del
+    // host —no hay limitador— y se acepta; lo que se fija es que no crezca.
     {
         RdPianoEngine *e = make_engine(48000.0, BLOCK, 5);
         if (!e)

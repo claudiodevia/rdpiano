@@ -4,22 +4,12 @@
 #include "mame_utils.h"
 #include "sa_tables.h"
 
-// Los tres bloques de SoundChip::update() (REFACTORIZACION §5, §17.5).
+// Los tres bloques de SoundChip::update(). Lo que pasa entre ellos —Ic19Out,
+// Ic9Out— es el bus real entre los chips, por eso está en la firma.
 //
-// El bucle original eran 135 líneas con tres bloques delimitados por
-// comentarios `// IC19`, `// IC9`, `// IC8` y llaves anónimas, y el estado
-// entre ellos viajaba en cuatro variables sueltas declaradas arriba. Esas
-// cuatro variables documentaban sin querer **cuál es el bus real entre los
-// chips**: aquí están en la firma, que es donde se ven.
-//
-// La aritmética no se ha tocado ni una operación. Cada `& 0x3fff`, cada `+ 1`,
-// cada `|= 0x3c00` replica un sumador de verdad y no se "simplifica" (§20).
-// Lo que fija que la extracción fue neutra son dos cosas a la vez: los ~2.200
-// vectores de test/vectors/ic_blocks.txt, capturados del código anterior, y
-// los 16 hashes del golden.
-//
-// Van `inline` en la cabecera a propósito: eran bloques dentro de un bucle
-// caliente y tienen que poder seguir integrándose igual.
+// Cada `& 0x3fff`, cada `+ 1`, cada `|= 0x3c00` replica un sumador de verdad y
+// no se "simplifica": lo fijan los ~2.200 vectores de test/vectors/ic_blocks.txt
+// y los 16 hashes del golden. `inline` porque es un bucle caliente.
 
 // El estado de una parte. Diez por voz, dieciséis voces.
 struct SA_Part
@@ -149,12 +139,9 @@ inline Ic9Out tick_ic9(SA_Part &part, const SA_Part &flags, const SaTables &tabl
     return out;
 }
 
-// IC8: suma logarítmica de volumen y muestra. Los cuatro valores de la wave
-// ROM entran por parámetro porque son del juego de ROMs cargado, no del bloque:
-// así el bloque se puede probar sin ROMs.
-//
-// Devuelve la muestra tal cual la calcula el chip. Que la voz suene o no —el
-// hack `investigate` de env_value == 0— lo decide el bucle, que es donde se ve.
+// IC8: suma logarítmica de volumen y muestra. Los cuatro valores de la wave ROM
+// entran por parámetro para poder probar el bloque sin ROMs. Devuelve la muestra
+// tal cual la calcula el chip; que la voz suene o no lo decide el bucle.
 inline s32 tick_ic8(const SA_Part &part, const Ic19Out &ic19, const Ic9Out &ic9, uint16_t waverom_exp, bool sign_pa,
                     uint16_t waverom_delta, bool sign_pb, const SaTables &tables)
 {

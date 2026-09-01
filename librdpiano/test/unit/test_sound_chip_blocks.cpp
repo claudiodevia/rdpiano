@@ -1,15 +1,11 @@
-// Los tres bloques de SoundChip::update() (REFACTORIZACION §5, §17.5).
+// Los tres bloques de SoundChip::update(). El hash del golden dice que *algo*
+// cambió; estos vectores dicen cuál de los tres sumadores. Cubren un escenario
+// musical en cuatro parches más los bordes: fin de envolvente con IRQ, el
+// silenciado marcado `investigate`, el wrap de fase y las dos banderas de la
+// voz en sus cuatro combinaciones.
 //
-// El hash del golden dice que *algo* cambió; estos vectores dicen **cuál** de
-// los tres sumadores. Se capturaron del código anterior a la extracción, con
-// un escenario musical en cuatro parches más un barrido de bordes escritos
-// directamente en los registros del chip: envolvente que termina y dispara
-// IRQ, el silenciado marcado `investigate`, el wrap de fase, y las dos
-// banderas de la voz en sus cuatro combinaciones.
-//
-// No hacen falta ROMs: los cuatro valores de la wave ROM que consume IC8
-// vienen en el propio vector. Solo hace falta la LUT compartida, que es
-// función pura del índice.
+// No hacen falta ROMs: los cuatro valores de la wave ROM que consume IC8 vienen
+// en el propio vector.
 
 #include <stdio.h>
 #include <string.h>

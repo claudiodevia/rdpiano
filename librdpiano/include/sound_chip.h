@@ -36,7 +36,7 @@ class SoundChip
     uint16_t samples_delta[0x20000];
     bool samples_delta_sign[0x20000];
 
-    // LUT deterministas, compartidas por todas las instancias (§4).
+    // LUT deterministas, compartidas por todas las instancias.
     const SaTables &tables;
 
     SA_Part m_parts[NUM_VOICES][PARTS_PER_VOICE_MEM]; // channel memory

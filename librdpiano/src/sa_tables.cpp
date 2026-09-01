@@ -2,10 +2,8 @@
 
 #include <cmath>
 
-// Generación de las dos LUT de IC10/IC11, movida tal cual desde el constructor
-// de SoundChip (REFACTORIZACION §4). No se ha tocado una sola operación: los
-// dos `TODO: I want to believe there is a better way` siguen donde estaban, y
-// test_sa_tables.cpp fija la salida byte a byte.
+// Generación de las dos LUT de IC10/IC11, transcritas del silicio. No se toca
+// una operación: test_sa_tables.cpp fija la salida byte a byte.
 
 void sa_tables_generate(SaTables &out)
 {

@@ -1,11 +1,3 @@
-/*
-  ==============================================================================
-
-    This file contains the basic framework code for a JUCE plugin processor.
-
-  ==============================================================================
-*/
-
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
 #include "patches.h"
@@ -34,9 +26,8 @@ RdPiano_juceAudioProcessor::RdPiano_juceAudioProcessor()
 {
     engine = std::make_unique<RdPianoEngine>(romSets, (const uint8_t *)BinaryData::RD200_B_bin);
 
-    // Los diez parámetros salen de la tabla de PluginParams.h; aquí sólo se
-    // cachean sus valores crudos —para no buscar por id desde el hilo de audio—
-    // y se escucha su cambio para repintar el panel.
+    // Los diez parámetros salen de la tabla de PluginParams.h: aquí se cachean
+    // sus valores crudos y se escucha su cambio para repintar el panel.
     for (int i = 0; i < kNumRdParams; i++)
     {
         paramValues[i] = apvts.getRawParameterValue(rdParamSpecs[i].id);
@@ -55,8 +46,8 @@ RdPiano_juceAudioProcessor::~RdPiano_juceAudioProcessor()
 void RdPiano_juceAudioProcessor::parameterChanged(const juce::String &, float) { sendChangeMessage(); }
 
 //==============================================================================
-// Acceso por índice de tabla. El editor lo usa para recorrer descriptores en
-// vez de repetir un bloque por control (REFACTORIZACION §10).
+// Acceso por índice de tabla: es lo que deja al editor recorrer descriptores en
+// vez de repetir un bloque por control.
 juce::RangedAudioParameter &RdPiano_juceAudioProcessor::param(RdParamId id) const
 {
     juce::RangedAudioParameter *p = apvts.getParameter(rdParamSpecs[id].id);
@@ -93,8 +84,8 @@ void RdPiano_juceAudioProcessor::setCurrentProgram(int index)
         return;
 
     // El motor decide si hay que recargar el juego de ROM o basta con remapear
-    // una página (REFACTORIZACION §6). Lo que sigue siendo del plugin es
-    // serializarlo con el hilo de audio: setPatch() corre el emulador.
+    // una página. Del plugin es serializarlo con el hilo de audio: setPatch()
+    // corre el emulador.
     mcuLock.enter();
     engine->setPatch(index);
     mcuLock.exit();
@@ -117,9 +108,9 @@ void RdPiano_juceAudioProcessor::setMasterTune(int16_t tune)
 {
     masterTune = tune;
 
-    // El switcharoo y la codificación viven en el núcleo (REFACTORIZACION §3).
-    // Lo que sigue siendo del plugin es serializarlo con el hilo de audio: esto
-    // corre el emulador desde el hilo de UI (trampa 4 de CLAUDE.md).
+    // El switcharoo y la codificación viven en el núcleo. Del plugin es
+    // serializarlo: esto corre el emulador desde el hilo de UI (trampa 4 de
+    // CLAUDE.md).
     mcuLock.enter();
     engine->setMasterTune(tune);
     mcuLock.exit();
@@ -127,12 +118,9 @@ void RdPiano_juceAudioProcessor::setMasterTune(int16_t tune)
     sendChangeMessage();
 }
 
-// Vuelca los parámetros de JUCE al POD que lee render(). Se llama una vez por
-// bloque, antes de renderizar: el motor no conoce juce::AudioParameter.
-//
-// Se lee de los `std::atomic<float>` cacheados en el constructor, no del
-// AudioProcessorValueTreeState: buscar por id es una búsqueda de cadena, y
-// esto corre en el hilo de audio.
+// Vuelca los parámetros de JUCE al POD que lee render(), una vez por bloque. Se
+// lee de los `std::atomic<float>` cacheados en el constructor y no del APVTS:
+// buscar por id es una búsqueda de cadena en el hilo de audio.
 void RdPiano_juceAudioProcessor::syncParamsToEngine()
 {
     RdEngineParams &p = engine->params;
@@ -151,14 +139,10 @@ void RdPiano_juceAudioProcessor::syncParamsToEngine()
 //==============================================================================
 void RdPiano_juceAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
 {
-    // Todo lo que render() va a necesitar —búferes, resamplers, coeficientes del
-    // EQ— se reserva aquí (AUDITORIA §§1, 2, 11, 12), y arranca el firmware.
-    //
-    // No hace falta volver a seleccionar el parche: lo que boot() reinicia es el
-    // firmware, no el mapeo de la página de params que hizo selectPatch(), así
-    // que el parche sobrevive al arranque. Volver a aplicarlo cambiaría el audio
-    // (medido: hash distinto ya en el parche 0, por el trabajo de firmware que
-    // añaden el 0x31/0x30 de más).
+    // Aquí se reserva todo lo que render() necesita y arranca el firmware. No
+    // hay que volver a seleccionar el parche: boot() reinicia el firmware, no el
+    // mapeo de la página de params, y re-aplicarlo cambiaría el audio (trampa 8
+    // de CLAUDE.md).
     mcuLock.enter();
     engine->prepare(sampleRate, samplesPerBlock);
     mcuLock.exit();
@@ -194,8 +178,7 @@ void RdPiano_juceAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer, 
 
     // Un solo recorrido de midiMessages, que ya viene ordenado por
     // samplePosition. `numBytes` se mira antes de leer data[1] y data[2]: un
-    // SysEx corto vive en el montículo y leer de más sí sale del búfer
-    // (AUDITORIA §5).
+    // mensaje corto vive en el montículo y leer de más sale del búfer.
     for (const auto metadata : midiMessages)
     {
         const juce::uint8 *raw = metadata.data;
@@ -220,15 +203,11 @@ juce::AudioProcessorEditor *RdPiano_juceAudioProcessor::createEditor()
 }
 
 //==============================================================================
-// El preset es el árbol del AudioProcessorValueTreeState más las dos cosas que
-// no son parámetros: el parche (que es el programa) y la afinación maestra.
-//
-// La etiqueta raíz sigue siendo <RdPiano>, la misma que escribía el XML a mano
-// de la fase 2, y los dos atributos conservan su nombre: una sesión guardada
-// por una versión anterior se sigue abriendo y recupera parche y afinación.
-// Lo que aquella versión guardaba como atributos de la raíz —los diez
-// parámetros— ya no se lee, y por eso vuelven a fábrica, que es justo lo que
-// aquel código hacía mal (REFACTORIZACION §9).
+// El preset es el árbol del APVTS más las dos cosas que no son parámetros: el
+// parche (que es el programa) y la afinación maestra. La etiqueta raíz
+// <RdPiano> y los nombres de esos dos atributos no cambian: una sesión de una
+// versión anterior se sigue abriendo y recupera parche y afinación (sus diez
+// parámetros, que iban como atributos de la raíz, vuelven a fábrica).
 void RdPiano_juceAudioProcessor::getStateInformation(juce::MemoryBlock &destData)
 {
     juce::ValueTree state = apvts.copyState();

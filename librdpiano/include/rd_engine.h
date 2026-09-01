@@ -1,17 +1,8 @@
 #ifndef RD_ENGINE_H
 #define RD_ENGINE_H
 
-// El motor de audio completo, sin JUCE (REFACTORIZACION §1).
-//
-// Hasta la fase 2 toda la cadena —escalados, chorus, phaser, trémolo, EQ,
-// resampling y reparto temporal del MIDI— vivía dentro de `processBlock`,
-// mezclada con `juce::AudioBuffer`. Consecuencia: la mitad del riesgo real del
-// producto no era alcanzable desde ninguna prueba, y el "simulador de host"
-// que pedía FIABILIDAD §17.1 sólo se podía escribir copiando 130 líneas.
-//
-// Aquí está esa cadena entera como una clase de C++ puro. `processBlock` queda
-// en volcar el MIDI a `pushMidi()` y llamar a `render()`; `test_engine.cpp` la
-// instancia en vez de copiarla.
+// La cadena de audio entera —emulador, chorus, phaser, trémolo, EQ, resampling
+// y reparto del MIDI— como clase de C++ puro, sin JUCE.
 //
 // Contrato de tiempo real:
 //   - `prepare()` reserva TODO. `render()` no reserva, no bloquea y no imprime.
@@ -26,9 +17,8 @@
 
 class Mcu;
 
-// Los cuatro chips de un juego de ROM, ya en memoria. El motor guarda los
-// punteros: tienen que sobrevivirle (BinaryData en el plugin, ficheros
-// mapeados en las pruebas).
+// Los cuatro chips de un juego de ROM, ya en memoria. El motor solo guarda los
+// punteros: tienen que sobrevivirle.
 struct RdRomSet
 {
     const u8 *ic5 = nullptr;
@@ -37,8 +27,8 @@ struct RdRomSet
     const u8 *ic18 = nullptr;
 };
 
-// Parámetros del motor. POD y sin lógica: el hilo de UI escribe, `render()`
-// lee. Los valores por defecto son los del plugin.
+// Parámetros del motor. POD sin lógica: el hilo de UI escribe, `render()` lee.
+// Los valores por defecto son los de fábrica del plugin.
 struct RdEngineParams
 {
     float volume = 1.0f;
@@ -65,13 +55,9 @@ struct RdMidiEvent
     u8 data2 = 0;
 };
 
-// Biquad en forma directa II traspuesta, con los mismos coeficientes y el
-// mismo orden de operaciones que `juce::dsp::IIR::Filter<float>`: el EQ medio
-// del plugin tiene que sonar igual después de salir de JUCE.
-//
-// Lo único que no se replica es el `snapToZero` de JUCE, que sólo existe en
-// x86 (`JUCE_SNAP_TO_ZERO` es un no-op fuera de Intel) y que en un build ARM
-// —el objetivo del plugin— tampoco se ejecutaba.
+// Biquad en forma directa II traspuesta (el EQ medio). Replica coeficientes y
+// orden de operaciones de `juce::dsp::IIR::Filter<float>`, salvo su
+// `snapToZero`, que fuera de Intel es un no-op.
 struct RdBiquad
 {
     float b0 = 1.0f, b1 = 0.0f, b2 = 0.0f, a1 = 0.0f, a2 = 0.0f;
@@ -83,8 +69,7 @@ struct RdBiquad
         s2 = 0.0f;
     }
 
-    // Coeficientes de `Coefficients<float>::makePeakFilter`, normalizados por a0
-    // como hace `assignImpl`.
+    // Coeficientes de `Coefficients<float>::makePeakFilter`, normalizados por a0.
     void setPeak(double sampleRate, float frequency, float q, float gainFactor);
 
     inline float process(float in)
@@ -96,9 +81,8 @@ struct RdBiquad
     }
 };
 
-// Contadores de diagnóstico. El núcleo no imprime desde el hilo de audio
-// (AUDITORIA §7): lo que antes era un `printf` por bloque es un contador que
-// la UI puede leer cuando quiera.
+// Contadores de diagnóstico: el núcleo no imprime desde el hilo de audio, así
+// que lo que iría a un log es un contador que la UI lee cuando quiere.
 struct RdEngineStats
 {
     unsigned long tooFewFrames = 0;  // el bloque pedía menos de 2 muestras
@@ -107,11 +91,9 @@ struct RdEngineStats
     unsigned long clicks = 0;        // el resampler no consumió nada
     unsigned long midiDropped = 0;   // la cola de eventos se llenó
 
-    // resample_open() reserva ~600 KB con malloc y calcula un filtro Kaiser de
-    // ~70.000 coeficientes: 2,5 ms por handle (AUDITORIA §2). Fuera de prepare()
-    // este contador no se puede mover, y test_engine lo vigila — es la mitad de
-    // la prueba "sin reservas en RT" que un contador de `operator new` no ve,
-    // porque libresample usa malloc.
+    // resample_open() reserva ~600 KB y calcula un filtro Kaiser: 2,5 ms por
+    // handle, así que fuera de prepare() no se puede mover. test_engine lo
+    // vigila porque libresample usa malloc y `operator new` no lo vería.
     unsigned long resamplerOpens = 0;
 };
 
@@ -136,7 +118,7 @@ class RdPianoEngine
     void release();
 
     // Cambia de parche. Sólo recarga el juego de ROM si cambia de verdad; dentro
-    // del mismo juego es remapear una página (REFACTORIZACION §6).
+    // del mismo juego es remapear una página.
     void setPatch(int patch);
     int patch() const { return currentPatch; }
 
@@ -174,7 +156,7 @@ class RdPianoEngine
     RdBiquad eqR;
 
     // Abiertos en prepare() para todo el rango de factores de esta tasa de host
-    // y cerrados en release(): render() no los toca (AUDITORIA §2 y §9).
+    // y cerrados en release(): render() no los toca.
     void *resampleL = nullptr;
     void *resampleR = nullptr;
 

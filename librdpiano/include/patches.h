@@ -3,13 +3,12 @@
 
 #include <stddef.h>
 
-// Tabla de parches compartida entre el plugin y las pruebas.
-// Sin dependencias: solo datos. Los punteros a las ROMs los resuelve cada
-// consumidor (BinaryData en el plugin, ficheros en las pruebas), pero los
-// nombres canónicos de fichero viven aquí para que no puedan discrepar.
+// Tabla de parches compartida entre el plugin y las pruebas: solo datos, sin
+// dependencias. Cada consumidor resuelve los punteros a las ROMs (BinaryData en
+// el plugin, ficheros en las pruebas), pero los nombres canónicos están aquí.
 //
-// `inline constexpr` (C++17) y no `static const`: con `static` cada unidad de
-// traducción recibiría su propia copia de cada tabla.
+// `inline constexpr` y no `static const`: con `static`, una copia de cada tabla
+// por unidad de traducción.
 
 enum RomSetId
 {
@@ -63,39 +62,18 @@ inline constexpr int patchSampleRates[NUM_PATCHES] = {
     // MK80
     20000, 20000, 20000, 32000, 20000, 20000, 32000, 20000};
 
-// Compensación de ganancia por parche (FIABILIDAD §4 · N3).
+// Compensación de ganancia por parche: normaliza los 16 al mismo pico (+3 dBFS)
+// con el peor caso razonable —acorde de 16 notas a velocity 127 y `volume` a
+// tope—, medido con la cadena del motor a 48 kHz. Sin ella hay casi 12 dB entre
+// el parche más flojo y el más caliente.
 //
-// El emulador no tiene headroom. FIABILIDAD lo midió sobre la señal seca —8 de
-// los 16 parches por encima de fondo de escala con un acorde de 16 notas a
-// velocity 127, el parche 0 en 2,82— y medido después con la cadena entera del
-// motor, con el EQ de +8 dB que es lo que de verdad sale, resultó ser peor:
-// pasaban los 16, de +1,9 dBFS (Harpsichord) a +13,7 (E-Piano 1). Y no pasaban
-// lo mismo: casi 12 dB entre el más flojo y el más caliente, así que cambiar de
-// sonido cambiaba de nivel.
+// Se aplica en la salida, después de los efectos: la aritmética entera del
+// emulador y de lsp/ queda intacta, así que ni el golden ni los hashes de
+// test_lsp.cpp se mueven.
 //
-// Estos factores normalizan los 16 al mismo pico, medido con la cadena del
-// motor (seca, EQ incluido) a 48 kHz. El motor los aplica en la salida,
-// después de los efectos: el camino entero del emulador y de lsp/ es
-// aritmética entera y sigue intacto, así que ni el golden del e2e ni los
-// hashes de test_lsp.cpp se mueven.
-//
-// El objetivo es +3 dBFS y es una decisión de nivel, no de seguridad: a los
-// -6 dBFS que la tabla tuvo hasta ahora el plugin sonaba flojo a volumen
-// máximo. El caso que se normaliza es el peor razonable —acorde de 16 notas a
-// velocity 127 con `volume` a tope—, así que tocar normal queda muy por
-// debajo; lo que se acepta a cambio es que ESE caso pase de fondo de escala.
-//
-// Detrás NO hay limitador, así que lo que se pase recorta en la salida del
-// host. Medido, el chorus a profundidad de fábrica añade hasta +4,9 dB sobre
-// la señal seca —el phaser, al revés, atenúa—, de modo que con la seca a
-// +3 dBFS el peor caso de toda la cadena (Vibraphone MKS-20 con chorus) llega
-// a +7,9 dBFS. Es el precio del nivel y está medido, no es un descuido: si
-// alguna vez se quiere volver a un objetivo que no recorte, el número es
-// -6 dBFS (0.5f) y basta con regenerar la tabla.
-//
-// Se regeneran con `rdpiano_e2e --headroom`, que mide el pico de cada parche
-// con estos factores ya puestos y escribe la tabla corregida: es idempotente,
-// una segunda pasada devuelve los mismos números.
+// Detrás NO hay limitador y el chorus de fábrica añade hasta +4,9 dB: el peor
+// caso de toda la cadena llega a +7,9 dBFS. Para un objetivo que no recorte,
+// 0.5f (-6 dBFS). Se regenera con `rdpiano_e2e --headroom` (idempotente).
 inline constexpr float HEADROOM_TARGET_PEAK = 1.41254f; // +3 dBFS
 
 inline constexpr float patchOutputGain[NUM_PATCHES] = {
@@ -121,8 +99,7 @@ inline constexpr float patchOutputGain[NUM_PATCHES] = {
 };
 
 // Las cuatro ROMs de cada juego, en el orden de RomChip. El plugin las empotra
-// como BinaryData y las pruebas las leen de roms/: los nombres tienen que ser
-// los mismos, y esta es la única lista.
+// como BinaryData y las pruebas las leen de roms/: esta es la única lista.
 enum RomChip
 {
     ROM_IC5 = 0,  // onda
@@ -149,9 +126,8 @@ inline constexpr const char *PROG_ROM_FILE = "RD200_B.bin";
 inline constexpr size_t WAVE_ROM_SIZE = 0x20000;
 inline constexpr size_t PROG_ROM_SIZE = 0x2000;
 
-// Coherencia de las tablas paralelas, en compilación. Lo que no cabe aquí
-// —que los ficheros existan y midan lo que deben— está en
-// librdpiano/test/unit/test_patches.cpp.
+// Coherencia de las tablas paralelas, en compilación. Que los ficheros existan
+// y midan lo que deben lo comprueba test/unit/test_patches.cpp.
 namespace patches_detail
 {
 
@@ -183,8 +159,7 @@ namespace patches_detail
 
     constexpr bool gains_in_range()
     {
-        // Ni mudo ni un impulsor: una compensación fuera de este margen es un
-        // error de la tabla, no una decisión de producto.
+        // Fuera de este margen es un error de la tabla, no una decisión.
         for (int i = 0; i < NUM_PATCHES; i++)
             if (!(patchOutputGain[i] > 0.05f) || !(patchOutputGain[i] < 4.0f))
                 return false;

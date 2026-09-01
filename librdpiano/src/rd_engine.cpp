@@ -6,8 +6,8 @@
 #include "rd_trace.h"
 #include "resample/libresample.h"
 
-// El periodo del chorus por posición del dial, en milisegundos. Venía del
-// plugin; vive aquí porque es parte de la cadena, no de la UI.
+// El periodo del chorus por posición del dial, en milisegundos. Es parte de la
+// cadena, no de la UI.
 static const int chorusRateToMsPeriod[15] = {
     2700, // 1
     1380, // 2
@@ -26,15 +26,13 @@ static const int chorusRateToMsPeriod[15] = {
     175,  // 15
 };
 
-// El EQ medio, afinado de oído contra un MKS-20. Eran cuatro constantes
-// locales reconstruidas en cada bloque (AUDITORIA §11); aquí son constantes de
-// la cadena y los coeficientes se calculan una vez en prepare().
+// El EQ medio, afinado de oído contra un MKS-20. Los coeficientes se calculan
+// una vez en prepare().
 static const float kMidEqFreq = 350.0f;
 static const float kMidEqQ = 0.2f;
 static const float kMidEqGainDb = 8.0f;
 
-// El escalado seco: (sample << 5 >> 6) / 65536 * 0.5. Estaba escrito en el
-// plugin y copiado en el harness (REFACTORIZACION §8): ahora hay un sitio.
+// El escalado seco: (sample << 5 >> 6) / 65536 * 0.5.
 static const int kEmuInputShift = 5;
 static const int kEmuOutputShift = 6;
 static const float kEmuToFloat = 1.0f / 65536.0f;
@@ -126,15 +124,10 @@ void RdPianoEngine::prepare(double newHostRate, int newMaxBlock)
     hostRate = newHostRate;
     maxBlock = newMaxBlock < 0 ? 0 : newMaxBlock;
 
-    // El búfer intermedio guarda muestras a la tasa del EMULADOR generadas a
-    // partir de maxBlock muestras del HOST: el factor es sourceRate/hostRate, no
-    // su inverso (AUDITORIA §1). Con el factor invertido el búfer se quedaba
-    // corto por debajo de 32 kHz, saltaba la guarda y el plugin enmudecía en
-    // todos los bloques.
-    //
-    // Se dimensiona para el peor caso —el parche más rápido, 32 kHz— porque el
-    // parche cambia sin volver a preparar; más el margen de hasta numFrames/4
-    // que puede añadir la corrección de deriva de render().
+    // El búfer intermedio va a la tasa del EMULADOR: el factor es
+    // sourceRate/hostRate, no su inverso. Se dimensiona para el peor caso
+    // —32 kHz, porque el parche cambia sin volver a preparar— más el margen de
+    // numFrames/4 que puede añadir la corrección de deriva de render().
     const double worstRatio = 32000.0 / hostRate;
     emuCapacity = (int)ceil(maxBlock * worstRatio) + maxBlock / 4 + 4;
     if (emuCapacity < 4)
@@ -148,29 +141,19 @@ void RdPianoEngine::prepare(double newHostRate, int newMaxBlock)
 
     samplesError = 0;
 
-    // Los dos resamplers se abren aquí y no se vuelven a tocar (AUDITORIA §2).
-    // resample_open(highQuality=1) calcula un filtro Kaiser de ~70.000
-    // coeficientes y reserva ~600 KB: 2,5 ms por handle, dos handles, en el hilo
-    // de audio y en cada cambio de parche que cruzase frecuencias.
-    //
-    // El rango cubre todos los parches a esta tasa de host, y resample_process()
-    // acepta un factor variable dentro de él. El filtro no depende del rango
-    // —sólo Xoff, XSize e YSize—, y para toda tasa de host >= 32 kHz el Xoff que
-    // sale del rango es el mismo que salía del factor fijo: la salida no se
-    // mueve donde antes había salida.
+    // Los dos resamplers se abren aquí y no se vuelven a tocar: cada
+    // resample_open(highQuality=1) cuesta ~600 KB y 2,5 ms. El rango cubre todos
+    // los parches a esta tasa de host y resample_process() acepta un factor
+    // variable dentro de él; el filtro no depende del rango.
     const double minFactor = hostRate / 32000.0;
     const double maxFactor = hostRate / 20000.0;
     resampleL = resample_open(1, minFactor, maxFactor);
     resampleR = resample_open(1, minFactor, maxFactor);
     stats.resamplerOpens += 2;
 
-    // El firmware arranca siempre a 20 kHz, también en los parches de 32 kHz:
-    // boot() empieza con un programChange(0) y el parche 0 es de 20 kHz, así que
-    // el margen de arranque corre al ritmo del parche que de verdad está
-    // cargado. El harness e2e calienta al ritmo del parche destino; esa
-    // divergencia (trampa 7 de CLAUDE.md) sigue viva porque cerrarla movería el
-    // golden de los parches de 32 kHz, y eso es un cambio de audio que hay que
-    // escuchar antes.
+    // El firmware arranca siempre a 20 kHz, también en los parches de 32 kHz. El
+    // harness e2e calienta al ritmo del parche destino: la divergencia (trampa 7
+    // de CLAUDE.md) sigue viva porque cerrarla movería el golden.
     mcu->boot(currentMasterTune, false);
 
     spaceD.reset();
@@ -250,9 +233,8 @@ void RdPianoEngine::render(float *left, float *right, int numFrames)
         return;
     }
 
-    // Los búferes remuestreados se dimensionaron en prepare(); un host que
-    // entregue un bloque mayor que el anunciado no puede escribir fuera
-    // (AUDITORIA §4).
+    // Los búferes se dimensionaron en prepare(): un host que entregue un bloque
+    // mayor que el anunciado no puede escribir fuera.
     if (numFrames > outCapacity)
     {
         stats.blockTooLarge++;
@@ -278,11 +260,9 @@ void RdPianoEngine::render(float *left, float *right, int numFrames)
         currentError += limit;
     }
 
-    // Los dos retornos tempranos limpian la salida (AUDITORIA §8): dejarla
-    // intacta devolvía al host lo que hubiera en el búfer —la entrada, o el
-    // bloque anterior— en vez de silencio. Con §1 arreglado estos caminos
-    // deberían ser inalcanzables; siguen aquí porque un host puede pedir
-    // cualquier cosa.
+    // Los dos retornos tempranos limpian la salida: dejarla intacta devolvería
+    // al host la entrada o el bloque anterior en vez de silencio. No deberían
+    // alcanzarse, pero un host puede pedir cualquier cosa.
     if (renderBufferFrames < 2)
     {
         stats.tooFewFrames++;
@@ -319,20 +299,11 @@ void RdPianoEngine::render(float *left, float *right, int numFrames)
     phaser.rate = phaserRateTable[clamp_index((int)(params.efxPhaserRate * 0x7f), 0, 0x7f)];
     phaser.depth = phaserDepthTable[clamp_index((int)(params.efxPhaserDepth * 0x7f), 0, 0x7f)];
 
-    // Reparto del MIDI (AUDITORIA §5). Tres defectos superpuestos en uno:
-    //
-    //   - la condición era `samplePosition >= i`, que en i == 0 se cumple para
-    //     todos los eventos: el bloque entero de MIDI se consumía en la primera
-    //     muestra y la resolución intra-bloque se perdía (~10,7 ms a 48 kHz);
-    //   - `samplePosition` va en muestras del host e `i` en muestras del
-    //     emulador, así que hacía falta convertir;
-    //   - el reparto era O(renderBufferFrames × eventos) con un std::vector y un
-    //     std::find dentro del bucle de audio.
-    //
-    // Ahora es un solo recorrido con un índice que avanza en paralelo al bucle
-    // de muestras: sin contenedor auxiliar, sin búsqueda y sin reservas. La cola
-    // llega ordenada por `frame` (juce::MidiBuffer lo está); un evento fuera de
-    // orden no se pierde, se entrega en el vaciado del final.
+    // Reparto del MIDI: un solo recorrido con un índice que avanza en paralelo
+    // al bucle de muestras, sin contenedor auxiliar ni búsqueda. `frame` va en
+    // muestras del host e `i` en muestras del emulador, así que hay que
+    // convertir. La cola llega ordenada; un evento fuera de orden no se pierde,
+    // se entrega en el vaciado del final.
     const double hostToEmu = (double)sourceRate / destSampleRate;
     int nextEvent = 0;
 
@@ -389,11 +360,9 @@ void RdPianoEngine::render(float *left, float *right, int numFrames)
     const float depth = clamp_index(params.tremoloDepth, 0, 14) / 14.0f;
     const int tremRate = clamp_index(params.tremoloRate, 0, 14);
 
-    // La compensación de headroom por parche entra aquí, en la salida: los dos
-    // bloques que la preceden —el emulador y lsp/— son aritmética entera
-    // transcrita del hardware, y multiplicar dentro de ellos cambiaría lo que el
-    // golden del e2e y los hashes de test_lsp.cpp fijan. Fuera, es una constante
-    // más del escalado de salida.
+    // La compensación de headroom entra en la salida, no antes: el emulador y
+    // lsp/ son aritmética entera transcrita del hardware y multiplicar dentro
+    // movería el golden y los hashes de test_lsp.cpp.
     const float outputGain = kOutputScaling * patchOutputGain[currentPatch];
 
     for (int i = 0; i < numFrames; i++)

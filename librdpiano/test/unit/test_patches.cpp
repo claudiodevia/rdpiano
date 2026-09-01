@@ -1,10 +1,7 @@
-// La tabla de parches: lo que no cabe en un static_assert.
-//
-// Los static_assert de patches.h ya cubren la coherencia de las tablas
-// paralelas (tamaños, rangos, tasas conocidas). Aquí se comprueba lo que
-// depende del disco: que las ROMs que nombra la tabla existan, midan lo que
-// deben, y sean las mismas que el .jucer empotra en el plugin
-// (REFACTORIZACION §17.7).
+// La tabla de parches: lo que no cabe en un static_assert. La coherencia de las
+// tablas paralelas ya la cubre patches.h; aquí se comprueba lo que depende del
+// disco —que las ROMs existan, midan lo que deben y sean las mismas que empotra
+// el plugin.
 
 #include <stdio.h>
 
@@ -68,12 +65,9 @@ TEST_SUITE(patches_table)
     CHECK_EQ(names.size(), NUM_PATCHES);
 }
 
-// El plugin no lee de disco: empotra las ROMs con `juce_add_binary_data`. Si
-// una de las dos listas cambia sin la otra, el plugin y las pruebas dejan de
-// estar probando lo mismo.
-//
-// Hasta la fase 3 la lista del plugin estaba en `rdpiano_juce.jucer`; desde que
-// no hay Projucer está en su CMakeLists (REFACTORIZACION §16.3).
+// El plugin no lee de disco: empotra las ROMs con `juce_add_binary_data` desde
+// su CMakeLists. Si una de las dos listas cambia sin la otra, plugin y pruebas
+// dejan de probar lo mismo.
 TEST_SUITE(patches_plugin_resources)
 {
     std::string cmakePath = g_roms_dir + "/../rdpiano_juce/CMakeLists.txt";

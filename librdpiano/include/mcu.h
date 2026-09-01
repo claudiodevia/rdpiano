@@ -5,11 +5,8 @@
 #include "rd_board.h"
 
 // El core HD63701 (derivado de MAME, trampa 5 de CLAUDE.md) mas la placa a la
-// que esta soldado. Desde la fase 3 el mapa de memoria no esta aqui: vive en
-// `RdBoard` (REFACTORIZACION §2). Lo que queda en este fichero es CPU —el
-// juego de instrucciones, el temporizador y las lineas de interrupcion— y el
-// protocolo del firmware, que corre la CPU entre mensajes y por eso no cabe
-// en `CommandPort`.
+// que esta soldado: juego de instrucciones, temporizador y lineas de
+// interrupcion. El mapa de memoria vive en `RdBoard`.
 class Mcu : public RdBoardCpu
 {
   public:
@@ -17,7 +14,7 @@ class Mcu : public RdBoardCpu
     ~Mcu();
 
     // 1,2 MB de estado: una copia accidental daría un emulador divergente en
-    // silencio. Nadie las copia hoy y nadie debería.
+    // silencio.
     Mcu(const Mcu &) = delete;
     Mcu &operator=(const Mcu &) = delete;
     Mcu(Mcu &&) = delete;
@@ -31,26 +28,23 @@ class Mcu : public RdBoardCpu
 
     s32 generate_next_sample(bool sampleRate32 = false);
 
-    // Protocolo del firmware. La cola de bytes es privada: lo que se expone es
-    // la intención (REFACTORIZACION §3). `boot` y `setMasterTune` corren la CPU
-    // entre mensajes, por eso viven aquí y no en CommandPort.
+    // Protocolo del firmware, por intención: la cola de bytes es privada. `boot`
+    // y `setMasterTune` corren la CPU entre mensajes, por eso están aquí y no en
+    // CommandPort.
 
     // Handshake de arranque completo: reset, parche 0, master tune, 1024
     // muestras de margen y recarga del parche.
     //
-    // `warmupRate32` dice a qué ritmo corre la CPU durante esas 1024 muestras.
-    // No tiene valor por defecto a propósito: el plugin arranca siempre a 20 kHz
-    // y el harness al ritmo del parche, así que para los parches de 32 kHz los
-    // dos arrancan con distinto trabajo de firmware por delante. Es una
-    // divergencia real, hoy sin resolver; obligar a decirlo en cada llamada la
-    // deja a la vista en vez de escondida en un valor por defecto.
+    // `warmupRate32` es el ritmo de la CPU durante esas 1024 muestras. Sin valor
+    // por defecto a propósito: plugin y harness lo pasan distinto en los parches
+    // de 32 kHz (trampa 7 de CLAUDE.md) y eso tiene que verse en la llamada.
     void boot(int16_t masterTune, bool warmupRate32);
 
     // 0x31 → 0x30: que el firmware relea la página recién mapeada.
     void reloadPatch();
 
-    // El "switcharoo" 0x30 → tuning → 0x30, con su TODO: afinar parches
-    // distintos del 0 no funciona sin él. Corre el emulador ~200 muestras.
+    // El "switcharoo" 0x30 → tuning → 0x30: afinar parches distintos del 0 no
+    // funciona sin él. Corre el emulador ~200 muestras.
     void setMasterTune(int16_t tune);
 
     // Pánico: pedal arriba y las 128 notas apagadas.
@@ -58,19 +52,17 @@ class Mcu : public RdBoardCpu
 
     void sendMidiCmd(u8 cmd, u8 data1, u8 data2);
 
-    // Carga de ROM, partida en dos por coste (REFACTORIZACION §6):
+    // Carga de ROM, partida en dos por coste:
     //
     //   loadRomSet()  ~2,9 ms  depende del ROM SET (tres en total)
     //   selectPatch() ~0,03 ms depende del PARCHE  (dieciseis)
     //
-    // Cambiar de "Piano 1" a "Piano 2" es lo segundo, no lo primero. Las ROM
-    // que se pasan a loadRomSet tienen que sobrevivir al Mcu: se guarda el
-    // puntero de la params para poder remapear la pagina en selectPatch().
+    // Las ROM que se pasan a loadRomSet tienen que sobrevivir al Mcu: se guarda
+    // el puntero de la params para remapear la pagina en selectPatch().
     void loadRomSet(const u8 *temp_ic5, const u8 *temp_ic6, const u8 *temp_ic7, const u8 *temp_paramsrom);
     void selectPatch(size_t from_addr);
 
-    // Equivalente a loadRomSet() + selectPatch(). Se mantiene porque es lo que
-    // llaman hoy el plugin y el harness; hace el trabajo caro siempre.
+    // loadRomSet() + selectPatch(): hace el trabajo caro siempre.
     void loadSounds(const u8 *temp_ic5, const u8 *temp_ic6, const u8 *temp_ic7, const u8 *temp_paramsrom,
                     size_t from_addr);
     void reset();
@@ -83,8 +75,7 @@ class Mcu : public RdBoardCpu
 
   private:
     // El bus. `read_byte`/`write_byte` son los nombres que usan las macros RM/WM
-    // del core de MAME: se dejan como reenvio de una linea para no tocar
-    // mcu_ops.h.
+    // del core de MAME: reenvio de una linea para no tocar mcu_ops.h.
     RdBoard board;
 
     u8 read_byte(u16 addr) { return board.read(addr); }

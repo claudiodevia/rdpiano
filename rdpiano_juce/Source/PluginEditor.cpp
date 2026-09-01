@@ -1,11 +1,3 @@
-/*
-  ==============================================================================
-
-    This file contains the basic framework code for a JUCE plugin editor.
-
-  ==============================================================================
-*/
-
 #include "PluginEditor.h"
 #include "PluginProcessor.h"
 
@@ -89,8 +81,7 @@ const Editor::ModeSpec Editor::modeSpecs[Editor::kNumDisplayModes] = {
 };
 
 // Los 16 parches como los enseña el display: dos filas de 17. No es
-// `patchNames` de patches.h, que usa el formato corto "MKS-20: Piano 1"
-// (REFACTORIZACION §11 propone unificarlos; no es un paso de esta fase).
+// `patchNames` de patches.h, que usa el formato corto "MKS-20: Piano 1".
 static const char *const displayPatchNames[NUM_PATCHES] = {
     "MKS-20           Piano 1          ", "MKS-20           Piano 2          ", "MKS-20           Piano 3          ",
     "MKS-20           Harpsichord      ", "MKS-20           Clavi            ", "MKS-20           Vibraphone       ",
@@ -246,9 +237,8 @@ void RdPiano_juceAudioProcessorEditor::renderParamLine(uint8_t (&line)[Lcd::kCha
     for (int i = 0; i < kParamSteps; i++)
         line[Lcd::kColumns + 1 + i] = '_';
 
-    // El marcador es el carácter 0xff del juego del display. Antes viajaba
-    // dentro de una `juce::String`, que lo codificaba como dos bytes de UTF-8 y
-    // lo rompía (AUDITORIA §13); aquí la línea es un búfer de bytes.
+    // El marcador es el carácter 0xff del juego del display: por eso la línea es
+    // un búfer de bytes y no una `juce::String`, que lo codificaría en UTF-8.
     line[Lcd::kColumns + 1 + step] = 0xff;
 }
 
@@ -279,12 +269,6 @@ void RdPiano_juceAudioProcessorEditor::sliderValueChanged(juce::Slider *slider)
 
     // Los seis modos de parámetro comparten el mapeo del dial: -1..1 repartido
     // en los 15 pasos que enseña el display.
-    //
-    // Antes no era así: los cuatro modos enteros usaban este reparto y los dos
-    // del phaser escribían `jlimit(dial, 0, 1)` mientras el display los volvía a
-    // leer como paso/14, de modo que la mitad izquierda del dial daba 0 y la
-    // aguja saltaba al soltar. Unificarlo es el objetivo del refactor y arregla
-    // esa asimetría.
     const int step = juce::jlimit(0, kParamSteps - 1, (int)std::floor((value / 2.0 + 0.5) * (kParamSteps - 1)));
     const RdParamId id = modeSpecs[mode].param;
     audioProcessor.setParamValue(id, audioProcessor.param(id).convertFrom0to1((float)step / (kParamSteps - 1)));

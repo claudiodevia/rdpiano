@@ -1,13 +1,7 @@
-// Mapa de memoria y latch de banco (REFACTORIZACION §2, §17.4).
-//
-// Las dos primeras suites son de la fase 0: aritmética de direcciones, que es
-// lo que hacía falta para autorizar el cambio de máscara de la ROM de programa
-// cuando `read_byte`/`write_byte` todavía eran privados de `Mcu`.
-//
-// El resto es de la fase 3, que sacó el mapa a `RdBoard`: ahora se escribe y se
-// lee de verdad —RAM, chip de sonido, latch, página de params, ROM de programa
-// y los dos puertos del bus de comandos— sin CPU, sin firmware y sin audio.
-// Una `RdBoard` con una CPU de mentira es todo lo que hace falta.
+// Mapa de memoria y latch de banco: se escribe y se lee de verdad —RAM, chip de
+// sonido, latch, página de params, ROM de programa y los dos puertos del bus de
+// comandos— sin CPU, sin firmware y sin audio. Basta una `RdBoard` con una CPU
+// de mentira.
 
 #include <stdio.h>
 
@@ -19,10 +13,9 @@
 #include "rom_loader.h"
 #include "unit_test.h"
 
-// `read_byte` acota la ROM de programa sobre un array de 0x2000. La máscara
-// era `& 0xdfff`: funciona —limpiar el bit 13 de 0..0x3fff da 0..0x1fff— pero
-// se lee como un error. Esta suite fija la equivalencia en el único rango que
-// el bus puede producir: addr >= 0xc000, luego offset 0..0x3fff.
+// La ROM de programa se acota sobre un array de 0x2000. Esta suite fija la
+// equivalencia con la máscara `& 0xdfff` de antes en el único rango que el bus
+// puede producir: addr >= 0xc000, luego offset 0..0x3fff.
 TEST_SUITE(board_program_rom_mask)
 {
     int mismatches = 0;
@@ -360,9 +353,9 @@ TEST_SUITE(board_comm_ports)
 }
 
 // El chip de sonido ocupa 0x1000-0x1FFF. Su `read()` ignora el offset y
-// devuelve siempre el identificador de la última IRQ: es una rareza conocida
-// (REFACTORIZACION §5, sin resolver), y esta comprobación la deja escrita para
-// que el día que se arregle salte aquí y no en el golden.
+// devuelve siempre el identificador de la última IRQ: rareza conocida y sin
+// resolver, escrita aquí para que el día que se arregle salte aquí y no en el
+// golden.
 TEST_SUITE(board_sound_chip_window)
 {
     const Fixture &f = fixture();

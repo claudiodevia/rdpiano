@@ -1,14 +1,12 @@
 #ifndef RDPIANO_CHECK_H
 #define RDPIANO_CHECK_H
 
-// Mini-marco de comprobaciones compartido por rdpiano_e2e y rdpiano_tests.
+// Mini-marco de comprobaciones compartido por rdpiano_e2e y rdpiano_tests. El
+// núcleo no tiene dependencias y tampoco las gana por las pruebas: esto es todo
+// el andamiaje que hay.
 //
-// librdpiano no tiene dependencias y no debe ganarlas por las pruebas
-// (REFACTORIZACION §17.2): esto es todo el andamiaje que hay.
-//
-// Uso: cada bloque de comprobaciones recibe (o declara) un `CheckRun checks`,
-// registra en él, y al final se imprimen los fallos y se suma `failed()`.
-// Las macros CHECK_* escriben sobre un `checks` que debe estar en el ámbito.
+// Uso: cada bloque recibe (o declara) un `CheckRun checks` y registra en él; al
+// final se imprimen los fallos y se suma `failed()`.
 
 #include <math.h>
 #include <stdarg.h>
@@ -17,9 +15,8 @@
 #include <string>
 #include <vector>
 
-// FNV-1a de 64 bits, byte a byte. Es el mismo hash que usa el harness e2e
-// para el stream de audio; aquí lo comparten las pruebas que congelan una
-// respuesta (efectos, resampler, motor).
+// FNV-1a de 64 bits, el mismo hash que el harness e2e usa para el stream de
+// audio. Lo comparten las pruebas que congelan una respuesta.
 struct Fnv1a
 {
     unsigned long long h = 0xcbf29ce484222325ull;

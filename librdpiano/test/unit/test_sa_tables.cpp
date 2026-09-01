@@ -1,9 +1,5 @@
-// Las dos LUT de IC10/IC11 (REFACTORIZACION §4, §17.5).
-//
-// Son función pura del índice y se generan una sola vez para todo el proceso.
-// Los hashes de abajo se capturaron del código anterior a la fase 1, cuando
-// cada SoundChip generaba las tablas en su propio constructor: si cambian, el
-// timbre cambia, y no es un test que se regenere para ponerlo verde.
+// Las dos LUT de IC10/IC11, función pura del índice. Si los hashes de abajo
+// cambian, el timbre cambia: no es un test que se regenere para ponerlo verde.
 
 #include "unit_test.h"
 
@@ -21,7 +17,7 @@ static u64 fnv1a(const void *data, size_t n)
     return h;
 }
 
-// Capturados con el generador de sound_chip.cpp anterior a la fase 1.
+// Capturados con el generador original de sound_chip.cpp.
 static constexpr u64 PHASE_EXP_HASH = 0x94e2a43f3db60011ull;
 static constexpr u64 SAMPLES_EXP_HASH = 0xba26c216dad20d95ull;
 
@@ -37,9 +33,7 @@ TEST_SUITE(sa_tables_hashes)
 // ahorra los 320 KB y los ~16 ms por SoundChip.
 TEST_SUITE(sa_tables_shared) { CHECK(&sa_tables() == &sa_tables()); }
 
-// ...y tiene que coincidir con lo que produce el generador en frío. Esto es lo
-// que autorizaría precalcularlas como blob (§4, opción 2): la comparación
-// generador-contra-tabla ya está escrita.
+// ...y tiene que coincidir con lo que produce el generador en frío.
 TEST_SUITE(sa_tables_generator_matches)
 {
     SaTables *fresh = new SaTables();

@@ -12,7 +12,7 @@
 // selecciona un subconjunto.
 //
 // A diferencia del harness e2e, estas pruebas no emulan audio: la suite entera
-// tiene que terminar en menos de un segundo (REFACTORIZACION §17.2).
+// tiene que terminar en menos de un segundo.
 
 #include <string>
 #include <vector>

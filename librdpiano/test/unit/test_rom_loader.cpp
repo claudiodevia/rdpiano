@@ -1,9 +1,6 @@
-// Descifrado de ROM: permutaciones y páginas de params
-// (REFACTORIZACION §6, §17.4).
-//
-// Funciones puras sobre u8[], sin CPU y sin audio: la parte del núcleo que más
-// barato sale probar y la que más caro sale equivocarse, porque una
-// permutación mal reordenada no da un error, da otro timbre.
+// Descifrado de ROM: permutaciones y páginas de params. Funciones puras sobre
+// u8[], sin CPU y sin audio; una permutación mal reordenada no da un error, da
+// otro timbre.
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -107,8 +104,8 @@ TEST_SUITE(rom_loader_bijections)
 
 // ---------------------------------------------------------------------------
 // Hash del params_rom resultante para los 16 offsets de la tabla de parches.
-// Capturados con el `loadSounds` monolítico anterior a la fase 1: son los que
-// autorizan a partirlo en loadRomSet()/selectPatch().
+// Capturados con el `loadSounds` monolítico: son los que autorizan a partirlo
+// en loadRomSet()/selectPatch().
 
 static constexpr u64 PARAMS_ROM_HASHES[NUM_PATCHES] = {
     0x4a0c7db560b285cbull, //  0 MKS-20: Piano 1
@@ -174,9 +171,8 @@ TEST_SUITE(rom_loader_program_rom)
 }
 
 // ---------------------------------------------------------------------------
-// La equivalencia que autoriza el refactor de §6: partir el trabajo caro
-// (ROM SET) del barato (PARCHE) no puede cambiar un byte del resultado, ni
-// siquiera arrastrando estado de un parche al siguiente.
+// Partir el trabajo caro (ROM SET) del barato (PARCHE) no puede cambiar un byte
+// del resultado, ni siquiera arrastrando estado de un parche al siguiente.
 
 TEST_SUITE(rom_loader_select_patch_is_stateless)
 {

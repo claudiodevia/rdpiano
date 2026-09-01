@@ -1,11 +1,9 @@
-// Presets y programas: la ida y vuelta que hasta la fase 3 sólo se veía
-// abriendo un DAW (REFACTORIZACION §17.7).
+// Presets y programas: la ida y vuelta del estado del plugin.
 //
-// La prueba habla con el `AudioProcessor` por su API pública —`getParameters()`
-// por id, `getStateInformation`/`setStateInformation`, `setCurrentProgram`— y
-// nunca por los punteros concretos del plugin. Es a propósito: se escribió
-// contra el XML a mano de la fase 2 y tiene que seguir valiendo, sin editarla,
-// contra el `AudioProcessorValueTreeState` que la sustituye (§9).
+// Habla con el `AudioProcessor` sólo por su API pública —`getParameters()` por
+// id, `getStateInformation`/`setStateInformation`, `setCurrentProgram`— y nunca
+// por los punteros concretos: así sigue valiendo, sin editarla, si cambia cómo
+// se guarda el estado por dentro.
 
 #include <JuceHeader.h>
 
@@ -16,9 +14,9 @@
 namespace
 {
 
-    // Los diez parámetros del plugin, por id. La lista está aquí y no en el
-    // procesador porque su función es justamente discrepar si alguien renombra
-    // uno: un id que cambia rompe todos los presets guardados.
+    // Los diez parámetros por id. La lista está duplicada a propósito: su
+    // función es discrepar si alguien renombra uno, porque un id que cambia
+    // rompe todos los presets guardados.
     const char *const kParamIds[] = {"volume",      "chorusEnabled", "chorusRate", "chorusDepth",   "tremoloEnabled",
                                      "tremoloRate", "tremoloDepth",  "efxEnabled", "efxPhaserRate", "efxPhaserDepth"};
 
@@ -160,10 +158,9 @@ TEST_SUITE(plugin_state_roundtrip)
     CHECK_EQ(restored.engine->masterTune(), 4321);
 }
 
-// Una sesión guardada por una versión anterior no trae todos los atributos.
-// Lo que falte tiene que volver al valor de fábrica —el mismo con el que
-// arranca el plugin—, no a un segundo juego de defectos escrito a mano en
-// setStateInformation (REFACTORIZACION §9).
+// Una sesión guardada por una versión anterior no trae todos los atributos: lo
+// que falte tiene que volver al valor de fábrica, el mismo con el que arranca
+// el plugin.
 TEST_SUITE(plugin_state_missing_attributes)
 {
     RdPiano_juceAudioProcessor fresh;

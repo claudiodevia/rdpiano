@@ -4,10 +4,8 @@
 
 MasterTuneBytes encode_master_tune(int16_t tune)
 {
-    // Copia literal de las cuatro líneas que estaban duplicadas en
-    // PluginProcessor.cpp (setMasterTune y mcuReset). `magnitude` en vez de
-    // `abs()` para no depender de qué sobrecarga entra por la cabecera: para un
-    // int16 el valor es el mismo, incluido -32768.
+    // `magnitude` en vez de `abs()` para no depender de qué sobrecarga entra por
+    // la cabecera: para un int16 el valor es el mismo, incluido -32768.
     int magnitude = tune < 0 ? -(int)tune : (int)tune;
 
     MasterTuneBytes out;

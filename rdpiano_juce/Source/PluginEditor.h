@@ -1,11 +1,3 @@
-/*
-  ==============================================================================
-
-    This file contains the basic framework code for a JUCE plugin editor.
-
-  ==============================================================================
-*/
-
 #pragma once
 
 #include <JuceHeader.h>
@@ -16,18 +8,9 @@
 
 //==============================================================================
 /**
- * El panel, guiado por tablas (REFACTORIZACION §10).
- *
- * Antes eran 17 botones declarados, hechos visibles, suscritos y colocados
- * *dos veces cada uno* a mano; ocho ramas idénticas salvo el índice en
- * `buttonClicked`; cuatro máquinas de estado de tres posiciones escritas
- * cuatro veces; y seis bloques de diez líneas que construían la misma cadena
- * de LCD cambiando etiqueta y variable. 250 de 413 líneas eran copia-pega, con
- * un par de líneas duplicadas que nadie había visto.
- *
- * Aquí hay un `ButtonSpec` por botón y un `ModeSpec` por modo del display, y
- * el constructor, `resized()`, `buttonClicked()` y `updateValues()` son bucles
- * sobre esas dos tablas. Las coordenadas del panel quedan en un solo sitio.
+ * El panel, guiado por tablas: un `ButtonSpec` por botón y un `ModeSpec` por
+ * modo del display. El constructor, `resized()`, `buttonClicked()` y
+ * `updateValues()` son bucles sobre esas dos tablas.
  */
 class RdPiano_juceAudioProcessorEditor : public juce::AudioProcessorEditor,
                                          public juce::Button::Listener,
@@ -50,10 +33,8 @@ class RdPiano_juceAudioProcessorEditor : public juce::AudioProcessorEditor,
     void updateValues();
 
     //==============================================================================
-    // Qué muestra el display y, con él, qué edita el dial alfa. Sustituye a los
-    // ocho `bool` sueltos que había que poner a false uno a uno en cada
-    // pulsación: sólo uno puede estar activo, y ahora eso es un invariante del
-    // tipo en vez de una convención.
+    // Qué muestra el display y, con él, qué edita el dial alfa. Sólo uno puede
+    // estar activo a la vez.
     enum DisplayMode
     {
         kModePatch = 0, // el nombre del parche; el dial elige parche
@@ -138,10 +119,7 @@ class RdPiano_juceAudioProcessorEditor : public juce::AudioProcessorEditor,
         RdParamId param;
 
         // Con un modo "alternativo" activo, los botones de banco y de parche
-        // apagan su testigo. Ojo: los dos modos del phaser no cuentan, igual que
-        // no contaban antes de la fase 3 —se añadieron después que el resto y
-        // nadie los metió en la condición—. Se conserva tal cual: es la UI, y
-        // cambiarlo no es lo que este refactor viene a hacer.
+        // apagan su testigo. Los dos del phaser no cuentan (nunca contaron).
         bool countsAsAlternative;
     };
 
@@ -152,9 +130,9 @@ class RdPiano_juceAudioProcessorEditor : public juce::AudioProcessorEditor,
     MksButton buttons[kNumButtons];
     DisplayMode mode = kModePatch;
 
-    // Los 15 pasos que enseña el display y recorre el dial: los parámetros
-    // enteros van de 0 a 14 y los del phaser son 0..1 continuos, así que el paso
-    // se calcula sobre el valor normalizado y vale para los seis.
+    // Los 15 pasos que enseña el display y recorre el dial. Los parámetros
+    // enteros van de 0 a 14 y los del phaser son 0..1 continuos: el paso se
+    // calcula sobre el valor normalizado y vale para los seis.
     static const int kParamSteps = 15;
 
     int paramStep(DisplayMode m) const;

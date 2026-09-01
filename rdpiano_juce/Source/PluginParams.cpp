@@ -1,10 +1,4 @@
-/*
-  ==============================================================================
-
-    Construcción del layout de parámetros desde la tabla de PluginParams.h.
-
-  ==============================================================================
-*/
+// Construcción del layout de parámetros desde la tabla de PluginParams.h.
 
 #include "PluginParams.h"
 

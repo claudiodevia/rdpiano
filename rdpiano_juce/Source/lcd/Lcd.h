@@ -13,8 +13,7 @@
 #include <JuceHeader.h>
 
 //==============================================================================
-/*
- */
+// El display de dos filas del panel, con el juego de caracteres del original.
 class Lcd : public juce::Component
 {
   public:
@@ -23,13 +22,9 @@ class Lcd : public juce::Component
 
     void paint(juce::Graphics &) override;
 
-    // Dos filas de 17 caracteres, en el juego del display: no es texto de JUCE.
-    // Antes esto recibía una `juce::String` y copiaba 34 bytes de su UTF-8, con
-    // dos consecuencias (AUDITORIA §13): una cadena más corta leía fuera, y el
-    // marcador de la barra de parámetros —el carácter 0xff— salía codificado
-    // como dos bytes, así que ni se dibujaba ni dejaba el resto de la fila en su
-    // sitio. Con un búfer de bytes del tamaño exacto ninguna de las dos cosas es
-    // expresable.
+    // Dos filas de 17 caracteres, en el juego del display: bytes, no texto de
+    // JUCE. Con una `juce::String` el marcador 0xff de la barra de parámetros
+    // salía en UTF-8 de dos bytes y descuadraba la fila.
     static constexpr int kColumns = 17;
     static constexpr int kRows = 2;
     static constexpr int kChars = kColumns * kRows;

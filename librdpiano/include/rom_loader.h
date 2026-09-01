@@ -5,16 +5,11 @@
 
 #include "mame_utils.h"
 
-// Carga y descifrado de las ROM (REFACTORIZACION §6, §17.4).
+// Carga y descifrado de las ROM. Llegan con las líneas de dirección y de datos
+// permutadas en el PCB; las permutaciones de abajo deshacen ese cableado:
+// **no son cosméticas**, ninguna reordenación es inocente.
 //
-// Las ROM llegan con las líneas de dirección y de datos permutadas en el PCB.
-// Las permutaciones de abajo deshacen ese cableado: **no son cosméticas** y
-// ninguna reordenación es inocente (§20). Estaban como macros repartidas entre
-// mcu.cpp y sound_chip.cpp; aquí son `constexpr` en un solo sitio, para que
-// test_rom_loader.cpp pueda comprobar que siguen siendo biyectivas.
-//
-// Estas funciones son puras: entran `const u8 *`, sale un buffer. No hay CPU,
-// ni chip de sonido, ni estado. Por eso se prueban en milisegundos.
+// Funciones puras sobre `const u8 *`: sin CPU, sin chip de sonido, sin estado.
 
 // ROM de programa (firmware, 8 KB). Puede ser de 13 o 14 bits según el modelo.
 constexpr u32 unscramble_addr_cpub(u32 i) { return bitswap<14>(i, 13, 12, 11, 8, 9, 10, 7, 6, 5, 4, 3, 2, 1, 0); }
@@ -59,8 +54,7 @@ void decode_wave_rom(u8 *dst, const u8 *src);
 // descifrar los 0x20000 en un temporal y copiar la ventana.
 void decode_params_page(u8 *dst, const u8 *src, size_t from_addr);
 
-// El destino al que apuntan los bytes 0x00-0x02 para `from_addr`. Se expone
-// para poder comprobarlo sin hurgar en el buffer.
+// El destino al que apuntan los bytes 0x00-0x02 para `from_addr`.
 constexpr size_t params_patch_target(size_t from_addr) { return (from_addr - (from_addr >> 15 << 15)) + 0x4000; }
 
 #endif

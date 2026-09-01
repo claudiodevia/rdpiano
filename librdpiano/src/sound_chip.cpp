@@ -101,9 +101,8 @@ s32 SoundChip::update()
 
 void SoundChip::load_samples(const u8 *temp_ic5, const u8 *temp_ic6, const u8 *temp_ic7)
 {
-    // Antes se descifraban las tres ROM enteras en 384 KB de temporales *en la
-    // pila* (AUDITORIA §3) para leer cada byte una sola vez, en descrambled_i.
-    // Se descifra byte a byte en el sitio: mismo resultado, cero temporales.
+    // Se descifra byte a byte en el sitio: sin los 384 KB de temporales que
+    // costaría descifrar las tres ROM enteras primero.
 
     // Wave rom values
     for (size_t i = 0; i < 0x20000; i++)

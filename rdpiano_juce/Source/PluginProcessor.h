@@ -1,11 +1,3 @@
-/*
-  ==============================================================================
-
-    This file contains the basic framework code for a JUCE plugin processor.
-
-  ==============================================================================
-*/
-
 #pragma once
 
 #include <JuceHeader.h>
@@ -16,16 +8,9 @@
 
 //==============================================================================
 /**
- * Desde la fase 2 este archivo es sólo el plugin: parámetros, presets y el
- * puente con JUCE. La cadena de audio entera —emulador, chorus, phaser,
- * trémolo, EQ, resampling y reparto del MIDI— vive en `RdPianoEngine`, que no
- * conoce JUCE y se prueba headless (REFACTORIZACION §1).
- *
- * Desde la fase 3 los parámetros son un `AudioProcessorValueTreeState`
- * construido desde la tabla de `PluginParams.h` (§9): declararlos, guardarlos
- * y validarlos era antes tres listas paralelas escritas a mano, con dos juegos
- * de valores por defecto que no coincidían. `rdpiano_plugin_tests` fija la ida
- * y vuelta.
+ * El plugin: parámetros, presets y el puente con JUCE. La cadena de audio vive
+ * en `RdPianoEngine` y los parámetros son un `AudioProcessorValueTreeState`
+ * construido desde la tabla de `PluginParams.h`.
  */
 class RdPiano_juceAudioProcessor : public juce::AudioProcessor,
                                    public juce::ChangeBroadcaster,
@@ -72,9 +57,7 @@ class RdPiano_juceAudioProcessor : public juce::AudioProcessor,
 
     //==============================================================================
 
-    // Los parámetros, y el acceso por índice de tabla que usa el editor: es lo
-    // que permite que `PluginEditor` recorra descriptores en vez de repetir un
-    // bloque por control (§10).
+    // Los parámetros, con el acceso por índice de tabla que usa el editor.
     juce::AudioProcessorValueTreeState apvts;
 
     juce::RangedAudioParameter &param(RdParamId id) const;
@@ -96,9 +79,8 @@ class RdPiano_juceAudioProcessor : public juce::AudioProcessor,
   private:
     void syncParamsToEngine();
 
-    // Punteros crudos a los valores de los parámetros, resueltos una vez en el
-    // constructor. `render()` los lee una vez por bloque: buscar por id desde el
-    // hilo de audio sería una búsqueda de cadena por bloque.
+    // Valores de los parámetros, resueltos una vez en el constructor: buscar por
+    // id desde el hilo de audio sería una búsqueda de cadena por bloque.
     std::atomic<float> *paramValues[kNumRdParams] = {};
 
     //==============================================================================
