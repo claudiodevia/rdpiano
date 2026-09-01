@@ -1,63 +1,63 @@
 # RdPiano [![RdPiano](https://github.com/giulioz/rdpiano/actions/workflows/main.yml/badge.svg)](https://github.com/giulioz/rdpiano/actions/workflows/main.yml)
 
-RdPiano accurately emulates SA-synthesis digital pianos, such as the Roland MKS-20, RD1000 and the Rhodes MK-80 electric piano.
-It simulates the CPU-B board reused in different models, emulating the CPU and the custom chips. The emulation of the custom chips is derived from silicon analysis.
-It also approximates the BBD chorus and tremolo effect, albeit less accurately than the digital emulation.
+RdPiano emula con precisión los pianos digitales de síntesis SA, como el Roland MKS-20, el RD1000 y el piano eléctrico Rhodes MK-80.
+Simula la placa CPU-B reutilizada en distintos modelos, emulando la CPU y los chips a medida. La emulación de los chips a medida deriva del análisis del silicio.
+También aproxima el chorus BBD y el efecto de trémolo, aunque con menos exactitud que la emulación digital.
 
 ![UI](docs/ui_screenshot.png)
 
-**Demo video:** [https://www.youtube.com/watch?v=7w0uvZ-OZ7U](https://www.youtube.com/watch?v=7w0uvZ-OZ7U)
+**Vídeo de demostración:** [https://www.youtube.com/watch?v=7w0uvZ-OZ7U](https://www.youtube.com/watch?v=7w0uvZ-OZ7U)
 
-[![Youtube demo](https://img.youtube.com/vi/7w0uvZ-OZ7U/hqdefault.jpg)](https://www.youtube.com/watch?v=7w0uvZ-OZ7U)
+[![Demo en Youtube](https://img.youtube.com/vi/7w0uvZ-OZ7U/hqdefault.jpg)](https://www.youtube.com/watch?v=7w0uvZ-OZ7U)
 
-## Plugin downloads
+## Descargas del plugin
 
-- [MacOS AU](https://github.com/giulioz/rdpiano/releases/download/latest/rdpiano_juce.component.macOS.zip)
-- [MacOS VSTi](https://github.com/giulioz/rdpiano/releases/download/latest/rdpiano_juce.vst3.macOS.zip)
-- [MacOS Standalone](https://github.com/giulioz/rdpiano/releases/download/latest/rdpiano_juce.app.macOS.zip)
+- [AU para macOS](https://github.com/giulioz/rdpiano/releases/download/latest/rdpiano_juce.component.macOS.zip)
+- [VSTi para macOS](https://github.com/giulioz/rdpiano/releases/download/latest/rdpiano_juce.vst3.macOS.zip)
+- [Standalone para macOS](https://github.com/giulioz/rdpiano/releases/download/latest/rdpiano_juce.app.macOS.zip)
 
-**NOTE (MacOS)**: If you are having troubles with MacOS, it's possible your operating system is blocking the plugin because it's coming from an unregister developer. You can allow this plugin by running this command on a terminal:
+**NOTA (macOS)**: si tienes problemas en macOS, es posible que el sistema operativo esté bloqueando el plugin por venir de un desarrollador no registrado. Puedes autorizarlo ejecutando este comando en un terminal:
 
-```sudo xattr -rd com.apple.quarantine /Users/<yourusername>/Library/Audio/Plug-Ins/Components/RRV10.component```
+```sudo xattr -rd com.apple.quarantine /Users/<tuusuario>/Library/Audio/Plug-Ins/Components/RRV10.component```
 
-More info on this guide: https://www.osirisguitar.com/2020/04/01/how-to-make-unsigned-vsts-work-in-macos-catalina/
+Más información en esta guía: https://www.osirisguitar.com/2020/04/01/how-to-make-unsigned-vsts-work-in-macos-catalina/
 
-## Content
+## Contenido
 
-- **rdpiano_juce**: a plugin (VSTi/AU) version of the emulator, to be used with DAWs
-- **librdpiano**: a dependency-free version of the emulator, to be used as a library in other software, also builds a test standalone app with SDL
-- **re_stuff**: tooling used during the reverse engineering process, mostly for educational purposes
-- **scripts**: the two build scripts — `download-juce.sh` (fetch the JUCE tree) and `build-osx.sh` (configure and build one plugin format, or `ALL` for the five); CI runs these same two
+- **rdpiano_juce**: versión del emulador como plugin (VSTi/AU), para usar con DAWs
+- **librdpiano**: versión del emulador sin dependencias, para usar como biblioteca en otro software; también compila una app standalone de prueba con SDL
+- **re_stuff**: herramientas usadas durante el proceso de ingeniería inversa, sobre todo con fines educativos
+- **scripts**: los dos scripts de compilación — `download-juce.sh` (descarga el árbol de JUCE) y `build-osx.sh` (configura y compila un formato de plugin, o `ALL` para los cinco); la CI ejecuta estos mismos dos
 
-## Building
+## Compilación
 
-Everything — the core, its tests and the plugin — is built from the top-level `CMakeLists.txt`.
-macOS only, Xcode required.
+Todo — el núcleo, sus pruebas y el plugin — se compila desde el `CMakeLists.txt` de la raíz.
+Solo macOS, requiere Xcode.
 
 ```bash
-git clone <this repo> && cd rdpiano
-bash scripts/download-juce.sh   # fetches JUCE 9.0.1 into build/juce
-bash scripts/build-osx.sh ALL # VST3, AU, AUv3, LV2 and Standalone
-                              # or one format: AU, AUv3, LV2, Standalone, VST3
+git clone <este repo> && cd rdpiano
+bash scripts/download-juce.sh   # descarga JUCE 9.0.1 en build/juce
+bash scripts/build-osx.sh ALL # VST3, AU, AUv3, LV2 y Standalone
+                              # o un solo formato: AU, AUv3, LV2, Standalone, VST3
 ```
 
-The plugins end up in `build/plugin/rdpiano_juce/rdpiano_juce_artefacts/Release/`.
+Los plugins quedan en `build/plugin/rdpiano_juce/rdpiano_juce_artefacts/Release/`.
 
-Everything generated — the JUCE download included — lives under `build/`: `build/juce` (the
-download), `build/plugin` (the top-level build) and `build/core`, `build/core-asan` (the core-only
-ones). `rm -rf build` is a full clean; `rm -rf build/plugin build/core*` keeps the JUCE tree.
+Todo lo generado — la descarga de JUCE incluida — vive bajo `build/`: `build/juce` (la
+descarga), `build/plugin` (la compilación desde la raíz) y `build/core`, `build/core-asan` (las del
+núcleo suelto). `rm -rf build` es una limpieza completa; `rm -rf build/plugin build/core*` conserva el árbol de JUCE.
 
-To work on the emulator alone (no JUCE needed):
+Para trabajar solo en el emulador (sin necesidad de JUCE):
 
 ```bash
 cmake -S librdpiano -B build/core && cmake --build build/core
 ctest --test-dir build/core --output-on-failure
 ```
 
-## Acknowledgements
+## Agradecimientos
 
-- 6800 CPU emulation code taken from [MAME](https://github.com/mamedev/mame)
-- [InfoSecDJ](https://siliconpr0n.org/archive/doku.php?id=infosecdj:start), [Furrtek](http://furrtek.free.fr/), Jotego, Skutis and others for the help with silicon RE
-- [Sean Costello](https://valhalladsp.com/) for the [info](https://gearspace.com/board/showpost.php?p=9200326&postcount=18) on how to implement the chorus effect
-- Dominic Mazzoni for the audio resample library
-- [probonopd](https://github.com/probonopd) for the CI pipelines for building the JUCE plugin
+- Código de emulación de la CPU 6800 tomado de [MAME](https://github.com/mamedev/mame)
+- [InfoSecDJ](https://siliconpr0n.org/archive/doku.php?id=infosecdj:start), [Furrtek](http://furrtek.free.fr/), Jotego, Skutis y otros por la ayuda con la ingeniería inversa del silicio
+- [Sean Costello](https://valhalladsp.com/) por la [información](https://gearspace.com/board/showpost.php?p=9200326&postcount=18) sobre cómo implementar el efecto de chorus
+- Dominic Mazzoni por la biblioteca de remuestreo de audio
+- [probonopd](https://github.com/probonopd) por los pipelines de CI para compilar el plugin JUCE
