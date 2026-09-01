@@ -118,7 +118,6 @@ descartan (el firmware RD200 solo escribe ahí ceros de arranque).
 ```bash
 sh scripts/download-juce.sh   # JUCE 9.0.1 → build/juce (var de caché RDPIANO_JUCE_DIR)
 sh scripts/build-osx.sh ALL   # cinco formatos universales, generador Xcode
-sh scripts/build-osx.sh AU nativo   # sólo esta arquitectura, la mitad de tiempo
 # productos en build/plugin/rdpiano_juce/rdpiano_juce_artefacts/Release/<FORMATO>/
 ```
 Los dos scripts son POSIX `sh` y **no imprimen la salida de CMake/Xcode**: por pantalla va una
@@ -138,13 +137,23 @@ Ninguno de los dos repite trabajo hecho:
 - `build-osx.sh` **sólo configura CMake** si la caché de su binary dir no sirve —no existe, otro
   generador, otras arquitecturas, o se configuró sin JUCE y no hay plugin—; el proyecto Xcode lo
   regenera CMake solo cuando cambia un `CMakeLists`. Son ~3,4 s por invocación.
-- El segundo argumento de `build-osx.sh` elige arquitecturas: `universal` (por omisión,
-  `arm64;x86_64`, en `build/plugin`) o `nativo` (sólo la de la máquina, en `build/plugin-nativo`).
-  **Binary dir distinto a propósito**: compartirlo invalidaría la caché en cada cambio de modo y
-  obligaría a recompilarlo todo cada vez.
+- **Siempre universal** (`arm64;x86_64`, en `build/plugin`): no hay modo de arquitectura que elegir.
+  Hubo un `nativo` (sólo la de la máquina, en `build/plugin-nativo`) y se quitó — ahorraba
+  compilación, nada en ejecución (macOS carga una sola rebanada del universal y es el mismo código,
+  no hay flags por arquitectura en ningún `CMakeLists`) y su producto no carga bajo Rosetta. La
+  palabra `universal` se sigue aceptando como no-op.
 - `common.sh` deja **10 logs por script** (`LOGS_QUE_QUEDAN`) y poda el resto al abrir uno nuevo, y
   cuenta avisos *distintos*: en universal cada uno sale una vez por arquitectura y el total salía
   doblado.
+Con `install` como argumento (`sh scripts/build-osx.sh AU install`) **instala al terminar** en los directorios del sistema, reemplazando lo que
+hubiera: AU → `/Library/Audio/Plug-Ins/Components`, VST3 → `.../VST3`, LV2 → `.../LV2`, Standalone →
+`/Applications`. Pide contraseña de administrador una sola vez (`sudo -v`) y copia con `ditto` sobre
+el destino ya borrado (actualizar un bundle in situ deja restos del anterior). **AUv3 no tiene
+destino propio**: JUCE lo empotra en el `.app` del Standalone (`XCODE_EMBED_APP_EXTENSIONS`), así que
+se registra al instalar la aplicación; y no hay VST2 —JUCE 9 lo quitó—, de ahí que
+`/Library/Audio/Plug-Ins/VST` no se toque. Sin la palabra no se escribe nada fuera de `build/`, que
+es lo que hace la CI.
+
 Generador **Xcode** a propósito (AUv3 solo existe con él). Deployment target 11.0, y hay que
 pasárselo a `juceaide` por `MACOSX_DEPLOYMENT_TARGET` (invocación anidada que no hereda la caché).
 El plugin **enlaza** el target `librdpiano`: añadir un `.cpp` al núcleo es una línea en

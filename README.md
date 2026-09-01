@@ -1,8 +1,12 @@
 # RdPiano [![RdPiano](https://github.com/giulioz/rdpiano/actions/workflows/main.yml/badge.svg)](https://github.com/giulioz/rdpiano/actions/workflows/main.yml)
 
-RdPiano emula con precisión los pianos digitales de síntesis SA, como el Roland MKS-20, el RD1000 y el piano eléctrico Rhodes MK-80.
-Simula la placa CPU-B reutilizada en distintos modelos, emulando la CPU y los chips a medida. La emulación de los chips a medida deriva del análisis del silicio.
-También aproxima el chorus BBD y el efecto de trémolo, aunque con menos exactitud que la emulación digital.
+Emulador de los pianos digitales de síntesis SA de Roland: **MKS-20**, **RD-1000** y el piano
+eléctrico **Rhodes MK-80**.
+
+No es una imitación por muestreo: RdPiano ejecuta el firmware original sobre la placa CPU-B —la
+misma que compartían aquellos modelos— con la CPU y los chips de síntesis a medida reimplementados a
+partir del análisis del silicio. El chorus BBD y el trémolo sí son aproximaciones, y por tanto menos
+exactos que el resto de la cadena.
 
 ![UI](docs/ui_screenshot.png)
 
@@ -10,54 +14,123 @@ También aproxima el chorus BBD y el efecto de trémolo, aunque con menos exacti
 
 [![Demo en Youtube](https://img.youtube.com/vi/7w0uvZ-OZ7U/hqdefault.jpg)](https://www.youtube.com/watch?v=7w0uvZ-OZ7U)
 
-## Descargas del plugin
+## Descargas
 
-- [AU para macOS](https://github.com/giulioz/rdpiano/releases/download/latest/rdpiano_juce.component.macOS.zip)
-- [VSTi para macOS](https://github.com/giulioz/rdpiano/releases/download/latest/rdpiano_juce.vst3.macOS.zip)
-- [Standalone para macOS](https://github.com/giulioz/rdpiano/releases/download/latest/rdpiano_juce.app.macOS.zip)
+Compilaciones de la última versión, sólo macOS (binarios universales arm64 + x86_64):
 
-**NOTA (macOS)**: si tienes problemas en macOS, es posible que el sistema operativo esté bloqueando el plugin por venir de un desarrollador no registrado. Puedes autorizarlo ejecutando este comando en un terminal:
+- [AU](https://github.com/giulioz/rdpiano/releases/download/latest/rdpiano_juce.component.macOS.zip)
+- [VST3](https://github.com/giulioz/rdpiano/releases/download/latest/rdpiano_juce.vst3.macOS.zip)
+- [Standalone](https://github.com/giulioz/rdpiano/releases/download/latest/rdpiano_juce.app.macOS.zip)
 
-```sudo xattr -rd com.apple.quarantine /Users/<tuusuario>/Library/Audio/Plug-Ins/Components/RRV10.component```
+> **macOS bloquea el plugin.** Los binarios no están firmados, así que Gatekeeper los pone en
+> cuarentena. Para levantarla, en un terminal:
+>
+> ```bash
+> sudo xattr -rd com.apple.quarantine /Library/Audio/Plug-Ins/Components/rdpiano_juce.component
+> ```
+>
+> (cambia la ruta por la del formato que hayas instalado). Guía detallada:
+> [cómo usar VSTs sin firmar en macOS](https://www.osirisguitar.com/2020/04/01/how-to-make-unsigned-vsts-work-in-macos-catalina/).
 
-Más información en esta guía: https://www.osirisguitar.com/2020/04/01/how-to-make-unsigned-vsts-work-in-macos-catalina/
+## Qué hay en el repositorio
 
-## Contenido
-
-- **rdpiano_juce**: versión del emulador como plugin (VSTi/AU), para usar con DAWs
-- **librdpiano**: versión del emulador sin dependencias, para usar como biblioteca en otro software; también compila una app standalone de prueba con SDL
-- **re_stuff**: herramientas usadas durante el proceso de ingeniería inversa, sobre todo con fines educativos
-- **scripts**: los dos scripts de compilación, POSIX `sh` — `download-juce.sh` (descarga el árbol de JUCE) y `build-osx.sh` (configura y compila un formato de plugin, o `ALL` para los cinco); la CI ejecuta estos mismos dos. Por pantalla sólo sacan la etiqueta de cada paso: la salida entera va a `logs/<script>-<fecha>-<hora>.log` (directorio ignorado por git), y si algo falla vuelcan las últimas líneas de ese log
+| Directorio | Contenido |
+|---|---|
+| `librdpiano/` | El emulador y la cadena de audio completa, sin dependencias externas. Aquí vive la lógica real; también compila una app standalone de prueba con SDL. |
+| `rdpiano_juce/` | El plugin (VST3, AU, AUv3, LV2 y Standalone), construido con JUCE. |
+| `roms/` | Los volcados de ROM, empotrados en el binario al compilar. |
+| `re_stuff/` | Material de la ingeniería inversa —Verilog, desensamblados—, con fines educativos. No se compila. |
+| `scripts/` | Los dos scripts de compilación, POSIX `sh`, que son los mismos que ejecuta la CI. |
+| `docs/` | Documentación técnica (ver [Documentación](#documentación)). |
 
 ## Compilación
 
-Todo — el núcleo, sus pruebas y el plugin — se compila desde el `CMakeLists.txt` de la raíz.
-Solo macOS, requiere Xcode.
+Sólo macOS, con Xcode instalado. Todo —el núcleo, sus pruebas y el plugin— sale del
+`CMakeLists.txt` de la raíz:
 
 ```bash
 git clone <este repo> && cd rdpiano
-sh scripts/download-juce.sh   # descarga JUCE 9.0.1 en build/juce (no la repite si ya está)
-sh scripts/build-osx.sh ALL   # VST3, AU, AUv3, LV2 y Standalone
-                              # o un solo formato: AU, AUv3, LV2, Standalone, VST3
+sh scripts/download-juce.sh   # descarga JUCE 9.0.1 en build/juce; no la repite si ya está
+sh scripts/build-osx.sh ALL   # los cinco formatos: VST3, AU, AUv3, LV2 y Standalone
 ```
 
-Los binarios son universales (arm64 y x86_64). Para probar en esta máquina y tardar la mitad, un
-segundo argumento: `sh scripts/build-osx.sh AU nativo`, que compila sólo la arquitectura local en
-`build/plugin-nativo`.
+En lugar de `ALL` puedes pedir un solo formato (`AU`, `AUv3`, `LV2`, `Standalone`, `VST3`). Los
+binarios salen siempre universales (arm64 y x86_64): macOS carga del bundle sólo la rebanada de tu
+arquitectura, así que compilar una sola no hace que el plugin vaya más rápido, y el universal es
+además el único que carga en un host corriendo bajo Rosetta.
 
-Los plugins quedan en `build/plugin/rdpiano_juce/rdpiano_juce_artefacts/Release/`, y el log
-completo de la compilación en `logs/`.
+Los plugins quedan en `build/plugin/rdpiano_juce/rdpiano_juce_artefacts/Release/`.
 
-Todo lo generado — la descarga de JUCE incluida — vive bajo `build/`: `build/juce` (la
-descarga), `build/plugin` (la compilación desde la raíz) y `build/core`, `build/core-asan` (las del
-núcleo suelto). `rm -rf build` es una limpieza completa; `rm -rf build/plugin build/core*` conserva el árbol de JUCE.
+**Los scripts no imprimen la salida de CMake ni de Xcode**: por pantalla va una etiqueta por paso y,
+al final, el tiempo, el número de avisos y la ruta de los productos. La salida completa se guarda en
+`logs/<script>-<fecha>-<hora>.log` (directorio ignorado por git, se puede borrar entero) y, si un
+paso falla, el script vuelca ahí mismo sus últimas líneas.
 
-Para trabajar solo en el emulador (sin necesidad de JUCE):
+Ninguno de los dos repite trabajo ya hecho: la descarga se salta si `build/juce` ya es la versión que
+toca (`--forzar` la rehace), y la configuración de CMake sólo se repite si su caché dejó de servir.
+
+### Instalar en el sistema
+
+Con `install` el script copia además lo recién
+compilado a los directorios del sistema, reemplazando lo que hubiera:
+
+```bash
+sh scripts/build-osx.sh AU install    # compila el .component y lo instala
+sh scripts/build-osx.sh ALL install   # los cinco formatos, instalados
+sh scripts/build-osx.sh AU            # sin la palabra, sólo compila
+```
+
+| Formato | Destino |
+|---|---|
+| AU | `/Library/Audio/Plug-Ins/Components` |
+| VST3 | `/Library/Audio/Plug-Ins/VST3` |
+| LV2 | `/Library/Audio/Plug-Ins/LV2` |
+| Standalone | `/Applications` |
+
+Son directorios del sistema, así que pide la contraseña de administrador una sola vez (`sudo -v`)
+antes de copiar nada. **AUv3 no tiene destino propio**: JUCE lo empotra dentro del `.app` del
+Standalone, de modo que se registra al instalar la aplicación. Tampoco hay VST2 —JUCE 9 lo quitó—,
+así que `/Library/Audio/Plug-Ins/VST` no se toca.
+
+Sin `install` no se escribe nada fuera de `build/`: la instalación es opcional a propósito, porque
+pisa lo que ya estuviera instalado.
+
+### Sólo el emulador
+
+Para trabajar en el núcleo no hace falta JUCE:
 
 ```bash
 cmake -S librdpiano -B build/core && cmake --build build/core
 ctest --test-dir build/core --output-on-failure
 ```
+
+Las pruebas son de dos clases: las **unitarias** (`librdpiano/test/unit/`) cubren placa, ROMs,
+protocolo, bloques del chip de sonido, efectos y motor; el **e2e** (`librdpiano/test/e2e.cpp`) toca
+los 16 parches sin interfaz y compara el audio con un hash bit a bit contra `test/golden.txt`. Ese
+golden no se regenera para poner algo en verde: si el cambio de sonido es intencionado, primero se
+escucha.
+
+### Limpieza
+
+Todo lo generado —la descarga de JUCE incluida— vive bajo `build/`: `build/juce` (la descarga),
+`build/plugin` (la compilación desde la raíz) y `build/core`, `build/core-asan` (las del núcleo
+suelto).
+
+```bash
+rm -rf build                      # limpieza completa: el árbol queda como recién clonado
+rm -rf build/plugin build/core*   # borra lo compilado, conserva JUCE
+```
+
+## Documentación
+
+- [ARQUITECTURA.md](docs/ARQUITECTURA.md) — cómo está construido el sistema, pieza a pieza.
+- [FIRMWARE.md](docs/FIRMWARE.md) — qué firmware ejecuta el emulador y por qué sólo ése.
+- [AUDITORIA.md](docs/AUDITORIA.md) — revisión de código y defectos encontrados.
+- [FIABILIDAD-DIRECTO.md](docs/FIABILIDAD-DIRECTO.md) y
+  [RENDIMIENTO-DIRECTO.md](docs/RENDIMIENTO-DIRECTO.md) — tocar en directo sin sustos: fallos,
+  clics y latencia.
+- [REFACTORIZACION.md](docs/REFACTORIZACION.md) y [PENDIENTE.md](docs/PENDIENTE.md) — diseño y
+  trabajo abierto.
 
 ## Agradecimientos
 

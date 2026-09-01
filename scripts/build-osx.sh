@@ -12,14 +12,25 @@
 # Sin argumento no hace nada: no hay defecto a propósito, para que nadie se
 # coma los cinco formatos por descuido.
 #
-# El segundo argumento elige las arquitecturas. Por omisión `universal`
-# (arm64;x86_64), que es lo que se publica; `nativo` compila sólo la de esta
-# máquina y tarda la mitad, que para probar en el DAW de aquí sobra. Cada modo
-# tiene su propio binary dir (build/plugin y build/plugin-nativo) para que
-# alternar no invalide la caché del otro y obligue a recompilarlo entero.
+# Siempre se compila universal (arm64 y x86_64) en build/plugin. Hubo un modo
+# `nativo`, que compilaba sólo la arquitectura de esta máquina: ahorraba tiempo
+# de compilación y ninguno en ejecución —macOS carga una sola rebanada del
+# universal, y es el mismo código con los mismos flags—, mientras que a cambio
+# partía el binary dir en dos y daba un producto que no carga en un host bajo
+# Rosetta. Se quitó; `universal` se sigue aceptando, y no hace nada, porque es
+# lo único que hay.
+#
+#   sh scripts/build-osx.sh AU install
 #
 # Generador Xcode a propósito: la API CMake de JUCE sólo crea el objetivo AUv3
 # con ese generador, y el .jucer sí producía un .appex.
+#
+# Con `install`, al terminar bien, los bundles se copian a los directorios del
+# sistema (/Library/Audio/Plug-Ins/… y /Applications) reemplazando lo que
+# hubiera: copiarlos a mano es justo el paso que se olvida, y el DAW se queda
+# cargando el binario de ayer. Es opcional y no hay defecto —pide contraseña de
+# administrador y pisa lo instalado—, así que sin la palabra no se toca nada
+# fuera de build/ (la CI, por tanto, sólo compila).
 #
 # La salida de CMake y de Xcode —miles de líneas— va entera a
 # logs/build-osx-<fecha>-<hora>.log; por pantalla sólo pasan las etiquetas de
@@ -33,7 +44,7 @@ ROOT=$(cd "$(dirname "$0")/.."; pwd)
 uso()
 {
     cat >&2 <<USAGE
-${C_FUERTE}uso:${C_OFF} build-osx.sh <FORMATO> [universal|nativo]
+${C_FUERTE}uso:${C_OFF} build-osx.sh <FORMATO> [install]
 
   ${C_FUERTE}AU${C_OFF}          Audio Unit (.component)
   ${C_FUERTE}AUv3${C_OFF}        Audio Unit v3 (.appex)
@@ -42,15 +53,23 @@ ${C_FUERTE}uso:${C_OFF} build-osx.sh <FORMATO> [universal|nativo]
   ${C_FUERTE}VST3${C_OFF}        VST3 (.vst3)
   ${C_FUERTE}ALL${C_OFF}         los cinco formatos
 
-  ${C_FUERTE}universal${C_OFF}   arm64 y x86_64 (por omisión), en build/plugin
-  ${C_FUERTE}nativo${C_OFF}      sólo $(uname -m), la mitad de tiempo, en build/plugin-nativo
+  ${C_FUERTE}install${C_OFF}     además, instala en el sistema (contraseña de administrador):
+              AU en /Library/Audio/Plug-Ins/Components, VST3 en .../VST3,
+              LV2 en .../LV2 y Standalone en /Applications, reemplazando lo
+              que hubiera. AUv3 no tiene destino propio: viaja empotrado en
+              el .app del Standalone. Sin esta palabra sólo se compila.
 
-Ningún nombre distingue mayúsculas de minúsculas (au, Vst3, all...).
+Ningún nombre distingue mayúsculas de minúsculas (au, Vst3, all...). Los cinco
+formatos salen universales (arm64 y x86_64), que es lo único que se compila:
+
+  sh scripts/build-osx.sh AU install          compila el .component y lo instala
+  sh scripts/build-osx.sh AU                  sólo compila
+  sh scripts/build-osx.sh ALL install         los cinco formatos, instalados
 USAGE
     exit 1
 }
 
-[ $# -ge 1 ] && [ $# -le 2 ] || uso
+[ $# -ge 1 ] && [ $# -le 3 ] || uso
 
 minusculas()
 {
@@ -72,14 +91,23 @@ case $(minusculas "$1") in
         ;;
 esac
 
-case $(minusculas "${2:-universal}") in
-    universal)     ARCHS="arm64;x86_64"; BUILD="$ROOT/build/plugin" ;;
-    nativo|native) ARCHS=$(uname -m);    BUILD="$ROOT/build/plugin-nativo" ;;
-    *)
-        printf '%sArquitectura desconocida:%s %s\n\n' "$C_ROJO" "$C_OFF" "$2" >&2
-        uso
-        ;;
-esac
+# El resto de argumentos: sólo la instalación, que no tiene defecto a propósito
+# —pide contraseña y pisa lo que haya en /Library—, así que hay que nombrarla.
+# `universal` se acepta y no hace nada: ya no hay otro modo que elegir.
+ARCHS="arm64;x86_64"
+BUILD="$ROOT/build/plugin"
+INSTALAR=
+shift
+for ARG do
+    case $(minusculas "$ARG") in
+        install|instalar) INSTALAR=1 ;;
+        universal)        ;;
+        *)
+            printf '%sArgumento desconocido:%s %s\n\n' "$C_ROJO" "$C_OFF" "$ARG" >&2
+            uso
+            ;;
+    esac
+done
 
 ARTEFACTS="$BUILD/rdpiano_juce/rdpiano_juce_artefacts/Release"
 
@@ -119,5 +147,74 @@ fi
 paso "Compilando rdpiano_juce_$FORMAT (Release)"
 cmd cmake --build "$BUILD" --config Release --target "rdpiano_juce_$FORMAT"
 
+# Instalación (sólo con `install`) en los directorios del sistema, no en
+# ~/Library: hacen falta permisos de administrador, así que se pide la
+# contraseña una sola vez —con sudo -v, antes de tocar nada— y las copias
+# siguientes reutilizan esa credencial. Se copia con
+# ditto, que conserva atributos extendidos y firma del bundle, sobre el destino
+# ya borrado: actualizar un bundle in situ deja dentro restos del anterior.
+#
+# AUv3 no aparece aquí porque no tiene destino propio: juce_add_plugin lo
+# empotra en el .app del Standalone (XCODE_EMBED_APP_EXTENSIONS), y se registra
+# al copiar la aplicación a /Applications. Tampoco hay VST2 —JUCE 9 lo quitó—,
+# de ahí que /Library/Audio/Plug-Ins/VST se quede como estaba.
+destino_de()
+{
+    case $1 in
+        AU)         echo /Library/Audio/Plug-Ins/Components ;;
+        VST3)       echo /Library/Audio/Plug-Ins/VST3 ;;
+        LV2)        echo /Library/Audio/Plug-Ins/LV2 ;;
+        Standalone) echo /Applications ;;
+        *)          echo '' ;;
+    esac
+}
+
+instalar()
+{
+    DESTINO=$(destino_de "$1")
+    for ORIGEN in "$ARTEFACTS/$1"/*; do
+        [ -e "$ORIGEN" ] || continue
+        NOMBRE=$(basename "$ORIGEN")
+        paso "Instalando $NOMBRE en $DESTINO"
+        cmd sudo mkdir -p "$DESTINO"
+        cmd sudo rm -rf "$DESTINO/$NOMBRE"
+        cmd sudo ditto "$ORIGEN" "$DESTINO/$NOMBRE"
+        INSTALADOS="$INSTALADOS $DESTINO/$NOMBRE"
+    done
+}
+
+if [ "$FORMAT" = All ]; then
+    FORMATOS="AU AUv3 LV2 Standalone VST3"
+else
+    FORMATOS=$FORMAT
+fi
+
+INSTALADOS=
+if [ -n "$INSTALAR" ]; then
+    PENDIENTES=
+    for F in $FORMATOS; do
+        if [ -n "$(destino_de "$F")" ] && [ -d "$ARTEFACTS/$F" ]; then
+            PENDIENTES="$PENDIENTES $F"
+        fi
+    done
+
+    if [ -n "$PENDIENTES" ]; then
+        paso "Instalando en el sistema (contraseña de administrador)"
+        sudo -v || fatal "sin permisos de administrador no se puede instalar"
+        for F in $PENDIENTES; do
+            instalar "$F"
+        done
+    fi
+fi
+
 fin "Listo en $(transcurrido)s," "$(avisos) (log completo en $LOG)"
 ruta "Productos en" "$PRODUCTOS/"
+for P in $INSTALADOS; do
+    ruta "Instalado en" "$P"
+done
+case "$INSTALAR: $FORMATOS " in
+    1:*" AUv3 "*)
+        printf '%sAUv3 va empotrado en rdpiano_juce.app; no tiene destino propio.%s\n' \
+               "$C_TENUE" "$C_OFF"
+        ;;
+esac
