@@ -75,11 +75,16 @@ class RdBoard
     void loadRomSet(const u8 *temp_ic5, const u8 *temp_ic6, const u8 *temp_ic7, const u8 *temp_paramsrom);
     void selectPatch(size_t from_addr);
 
-    // `loadRomSet` partido a su vez en la fase cara y la barata: `prepareRomSet`
-    // descifra contra el juego de reserva del chip y no toca nada que el
-    // emulador lea, así que corre fuera del cerrojo del integrador.
-    void prepareRomSet(const u8 *temp_ic5, const u8 *temp_ic6, const u8 *temp_ic7);
-    void publishRomSet(const u8 *temp_paramsrom);
+    // `loadRomSet` partido a su vez en la fase cara y la barata: `decodeRomSet`
+    // descifra en una ranura del chip que el emulador no lee —se hacen todas al
+    // construir— y `selectRomSet` activa una ya descifrada en O(1).
+    void decodeRomSet(unsigned slot, const u8 *temp_ic5, const u8 *temp_ic6, const u8 *temp_ic7);
+    void selectRomSet(unsigned slot, const u8 *temp_paramsrom);
+
+    // Mapea una página de parámetros YA descifrada (PARAMS_PAGE_BYTES). Escribe
+    // exactamente los mismos bytes que `selectPatch()` sin descifrar nada: el
+    // resto del espacio quedó a 0xff al construir y nadie más lo toca.
+    void selectPatchPage(const u8 *page, size_t from_addr);
 
     // Todo lo que cuelga del bus a estado de arranque: RAM, latch de banco, chip
     // de sonido y la cola de comandos. Las ROM y la página de parámetros ya

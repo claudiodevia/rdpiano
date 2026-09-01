@@ -13,8 +13,12 @@
 
 SoundChip::SoundChip(const u8 *temp_ic5, const u8 *temp_ic6, const u8 *temp_ic7) : tables(sa_tables())
 {
+    wave_slots = new WaveTables[NUM_WAVE_SLOTS];
+    waves = &wave_slots[0];
     load_samples(temp_ic5, temp_ic6, temp_ic7);
 }
+
+SoundChip::~SoundChip() { delete[] wave_slots; }
 
 u8 SoundChip::read(size_t offset) { return m_irq_id; }
 
@@ -125,26 +129,26 @@ s32 SoundChip::update()
 
 void SoundChip::load_samples(const u8 *temp_ic5, const u8 *temp_ic6, const u8 *temp_ic7)
 {
-    decode_samples(temp_ic5, temp_ic6, temp_ic7);
-    publish_samples();
+    decode_samples(0, temp_ic5, temp_ic6, temp_ic7);
+    select_samples(0);
 }
 
-void SoundChip::publish_samples()
+void SoundChip::select_samples(unsigned slot)
 {
-    if (!waves_pending)
+    if (slot >= NUM_WAVE_SLOTS)
         return;
 
-    WaveTables *t = waves;
-    waves = waves_back;
-    waves_back = t;
-    waves_pending = false;
+    waves = &wave_slots[slot];
 }
 
-void SoundChip::decode_samples(const u8 *temp_ic5, const u8 *temp_ic6, const u8 *temp_ic7)
+void SoundChip::decode_samples(unsigned slot, const u8 *temp_ic5, const u8 *temp_ic6, const u8 *temp_ic7)
 {
+    if (slot >= NUM_WAVE_SLOTS)
+        return;
+
     // Se descifra byte a byte en el sitio: sin los 384 KB de temporales que
     // costaría descifrar las tres ROM enteras primero.
-    WaveTables &out = *waves_back;
+    WaveTables &out = wave_slots[slot];
 
     // Wave rom values
     for (size_t i = 0; i < 0x20000; i++)
@@ -176,6 +180,4 @@ void SoundChip::decode_samples(const u8 *temp_ic5, const u8 *temp_ic6, const u8 
         out.delta[i] = delta_sample;
         out.delta_sign[i] = delta_sign;
     }
-
-    waves_pending = true;
 }

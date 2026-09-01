@@ -6,9 +6,14 @@
 //
 // Contrato de tiempo real:
 //   - `prepare()` reserva TODO. `render()` no reserva, no bloquea y no imprime.
-//   - `setPatch()`, `setMasterTune()` y `allNotesOff()` corren el emulador: los
-//     llama el hilo de UI y el integrador tiene que serializarlos con
-//     `render()` (en el plugin, `mcuLock`).
+//   - Cambiar de parche o de afinación desde otro hilo se hace con
+//     `requestPatch()`/`requestMasterTune()`: publican la petición y la atiende
+//     `render()`, con una rampa alrededor. No hace falta cerrojo ninguno.
+//   - `setPatch()`, `setMasterTune()` y `allNotesOff()` corren el emulador en el
+//     acto: son para la puesta en marcha y las pruebas, no para tocar en vivo
+//     mientras `render()` está en marcha en otro hilo.
+
+#include <atomic>
 
 #include "lsp/phaser.h"
 #include "lsp/spaced.h"
@@ -117,20 +122,40 @@ class RdPianoEngine
     // Libera los búferes. `prepare()` la puede volver a llamar.
     void release();
 
-    // La parte cara de `setPatch()`: descifrar las tres ROM de onda del juego
-    // del parche, ~2,9 ms. Escribe en el juego de reserva del chip, que
-    // `render()` no lee, así que va FUERA del cerrojo del integrador; después
-    // `setPatch()` sólo tiene que publicarlo (~0,03 ms). Es opcional: si nadie
-    // la llamó, `setPatch()` hace el descifrado por su cuenta.
+    // No hace nada: los tres juegos de ROM se descifran al construir y las 16
+    // páginas de parámetros también, así que ya no hay parte cara que adelantar.
+    // Se mantiene para que un integrador antiguo siga compilando.
     void prepareRomSetFor(int patch);
 
-    // Cambia de parche. Sólo recarga el juego de ROM si cambia de verdad; dentro
-    // del mismo juego es remapear una página.
+    // Cambia de parche en el acto. Sólo reactiva el juego de ROM si cambia de
+    // verdad; dentro del mismo juego es mapear otra página ya descifrada.
     void setPatch(int patch);
-    int patch() const { return currentPatch; }
+
+    // El parche que el motor tiene puesto o va a poner: si hay una petición sin
+    // atender, la de la petición. Es lo que la interfaz debe enseñar.
+    int patch() const { return latestPatch.load(std::memory_order_relaxed); }
+
+    // El que está sonando ahora mismo, con la petición ya atendida.
+    int activePatch() const { return currentPatch; }
+
+    // Peticiones desde cualquier hilo: se publican y las atiende `render()`.
+    // Cambiar de parche baja la salida a cero en 3 ms, cambia, y vuelve a subir
+    // en 15 ms; las repeticiones se colapsan, así que barrer el dial no encadena
+    // cambios. RT-safe: un `exchange` y nada más.
+    void requestPatch(int patch);
+    void requestMasterTune(int16_t tune);
 
     void setMasterTune(int16_t tune);
-    int16_t masterTune() const { return currentMasterTune; }
+
+    // La afinación puesta o pedida, igual que `patch()`: lo que la interfaz
+    // debe enseñar aunque `render()` no haya atendido todavía la petición.
+    int16_t masterTune() const { return (int16_t)latestTune.load(std::memory_order_relaxed); }
+
+    // Retardo de grupo del remuestreador en muestras del host, para que el
+    // integrador se lo declare al anfitrión. Constante desde `prepare()`: es el
+    // peor caso (parche de 20 kHz), no el del parche puesto, para no obligar al
+    // anfitrión a renegociar la latencia en cada cambio de sonido.
+    int latencySamples() const { return latencyFrames; }
 
     // Pánico: pedal arriba y las 128 notas apagadas.
     void allNotesOff();
@@ -167,13 +192,46 @@ class RdPianoEngine
 
     double hostRate = 0;
     int maxBlock = 0;
+    int latencyFrames = 0;
     int sourceRate = 20000;
     int currentPatch = 0;
     int16_t currentMasterTune = 0;
 
-    // Juego de ROM que `prepareRomSetFor()` dejó descifrado y sin publicar, o
-    // -1 si no hay nada esperando.
-    int preparedRomSet = -1;
+    // Las 16 páginas de parámetros ya descifradas (32 KB cada una), en el orden
+    // de los parches: cambiar de parche es copiar una, no descifrarla.
+    u8 *paramPages = nullptr;
+    const u8 *paramPage(int patch) const;
+
+    void applyPatch(int patch);
+    void serviceRequests();
+
+    // Peticiones pendientes. -1 y kNoTuneRequest = no hay nada que atender.
+    static const int kNoTuneRequest = 0x7fffffff;
+    std::atomic<int> patchRequest{-1};
+    std::atomic<int> tuneRequest{kNoTuneRequest};
+    std::atomic<int> latestPatch{0};
+    std::atomic<int> latestTune{0};
+
+    // Declick del cambio de parche: la salida baja a cero antes de cambiar y
+    // sube después. `declickPatch` es el parche que espera a que la rampa toque
+    // fondo; el cambio se aplica entre bloques, nunca a mitad de uno, porque la
+    // tasa del emulador cambia con él.
+    float declickGain = 1.0f;
+    float declickDownStep = 1.0f;
+    float declickUpStep = 1.0f;
+    int declickPatch = -1;
+
+    // Mezcla de los dos efectos: 0 = seco, 1 = efecto. Se mueve en rampa, y
+    // `process()` corre siempre —también en bypass— para que la línea de retardo
+    // no se congele y suelte lo que tenía dentro al reactivarla.
+    float chorusMix = 0.0f;
+    float efxMix = 0.0f;
+    float effectMixStep = 1.0f;
+
+    // Ganancias interpoladas dentro del bloque: sin esto, mover el volumen es un
+    // escalón por bloque (zíper) y cambiar de parche, un salto de hasta 12 dB.
+    float volumeSmoothed = 1.0f;
+    float outputGainSmoothed = 0.0f;
 
     // Búferes del emulador (a `sourceRate`) y su salida remuestreada (a
     // `hostRate`). Se reservan en `prepare()` y en ningún otro sitio.

@@ -28,6 +28,8 @@ class RdPiano_juceAudioProcessorEditor : public juce::AudioProcessorEditor,
 
     void buttonClicked(juce::Button *) override;
     void sliderValueChanged(juce::Slider *) override;
+    void sliderDragStarted(juce::Slider *) override;
+    void sliderDragEnded(juce::Slider *) override;
     void changeListenerCallback(juce::ChangeBroadcaster *) override;
 
     void updateValues();
@@ -129,6 +131,16 @@ class RdPiano_juceAudioProcessorEditor : public juce::AudioProcessorEditor,
 
     MksButton buttons[kNumButtons];
     DisplayMode mode = kModePatch;
+
+    // El dial de parches sólo cambia de sonido al SOLTARLO: mientras se arrastra
+    // enseña el nombre y nada más. Un gesto de extremo a extremo eran quince
+    // cambios de parche encadenados, con sus quince cortes de audio.
+    bool dialDragging = false;
+    int dialPatchPreview = -1;
+
+    // Última posición del fader ya pintada: el fondo sólo se repinta cuando se
+    // mueve, y sólo la franja del fader.
+    float paintedVolume = -1.0f;
 
     // Los 15 pasos que enseña el display y recorre el dial. Los parámetros
     // enteros van de 0 a 14 y los del phaser son 0..1 continuos: el paso se

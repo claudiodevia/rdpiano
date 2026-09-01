@@ -28,14 +28,23 @@ processBlock → RdPianoEngine::pushMidi/render
 ```
 
 - `RdPianoEngine` ([rd_engine.h](librdpiano/include/rd_engine.h)) es la frontera motor/plugin, sin
-  JUCE. Contrato: `prepare()` reserva todo; `render()` no reserva, no bloquea, no imprime;
-  `setPatch()`/`setMasterTune()` corren el emulador y los serializa `mcuLock` (`juce::SpinLock`).
-- **Disciplina del cerrojo** (docs/AUDITORIA.md §3): el hilo de audio nunca lo espera sin límite.
-  `processBlock` usa `acquireEngineLock()` —`tryEnter()` y reintentos con `Thread::yield()` hasta un
-  cuarto del bloque— y si se agota devuelve silencio sumando `blocksPreempted`; el MIDI ya está en la
-  cola del motor, así que el siguiente `render()` lo entrega. Del otro lado, lo caro se hace **fuera**
-  del cerrojo: `setCurrentProgram` llama a `engine->prepareRomSetFor(n)` antes de tomarlo. Nada nuevo
-  bajo `mcuLock` que dure más que `setMasterTune` (~0,36 ms), o el plazo deja de cubrirlo.
+  JUCE. Contrato: `prepare()` reserva todo; `render()` no reserva, no bloquea, no imprime.
+- **No hay cerrojo**: lo que corre el emulador desde fuera se publica como petición y lo atiende
+  `render()` al principio del bloque (`serviceRequests()`). `requestPatch()`/`requestMasterTune()`
+  son un `store` atómico y nada más; las repeticiones se colapsan solas, que es justo lo que hace
+  falta con un dial. `setPatch()`/`setMasterTune()`/`allNotesOff()` siguen existiendo y corren el
+  emulador **en el acto**: son para la puesta en marcha y las pruebas, no para llamarlas mientras
+  `render()` está en marcha en otro hilo. `patch()` y `masterTune()` devuelven la intención —lo
+  pedido aunque no se haya atendido—, `activePatch()` lo que está sonando.
+- **Declick del cambio de parche**: la petición no se aplica hasta que la salida está en cero
+  (rampa de 3 ms) y después vuelve a subir en 15 ms. Se aplica **entre bloques** siempre, porque la
+  tasa del emulador cambia con el parche y el bloque entero depende de ella. El plugin **no** puede
+  perder bloques por esto: `processBlock` ya no espera a nadie.
+- **Los efectos corren siempre**, encendidos o no: `SpaceD::process()`/`Phaser::process()` son lo
+  único que avanza sus líneas de retardo, y saltárselos las congelaba con el audio de la última vez
+  —que soltaban entero al reactivar el efecto—. El bypass es una mezcla en rampa de 10 ms
+  (`chorusMix`, `efxMix`); con la mezcla en 0 o en 1 la salida es bit a bit la de antes. Coste:
+  +0,03 ms por bloque, y constante con independencia de qué efectos estén encendidos.
 - **Reloj maestro = audio**: 1 muestra → 100 ciclos de CPU (62 si el parche es de 32 kHz). No hay
   bucle de CPU independiente. `SoundChip::update()` = 16 voces × 10 partes por los tres bloques
   (`tick_ic19/ic9/ic8`, inline en `sa_blocks.h`; LUT IC10/IC11 compartidas en `sa_tables.h`).
@@ -43,24 +52,38 @@ processBlock → RdPianoEngine::pushMidi/render
   pasos por coste:
    `loadRomSet()` (caro) + `selectPatch()` (barato, reubica página alta de params y parchea bytes
   0x00–0x02). `loadSounds()` = ambos.
-- `loadRomSet()` está a su vez partido: `SoundChip` guarda **dos** juegos de tablas de onda (768 KB
-  cada uno), `decode_samples()` descifra contra el de reserva —que `update()` no lee— y
-  `publish_samples()` lo activa intercambiando el puntero. Sube como `prepareRomSet`/`publishRomSet`
-  por `RdBoard` y `Mcu` hasta `RdPianoEngine::prepareRomSetFor()`. Es lo que deja los ~2,9 ms fuera
-  del cerrojo; `setPatch()` sigue valiendo sola (descifra ella si nadie preparó). Que las dos rutas
-  den el mismo audio muestra a muestra lo fija `engine_patch_prepare` en `test_engine.cpp`.
+- **Todo lo caro se descifra al construir el motor** (~9 ms, 2,75 MB): `SoundChip` guarda una ranura
+  de tablas de onda **por juego de ROM** (tres, 768 KB cada una, en el montón) y `RdPianoEngine`
+  guarda las **16 páginas de parámetros** ya descifradas (32 KB cada una). Desde ahí un cambio de
+  parche es `selectRomSet()` (un puntero) + `selectPatchPage()` (un `memcpy` de 32 KB): unos
+  microsegundos, que es lo que lo hace posible desde el hilo de audio. `decodeRomSet`/`selectRomSet`
+  suben por `RdBoard` y `Mcu`; `prepareRomSetFor()` sobrevive como no-op para no romper a nadie.
+  Que la página cacheada dé el mismo audio que descifrarla lo fija `engine_patch_prepare`.
 - El **protocolo del firmware** (0x30/0x31/0xE0/0x50…) solo en `command_port.h`; fuera se habla por
   intención (`boot()`, `selectPatch()`, `sendMidiCmd()`…). Cola = anillo fijo, cero reservas en RT.
 - `patchOutputGain[]` ([patches.h](librdpiano/include/patches.h)) normaliza los 16 parches a **+6
   dBFS** con acorde de 16 notas a velocity 127. Se aplica en la salida, después del emulador y de
-  `lsp/` (aritmética entera del hardware) → no mueve golden ni hashes de `test_lsp.cpp`. **No hay
+  `lsp/` (aritmética entera del hardware) → no mueve golden ni hashes de `test_lsp.cpp`. Él y
+  `volume` se **interpolan dentro del bloque** (leerlos una vez por bloque era zíper al mover el
+  mando y un escalón de hasta 12 dB al cambiar de parche); con el valor quieto el paso es
+  exactamente 0 y la salida no se mueve. **No hay
   limitador detrás**: con chorus de fábrica el peor caso medido llega a +10,8 dBFS. Se regenera con
   `rdpiano_e2e --headroom` (idempotente).
 - `RdBiquad` (EQ medio) replica `juce::dsp::IIR::Filter<float>` salvo `snapToZero` (no-op
   fuera de Intel).
+- El **program change MIDI** lo intercepta `RdPianoEngine::pushMidi()` y lo convierte en
+  `requestPatch()`: reenviarlo al firmware tal cual dejaba el motor mudo, porque cambiaba el número
+  de parche pero no la página de parámetros mapeada.
+- **Latencia declarada**: `latencySamples()` es el retardo de grupo del remuestreador (`Xoff` a la
+  tasa del host, 67 muestras a 48 kHz) y `prepareToPlay` se lo pasa a `setLatencySamples()`. Es el
+  peor caso —parche de 20 kHz— a propósito: no se renegocia al cambiar de sonido.
 - Plugin = 3 archivos + 2 tablas: `PluginParams.h` (10 parámetros, valores de fábrica desde
   `RdEngineParams`), `PluginProcessor` (APVTS, serializa presets), `PluginEditor` (tablas
-  `ButtonSpec` ×17 y `ModeSpec` ×8).
+  `ButtonSpec` ×17 y `ModeSpec` ×8). El procesador es además `juce::Timer` a 10 Hz: recoge el
+  parche que el motor pueda haber cambiado por su cuenta (un program change MIDI) para el espejo,
+  el preset y el panel. En el editor, el dial de parches sólo cambia de sonido **al soltarlo**
+  (`sliderDragEnded`); mientras se arrastra enseña el nombre. `updateValues()` repinta el fondo
+  sólo si se movió el fader, y cada control se repinta solo.
 
 ## Mapa de memoria (`RdBoard::read`/`write`, [rd_board.h](librdpiano/include/rd_board.h))
 
@@ -93,8 +116,8 @@ descartan (el firmware RD200 solo escribe ahí ceros de arranque).
    `patchSampleRates[]`. Ver [docs/FIRMWARE.md §3](docs/FIRMWARE.md).
 3. Dos hacks en `SoundChip::update()`: early-out `env_value==0 && env_dest==0` y silenciado
    condicional contra voces colgadas (`investigate`). Fijados por `test/vectors/ic_blocks.txt`.
-4. `setMasterTune()` corre el emulador (~200 muestras + `programChange(0)`); el plugin lo llama
-   desde el hilo de UI bajo `mcuLock`. Lleva
+4. `setMasterTune()` corre el emulador (~200 muestras + `programChange(0)`, ~0,16 ms): ahora lo
+   corre `render()` al atender la petición, no el hilo de UI. Lleva
    "switcharoo" 0x30 → tuning → 0x30 porque afinar parches ≠ 0 falla.
 5. `mcu_ops.h` y `mame_utils.h` son código derivado de MAME (BSD-3): no reescribir por estilo,
    mantener atribución.
@@ -103,12 +126,13 @@ descartan (el firmware RD200 solo escribe ahí ceros de arranque).
 7. **Plugin y harness arrancan distinto** en parches de 32 kHz: el motor pasa 20 kHz siempre, el
    harness el del parche. Cerrarlo movería el golden de 5 parches = cambio de audio.
 8. **`boot()` no pierde el parche** pero re-llamar `setPatch()` tras `prepare()` **sí cambia el
-   audio**. Orden bueno: seleccionar parche → preparar.
+   audio**. Orden bueno: seleccionar parche → preparar. Por eso `prepare()` atiende una petición
+   pendiente **antes** de arrancar el firmware, en vez de dejársela a `render()`.
 9. `emuCapacity` se dimensiona para 32 kHz (el parche cambia sin re-preparar) + `maxBlock/4` de
    margen por el corrector de deriva.
-10. `masterTune` y `currentPatch` **no son automatizables** a propósito (correrían emulador en el
-   hilo de audio). Viajan en el preset como propiedades del árbol APVTS, con los nombres de atributo
-   de siempre.
+10. `masterTune` y `currentPatch` **no son automatizables** a propósito: el parche es el *programa*
+   del anfitrión y la afinación no es un mando de mezcla. Viajan en el preset como propiedades del
+   árbol APVTS, con los nombres de atributo de siempre.
 11. El `.lv2` se llama ahora `rdpiano_juce.lv2` (antes `RdPiano.lv2`: `juce_add_plugin` usa
     `PRODUCT_NAME`); el URI no cambió. Los otros
     cuatro formatos conservan nombre, bundle id y códigos.
@@ -181,7 +205,7 @@ ctest --test-dir build/core --output-on-failure
   nota, acorde, extinción tras note-off (detector de voces colgadas), polifonía 16, rango de pico y
   **hash bit-exacto por parche** contra `test/golden.txt`. `--patch N` para iterar (~0,2 s).
   Cambios en `sound_chip.cpp`, `unscramble_*` o el MCU mueven el hash.
-- **Unitario** (`test/unit/`, 41 suites, 450 checks, 2,6 s): `test_board`, `test_patches`,
+- **Unitario** (`test/unit/`, 47 suites, 473 checks, 2,7 s): `test_board`, `test_patches`,
   `test_sa_tables`, `test_rom_loader`, `test_command_port`, `test_sound_chip_blocks` (2.256
   vectores), `test_lsp` (respuesta a impulso congelada), `test_resampler`, `test_engine`.
   Se añade con `TEST_SUITE(nombre)` + una línea en el CMakeLists; andamiaje = `test/check.h`.
@@ -189,8 +213,11 @@ ctest --test-dir build/core --output-on-failure
 - `test_engine.cpp` = simulador de host (bloques irregulares, 22–96 kHz, cambios de parche en
   caliente, extremos de parámetros) y lo único que verifica **cero reservas en `render()`**
   (sustituye `operator new` global + vigila `stats.resamplerOpens`, porque libresample usa `malloc`).
-- **Plugin** (`rdpiano_juce/test/`, `rdpiano_plugin_tests`, 5 suites, 95 checks): presets ida y
-  vuelta, valores de fábrica, programas, preset corrupto. Está en el ctest de la raíz:
+  También es la red de los transitorios: `engine_effect_tail` (encender un efecto en silencio tiene
+  que dar silencio), `engine_effect_bypass_ramp`, `engine_program_change`, `engine_patch_declick`,
+  `engine_volume_ramp` y `engine_latency`.
+- **Plugin** (`rdpiano_juce/test/`, `rdpiano_plugin_tests`, 6 suites, 98 checks): presets ida y
+  vuelta, valores de fábrica, programas, preset corrupto, latencia declarada. Está en el ctest de la raíz:
   ```bash
   cmake -B build/plugin -G Xcode -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64"
   cmake --build build/plugin --config Release --target rdpiano_tests rdpiano_e2e rdpiano_plugin_tests
@@ -204,7 +231,8 @@ en verde = cambio en el orden de evaluación del bucle → revertir.
 Tocar `lsp/`, `rd_engine.cpp` o `rdpiano_juce/` **no** mueve el golden (el harness mide el emulador
 desnudo): ahí la red es `test_engine.cpp` y `test_lsp.cpp`.
 
-Sin cubrir: `setMasterTune()`, la UI y sobre todo el **timbre** — los efectos se congelan por hash,
+Sin cubrir: `setMasterTune()`, la UI —incluido el dial, que ahora aplica el parche al soltar— y
+sobre todo el **timbre** — los efectos se congelan por hash,
 que detecta pero no juzga. Verificación auditiva con `test/standalone.cpp` o el plugin en un DAW.
 Un cambio en `sound_chip.cpp` que pase el harness pero mueva el hash es de **alto riesgo tímbrico:
 decírselo al usuario**.
@@ -223,7 +251,8 @@ decírselo al usuario**.
   git diff --name-only --diff-filter=ACMR -- '*.c' '*.h' '*.cpp' | xargs $CF -i
   ```
 - El núcleo no conoce JUCE ni `stdio` (tampoco `rd_engine.cpp`, `lsp/`, `resample/`); las cabeceras
-  no incluyen nada de la stdlib salvo `<stddef.h>`/`<cstdint>`; la traza sale por `RD_TRACE`
+  no incluyen nada de la stdlib salvo `<stddef.h>`/`<cstdint>` y el `<atomic>` de `rd_engine.h`
+  (las peticiones que sustituyen al cerrojo); la traza sale por `RD_TRACE`
   (`rd_trace.h`), no-op sin `-DRDPIANO_TRACE`.
 - Tipos MAME (`u8/s16/u32`) en el núcleo, tipos JUCE en el plugin.
 - `HACK:` / `TODO:` marcan comportamiento conocido-incorrecto: son contexto, no ruido.

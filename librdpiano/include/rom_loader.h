@@ -44,14 +44,16 @@ void decode_program_rom(u8 *dst, const u8 *src);
 // Descifra una ROM de onda entera. `dst` mide WAVE_ROM_BYTES.
 void decode_wave_rom(u8 *dst, const u8 *src);
 
+// Descifra en `dst` (PARAMS_PAGE_BYTES) la página de 32 KB alineada que
+// contiene `from_addr`. `unscramble_addr_params` se aplica índice a índice, así
+// que el resultado es byte a byte el mismo que descifrar los 0x20000 en un
+// temporal y copiar la ventana.
+void decode_params_window(u8 *dst, const u8 *src, size_t from_addr);
+
 // Deja `dst` (PARAMS_ROM_BYTES) como lo espera el bus para el parche que
-// empieza en `from_addr`: todo a 0xff, la página de 32 KB alineada que
-// contiene el parche mapeada en 0x8000, y los bytes 0x00-0x02 parcheados para
-// redirigir al firmware al parche elegido.
-//
-// Solo se descifra la página que se va a mapear: `unscramble_addr_params` se
-// aplica índice a índice, así que el resultado es byte a byte el mismo que
-// descifrar los 0x20000 en un temporal y copiar la ventana.
+// empieza en `from_addr`: todo a 0xff, la página descifrada mapeada en 0x8000,
+// y los bytes 0x00-0x02 parcheados para redirigir al firmware al parche
+// elegido.
 void decode_params_page(u8 *dst, const u8 *src, size_t from_addr);
 
 // El destino al que apuntan los bytes 0x00-0x02 para `from_addr`.

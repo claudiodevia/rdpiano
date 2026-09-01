@@ -8,7 +8,12 @@
 class SoundChip
 {
   public:
+    // Ranuras de tablas de onda descifradas: una por juego de ROM, para que
+    // cambiar de juego sea activar una ranura y no descifrar 768 KB.
+    static constexpr unsigned NUM_WAVE_SLOTS = 3;
+
     SoundChip(const u8 *temp_ic5, const u8 *temp_ic6, const u8 *temp_ic7);
+    ~SoundChip();
 
     // Ver Mcu: no copiable ni movible, por el mismo motivo.
     SoundChip(const SoundChip &) = delete;
@@ -27,14 +32,14 @@ class SoundChip
     void reset();
 
     // Carga de las ROM de onda, partida en dos por coste. `decode_samples()` es
-    // la parte cara (~2,9 ms) y escribe en el juego de reserva: no toca nada de
-    // lo que lee `update()`, así que el integrador puede correrla fuera del
-    // cerrojo que serializa con el hilo de audio. `publish_samples()` activa lo
-    // descifrado y es un intercambio de punteros.
-    void decode_samples(const u8 *temp_ic5, const u8 *temp_ic6, const u8 *temp_ic7);
-    void publish_samples();
+    // la parte cara (~2,9 ms) y escribe en la ranura que se le diga, que no
+    // tiene por qué ser la activa: se descifran todas al construir y desde ahí
+    // cambiar de juego es `select_samples()`, un puntero.
+    void decode_samples(unsigned slot, const u8 *temp_ic5, const u8 *temp_ic6, const u8 *temp_ic7);
+    void select_samples(unsigned slot);
 
-    // decode_samples() + publish_samples(): hace el trabajo caro siempre.
+    // Descifra el juego en la ranura 0 y la activa: el camino de siempre para
+    // quien solo usa un juego de ROM.
     void load_samples(const u8 *temp_ic5, const u8 *temp_ic6, const u8 *temp_ic7);
 
     // if there is an IRQ currently waiting
@@ -45,8 +50,8 @@ class SoundChip
     static constexpr unsigned PARTS_PER_VOICE = 10;
     static constexpr unsigned PARTS_PER_VOICE_MEM = 16;
 
-    // Las tablas de onda ya descifradas. Hay dos juegos: `waves` es el que lee
-    // update() y `waves_back` donde descifra decode_samples().
+    // Las tablas de onda ya descifradas, una ranura por juego de ROM. En el
+    // montón y no en el objeto: son 768 KB por ranura.
     struct WaveTables
     {
         uint16_t exp[0x20000];
@@ -55,10 +60,8 @@ class SoundChip
         bool delta_sign[0x20000];
     };
 
-    WaveTables wave_banks[2];
-    WaveTables *waves = &wave_banks[0];
-    WaveTables *waves_back = &wave_banks[1];
-    bool waves_pending = false;
+    WaveTables *wave_slots = nullptr;
+    WaveTables *waves = nullptr;
 
     // LUT deterministas, compartidas por todas las instancias.
     const SaTables &tables;

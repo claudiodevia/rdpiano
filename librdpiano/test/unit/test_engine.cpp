@@ -768,3 +768,313 @@ TEST_SUITE(engine_patch_prepare)
 
     checks.add("preparar-suena", rms(direct.l, 0, direct.l.size()) > 1e-4, "la secuencia salió muda");
 }
+
+// ------------------------------------------------- efectos: bypass y cola
+
+// El mayor salto entre muestras consecutivas de un tramo: la métrica de clic
+// que usa docs/RENDIMIENTO-DIRECTO.md.
+static double worst_step(const std::vector<float> &v, size_t from, size_t to)
+{
+    if (to > v.size())
+        to = v.size();
+
+    double worst = 0;
+    for (size_t i = from + 1; i < to; i++)
+    {
+        const double s = fabs((double)v[i] - (double)v[i - 1]);
+        if (s > worst)
+            worst = s;
+    }
+    return worst;
+}
+
+static void render_into(RdPianoEngine *e, Stereo &out, int block, int blocks)
+{
+    std::vector<float> l(block, 0.0f), r(block, 0.0f);
+    for (int b = 0; b < blocks; b++)
+    {
+        e->render(l.data(), r.data(), block);
+        out.l.insert(out.l.end(), l.begin(), l.end());
+        out.r.insert(out.r.end(), r.begin(), r.end());
+    }
+}
+
+TEST_SUITE(engine_effect_tail)
+{
+    // Apagar un efecto dejaba de llamar a su process(), que es lo único que
+    // avanza la línea de retardo: se quedaba congelada con el último audio que
+    // pasó por ella y lo soltaba ENTERO al reactivarla, un estallido de −11 dBFS
+    // sin tocar una sola tecla. Con process() corriendo siempre, encender un
+    // efecto en silencio absoluto tiene que seguir dando silencio.
+    const int BLOCK = 512;
+    const double RATE = 48000.0;
+
+    for (int which = 0; which < 2; which++)
+    {
+        RdPianoEngine *e = make_engine(RATE, BLOCK);
+        if (!e)
+        {
+            CHECK_MSG(false, "sin ROMs en %s", g_roms_dir.c_str());
+            return;
+        }
+
+        const bool chorus = which == 0;
+        const char *name = chorus ? "chorus" : "phaser";
+
+        e->params.chorusEnabled = chorus;
+        e->params.efxEnabled = !chorus;
+
+        // Un acorde con el efecto encendido: es lo que llena la línea.
+        for (int n = 0; n < 6; n++)
+            e->pushMidi(0, 0x90, 48 + n * 4, 127);
+
+        Stereo loud;
+        render_into(e, loud, BLOCK, 60); // ~0,64 s
+
+        // Se apaga el efecto y se sueltan las notas; luego, silencio de sobra.
+        e->params.chorusEnabled = false;
+        e->params.efxEnabled = false;
+        for (int n = 0; n < 6; n++)
+            e->pushMidi(0, 0x80, 48 + n * 4, 0);
+
+        Stereo quiet;
+        render_into(e, quiet, BLOCK, 280); // ~3 s
+
+        // Sólo la cola: al principio de este tramo todavía se está apagando el
+        // acorde. Lo que interesa es que al final no queda absolutamente nada.
+        double before = 0;
+        for (size_t i = quiet.l.size() - (size_t)BLOCK * 40; i < quiet.l.size(); i++)
+            if (fabs((double)quiet.l[i]) > before)
+                before = fabs((double)quiet.l[i]);
+
+        // Y ahora se enciende, sin tocar nada.
+        e->params.chorusEnabled = chorus;
+        e->params.efxEnabled = !chorus;
+
+        Stereo after;
+        render_into(e, after, BLOCK, 40); // ~0,43 s
+
+        const double burst = peak(after.l);
+
+        checks.add(check_fmt("%s-suena-antes", name), peak(loud.l) > 0.01,
+                   check_fmt("pico del acorde %.4f", peak(loud.l)));
+        checks.add(check_fmt("%s-silencio-previo", name), before < 1e-3,
+                   check_fmt("pico %.8f en el silencio antes de encender", before));
+        checks.add(check_fmt("%s-sin-cola-congelada", name), burst < 5e-3,
+                   check_fmt("pico %.6f al encender en silencio", burst));
+
+        delete e;
+    }
+}
+
+TEST_SUITE(engine_effect_bypass_ramp)
+{
+    // El bypass conmutaba de una muestra a la siguiente entre dos señales
+    // distintas: un clic. Ahora es una mezcla en rampa, así que el mayor salto
+    // en la conmutación no puede despegarse del de la señal normal.
+    const int BLOCK = 256;
+    RdPianoEngine *e = make_engine(48000.0, BLOCK);
+    if (!e)
+    {
+        CHECK_MSG(false, "sin ROMs en %s", g_roms_dir.c_str());
+        return;
+    }
+
+    e->params.chorusEnabled = false;
+    e->params.efxEnabled = false;
+    e->pushMidi(0, 0x90, 60, 110);
+
+    Stereo warm;
+    render_into(e, warm, BLOCK, 20);
+
+    const double typical = worst_step(warm.l, warm.l.size() / 2, warm.l.size());
+
+    struct Toggle
+    {
+        const char *name;
+        bool chorus;
+        bool efx;
+    };
+    const Toggle toggles[4] = {
+        {"chorus-on", true, false}, {"chorus-off", false, false}, {"efx-on", false, true}, {"efx-off", false, false}};
+
+    for (const Toggle &t : toggles)
+    {
+        e->params.chorusEnabled = t.chorus;
+        e->params.efxEnabled = t.efx;
+
+        Stereo out;
+        render_into(e, out, BLOCK, 20); // ~107 ms, la rampa son 10 ms
+
+        const double step = worst_step(out.l, 0, out.l.size());
+        checks.add(check_fmt("bypass-%s-sin-clic", t.name), step < typical * 3.0,
+                   check_fmt("salto %.5f frente a %.5f típico", step, typical));
+    }
+
+    delete e;
+}
+
+// ------------------------------------------------- program change
+
+TEST_SUITE(engine_program_change)
+{
+    // El program change se reenviaba al firmware tal cual y dejaba el motor
+    // MUDO: cambiaba el número de parche pero no la página de parámetros, que
+    // seguía siendo la del anterior. Ahora es un cambio de parche completo.
+    const int BLOCK = 256;
+    RdPianoEngine *e = make_engine(48000.0, BLOCK);
+    if (!e)
+    {
+        CHECK_MSG(false, "sin ROMs en %s", g_roms_dir.c_str());
+        return;
+    }
+
+    e->params.chorusEnabled = false;
+
+    // Parche 5: otro juego de ROM que el 0, que es el caso que se rompía.
+    e->pushMidi(0, 0xC0, 5, 0);
+
+    Stereo settle;
+    render_into(e, settle, BLOCK, 20);
+
+    CHECK_EQ(e->patch(), 5);
+    CHECK_EQ(e->activePatch(), 5);
+
+    e->pushMidi(0, 0x90, 60, 110);
+
+    Stereo out;
+    render_into(e, out, BLOCK, 60);
+
+    const double level = rms(out.l, 0, out.l.size());
+    checks.add("program-change-suena", level > 1e-4, check_fmt("rms %.6f tras el program change", level));
+
+    delete e;
+}
+
+// ------------------------------------------------- declick del cambio de parche
+
+TEST_SUITE(engine_patch_declick)
+{
+    // Cambiar de parche cortaba en seco lo que estuviera sonando, con un pico de
+    // +3,5 a +6,5 dB sobre la propia nota: voces del parche viejo leyendo las
+    // tablas de onda del nuevo. Pedido con requestPatch(), render() baja la
+    // salida antes de cambiar, así que ni pico ni salto.
+    const int BLOCK = 256;
+    RdPianoEngine *e = make_engine(48000.0, BLOCK);
+    if (!e)
+    {
+        CHECK_MSG(false, "sin ROMs en %s", g_roms_dir.c_str());
+        return;
+    }
+
+    e->params.chorusEnabled = false;
+    e->pushMidi(0, 0x90, 60, 110);
+
+    Stereo before;
+    render_into(e, before, BLOCK, 24);
+
+    const double levelBefore = peak(before.l);
+    const double stepBefore = worst_step(before.l, before.l.size() / 2, before.l.size());
+
+    // Al otro juego de ROM y a otra tasa de emulador: el salto más largo.
+    e->requestPatch(11);
+
+    Stereo during;
+    render_into(e, during, BLOCK, 24);
+
+    const double levelDuring = peak(during.l);
+    const double stepDuring = worst_step(during.l, 0, during.l.size());
+
+    checks.add("declick-aplicado", e->activePatch() == 11, check_fmt("parche activo %d", e->activePatch()));
+    checks.add("declick-sin-pico", levelDuring <= levelBefore,
+               check_fmt("pico %.4f durante el cambio, %.4f antes", levelDuring, levelBefore));
+    checks.add("declick-sin-salto", stepDuring < stepBefore * 2.0,
+               check_fmt("salto %.5f durante el cambio, %.5f antes", stepDuring, stepBefore));
+
+    // Y el parche nuevo suena.
+    e->pushMidi(0, 0x90, 60, 110);
+    Stereo after;
+    render_into(e, after, BLOCK, 40);
+    checks.add("declick-suena-despues", rms(after.l, 0, after.l.size()) > 1e-4, "el parche nuevo salió mudo");
+
+    delete e;
+}
+
+// ------------------------------------------------- rampa de volumen
+
+TEST_SUITE(engine_volume_ramp)
+{
+    // `volume` se leía una vez por bloque y saltaba: un mando movido rápido son
+    // decenas de escalones por segundo. Interpolado dentro del bloque, el salto
+    // no se despega del de la señal y el destino se alcanza igual.
+    const int BLOCK = 256;
+    RdPianoEngine *e = make_engine(48000.0, BLOCK);
+    if (!e)
+    {
+        CHECK_MSG(false, "sin ROMs en %s", g_roms_dir.c_str());
+        return;
+    }
+
+    e->params.chorusEnabled = false;
+    e->pushMidi(0, 0x90, 60, 110);
+
+    Stereo loud;
+    render_into(e, loud, BLOCK, 24);
+
+    const double stepBefore = worst_step(loud.l, loud.l.size() / 2, loud.l.size());
+    const double levelBefore = rms(loud.l, loud.l.size() - BLOCK, loud.l.size());
+
+    e->params.volume = 0.2f;
+
+    Stereo ramp;
+    render_into(e, ramp, BLOCK, 1);
+
+    Stereo quiet;
+    render_into(e, quiet, BLOCK, 4);
+
+    const double stepRamp = worst_step(ramp.l, 0, ramp.l.size());
+    const double levelAfter = rms(quiet.l, 0, quiet.l.size());
+    const double ratio = levelBefore > 0 ? levelAfter / levelBefore : 0;
+
+    checks.add("volumen-sin-escalon", stepRamp < stepBefore * 2.0,
+               check_fmt("salto %.5f al bajar el volumen, %.5f antes", stepRamp, stepBefore));
+    checks.add("volumen-llega", ratio > 0.1 && ratio < 0.35, check_fmt("nivel x%.3f con volume 1,0 -> 0,2", ratio));
+
+    delete e;
+}
+
+// ------------------------------------------------- latencia declarada
+
+TEST_SUITE(engine_latency)
+{
+    // El retardo de grupo del remuestreador, para que el anfitrión lo compense
+    // al grabar. Es `Xoff` (muestras de ENTRADA) llevado a la tasa del host, y
+    // se declara el peor caso —parche de 20 kHz— para no renegociarlo en cada
+    // cambio de sonido.
+    RdPianoEngine *a = make_engine(48000.0, 512);
+    RdPianoEngine *b = make_engine(96000.0, 512);
+    if (!a || !b)
+    {
+        CHECK_MSG(false, "sin ROMs en %s", g_roms_dir.c_str());
+        delete a;
+        delete b;
+        return;
+    }
+
+    checks.add("latencia-declarada", a->latencySamples() > 0, check_fmt("%d muestras a 48 kHz", a->latencySamples()));
+    checks.add("latencia-razonable", a->latencySamples() < (int)(0.005 * 48000.0),
+               check_fmt("%d muestras a 48 kHz son %.2f ms", a->latencySamples(), a->latencySamples() / 48.0));
+
+    // El retardo es un tiempo fijo: al doble de tasa, el doble de muestras.
+    checks.add("latencia-escala-con-el-host", b->latencySamples() == a->latencySamples() * 2,
+               check_fmt("%d a 48 kHz, %d a 96 kHz", a->latencySamples(), b->latencySamples()));
+
+    // No depende del parche: cambiarlo no puede mover lo que ya se declaró.
+    const int declared = a->latencySamples();
+    a->setPatch(3);
+    checks.add("latencia-constante-entre-parches", a->latencySamples() == declared,
+               check_fmt("%d -> %d", declared, a->latencySamples()));
+
+    delete a;
+    delete b;
+}

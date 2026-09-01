@@ -19,8 +19,13 @@ Lcd::~Lcd() {}
 
 void Lcd::setText(const uint8_t (&chars)[kChars])
 {
+    // Se repinta él, y sólo si el texto cambia: antes dependía del repaint()
+    // de toda la ventana que hacía el editor, que reescalaba el fondo entero.
+    if (memcmp(LCD_Data, chars, kChars) == 0)
+        return;
+
     memcpy(LCD_Data, chars, kChars);
-    // repaint();
+    repaint();
 }
 
 void Lcd::setScale(float scale) { this->scale = scale; }

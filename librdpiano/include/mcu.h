@@ -62,11 +62,15 @@ class Mcu : public RdBoardCpu
     void loadRomSet(const u8 *temp_ic5, const u8 *temp_ic6, const u8 *temp_ic7, const u8 *temp_paramsrom);
     void selectPatch(size_t from_addr);
 
-    // `loadRomSet` partido a su vez: `prepareRomSet` es el descifrado, contra el
-    // juego de reserva del chip; `publishRomSet` lo activa en O(1). Sirve para
-    // dejar los ~2,9 ms fuera del cerrojo que serializa con el hilo de audio.
-    void prepareRomSet(const u8 *temp_ic5, const u8 *temp_ic6, const u8 *temp_ic7);
-    void publishRomSet(const u8 *temp_paramsrom);
+    // `loadRomSet` partido a su vez: `decodeRomSet` es el descifrado, en la
+    // ranura que se le diga; `selectRomSet` activa una ya descifrada en O(1).
+    // Con las tres ranuras descifradas de antemano, cambiar de juego de ROM ya
+    // no cuesta milisegundos y cabe en el hilo de audio.
+    void decodeRomSet(unsigned slot, const u8 *temp_ic5, const u8 *temp_ic6, const u8 *temp_ic7);
+    void selectRomSet(unsigned slot, const u8 *temp_paramsrom);
+
+    // Mapea una pagina de parametros ya descifrada: `selectPatch` sin descifrar.
+    void selectPatchPage(const u8 *page, size_t from_addr);
 
     // loadRomSet() + selectPatch(): hace el trabajo caro siempre.
     void loadSounds(const u8 *temp_ic5, const u8 *temp_ic6, const u8 *temp_ic7, const u8 *temp_paramsrom,

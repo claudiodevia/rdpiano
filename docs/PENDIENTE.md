@@ -33,9 +33,9 @@ distintos, y **conviene no mezclarlos**, porque sólo el primero es gratis.
 | 5 | ~~Headroom: pico 2,82 (≈ +9 dB sobre fondo de escala)~~ **hecho** | **Cambio de audio** | **Sí, aplicado** | — | [FIAB §4](FIABILIDAD-DIRECTO.md) |
 | 6 | 23 huecos de silencio por troceado (búfer circular de salida) | **Cambio de audio** | **Sí** | Alto | [REF §17.6](REFACTORIZACION.md#176-lo-que-solo-se-puede-probar-con-un-motor-de-verdad) |
 | 7 | Ritmo del margen de arranque: motor 20 kHz, harness el del parche | **Cambio de audio** | **Sí** (5 parches) | Bajo | trampa 7 de [CLAUDE.md](../CLAUDE.md) |
-| 8 | MIDI que se descarta: program change, CC 120/123, canal, pitch bend | Comportamiento | Sí, donde hoy no suena nada | Medio | [FIAB §§2, 3, 9, 10](FIABILIDAD-DIRECTO.md) |
-| 9 | Cambio de parche: recarga de ROM bajo `mcuLock`, dos clics | Comportamiento | Sí (transitorio) | Medio | [AUD §3](AUDITORIA.md), [FIAB §§5, 6](FIABILIDAD-DIRECTO.md) |
-| 10 | `masterTune` no automatizable; aplicarlo corre el emulador | Comportamiento | No | Medio | [REF §9](REFACTORIZACION.md#9-parámetros-hacerlo-a-mano-cuesta-120-líneas-y-se-desincroniza) |
+| 8 | MIDI que se descarta: ~~program change~~, CC 120/123, canal, pitch bend | Comportamiento | Sí, donde hoy no suena nada | Medio | [FIAB §§2, 3, 9, 10](FIABILIDAD-DIRECTO.md) |
+| 9 | ~~Cambio de parche: recarga de ROM bajo `mcuLock`, dos clics~~ **hecho** | Comportamiento | **Sí, aplicado** (transitorio) | — | [REND §11](RENDIMIENTO-DIRECTO.md) |
+| 10 | `masterTune` no automatizable (aplicarlo ya no corre el emulador en el hilo de UI) | Comportamiento | No | Medio | [REF §9](REFACTORIZACION.md#9-parámetros-hacerlo-a-mano-cuesta-120-líneas-y-se-desincroniza) |
 | 11 | `SoundChip::read(offset)` ignora el offset; `offset % 8` pliega | Aritmética | **Sí, si se decide mal** | Bajo | [AUD §14](AUDITORIA.md), [REF §5](REFACTORIZACION.md#5-soundchipupdate-tres-bloques-que-piden-ser-tres-funciones) |
 | 12 | `waverom_addr` sin máscara; `SA_Part` con 7 campos sin inicializar | Aritmética | **Sí, si se toca** | Bajo | [AUD §6](AUDITORIA.md), fase 1 |
 | 13 | Bus de entrada estéreo en un plugin `pluginIsSynth` | Compatibilidad | No | Bajo | [FIAB §14](FIABILIDAD-DIRECTO.md) |
@@ -178,34 +178,33 @@ note off, note on y sustain (CC 64). Verificado hoy, queda fuera:
 
 | Qué | Estado | Documentado en |
 |---|---|---|
-| **Program change entrante** | Se pasa al firmware (`programChange(data2 & 0xF)`) sin remapear ROM ni página de params: deja el plugin mudo | [FIAB §2](FIABILIDAD-DIRECTO.md) (N1, CRÍTICO) |
+| **Program change entrante** | ~~Se pasa al firmware sin remapear ROM ni página de params: deja el plugin mudo~~ **hecho**: lo intercepta `RdPianoEngine::pushMidi()` y lo traduce a `requestPatch()` (`engine_program_change`) | [FIAB §2](FIABILIDAD-DIRECTO.md) (N1), [REND §7](RENDIMIENTO-DIRECTO.md) |
 | **CC 120/123 (panic)** | Se ignoran. `allNotesOff()` existe y está probado desde la fase 1 ([command_port.h:136](../librdpiano/include/command_port.h#L136)), pero nada lo conecta al MIDI entrante — el propio comentario de :133 lo dice | [FIAB §3](FIABILIDAD-DIRECTO.md) |
 | **Filtro de canal** | No hay: omni permanente, ni en `pushMidi` ni en `sendMidiCmd` | [FIAB §9](FIABILIDAD-DIRECTO.md) |
 | **Pitch bend, modulación, expresión** | Se descartan | [FIAB §10](FIABILIDAD-DIRECTO.md) |
 
 Lo importante para el refactor: **ya existe el sitio donde arreglarlo** —era lo que §3 perseguía—,
-así que cada uno de los cuatro es hoy una línea en `sendMidiCmd` más su prueba en
-`test_command_port.cpp`. El primero es el más grave y el menos obvio: intercepta un mensaje que el
-usuario espera que cambie de parche.
+así que cada uno de los tres que quedan es hoy una línea en `sendMidiCmd` más su prueba en
+`test_command_port.cpp`. El más grave, el program change, ya está: no se arregló en `sendMidiCmd`
+sino un piso más arriba, porque cambiar de parche de verdad es remapear la página de parámetros y
+eso es del motor, no del protocolo.
 
-### 2.5 El cambio de parche sigue bloqueando el hilo de audio
+### 2.5 El cambio de parche ya no bloquea el hilo de audio — **hecho**
 
-[PluginProcessor.cpp:115-118](../rdpiano_juce/Source/PluginProcessor.cpp#L115-L118) toma `mcuLock`
-desde el hilo de UI y llama a `engine->setPatch()`, que puede recargar las ROM de onda
-([rd_engine.cpp:204-205](../librdpiano/src/rd_engine.cpp#L204-L205)). La fase 1 abarató el caso
-común —dentro del mismo ROM set son 0,8 ms en vez de 2,86— pero el diseño es el mismo: el hilo de
-audio espera en un spinlock mientras la UI trabaja ([AUD §3](AUDITORIA.md)). Y arrastrar el dial de
-parches sigue disparando una recarga por evento ([FIAB §6](FIABILIDAD-DIRECTO.md)) y dos clics por
-cambio ([FIAB §5](FIABILIDAD-DIRECTO.md)). El arreglo natural —diferir el cambio al principio de
-`render()`— es el mismo que pide `masterTune`.
+`setCurrentProgram` publica la petición con `engine->requestPatch(n)` y vuelve; la atiende
+`render()` al principio del bloque, con una rampa de 3 ms hacia abajo y 15 ms hacia arriba
+alrededor del cambio. Con las tres ROM y las 16 páginas descifradas al construir el motor, aplicar
+el parche son microsegundos. Se fueron con ello `mcuLock`, `acquireEngineLock()` y
+`blocksPreempted`; el dial dispara **un** cambio por gesto, al soltarlo, en vez de uno por evento
+de arrastre. Ver [REND §§5, 6, 8](RENDIMIENTO-DIRECTO.md) y `engine_patch_declick`.
 
 ### 2.6 `masterTune` automatizable — [REF §9](REFACTORIZACION.md#9-parámetros-hacerlo-a-mano-cuesta-120-líneas-y-se-desincroniza)
 
-Sigue fuera del `APVTS`, viajando en el preset como propiedad del árbol, y por buen motivo:
-`setMasterTune()` corre ~200 muestras de emulador y termina con un `programChange(0)`
-([mcu.cpp:606-620](../librdpiano/src/mcu.cpp#L606-L620), trampa 4). Hacerlo automatizable exige
-antes diferir la aplicación al principio de `render()`, bajo el lock que ya existe — el mismo
-mecanismo que 2.5, y por eso los dos deberían ir juntos.
+Sigue fuera del `APVTS`, viajando en el preset como propiedad del árbol. El motivo técnico que lo
+impedía —`setMasterTune()` corre ~200 muestras de emulador desde el hilo de UI
+([mcu.cpp:606-620](../librdpiano/src/mcu.cpp#L606-L620), trampa 4)— **ya no está**: la afinación se
+publica con `requestMasterTune()` y la aplica `render()`, como el parche. Lo que queda es la
+decisión de producto: si la afinación maestra debe ser un parámetro automatizable del anfitrión.
 
 ### 2.7 Los dos puntos que pueden mover la aritmética
 

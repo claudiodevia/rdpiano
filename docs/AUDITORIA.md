@@ -189,6 +189,13 @@ audio con un camino de repliegue, nunca una espera activa.
 >    no cambia: el dial del panel los dispara en cada evento de arrastre y la mayoría repetían el
 >    valor puesto.
 >
+> **Y después, cerrado del todo: el cerrojo ya no existe** ([RENDIMIENTO-DIRECTO §6.3](RENDIMIENTO-DIRECTO.md)).
+> `setCurrentProgram` y `setMasterTune` publican una petición atómica que atiende `render()` al
+> principio del bloque; las tres ROM y las 16 páginas de parámetros se descifran al construir el
+> motor, así que aplicar un parche son microsegundos. Se fueron con ello `mcuLock`,
+> `acquireEngineLock()`, `mcuLockTimeoutTicks` y `blocksPreempted` —y con ellos el bloque de
+> silencio del repliegue, que era en sí mismo un clic.
+>
 > Los 384 KB de pila de `loadSounds` ya no existen: `decode_samples()` descifra byte a byte, sin
 > temporales. La suite `engine_patch_prepare` de `test_engine.cpp` fija que partir la carga en dos
 > fases dé el **mismo audio muestra a muestra** que hacerla de una.

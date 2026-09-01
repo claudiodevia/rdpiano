@@ -8,6 +8,13 @@
 oye un ruido y se nota un retardo.* ¿De dónde salen exactamente, y qué se puede hacer sin mover el
 timbre?
 
+> **Estado (1 sep 2026): los pasos 1 a 9 del plan de [§11](#11-plan-de-corrección-por-relación-beneficioriesgo)
+> están implementados**; P1–P10 corregidos. Falta sólo el paso 10 (P11, la velocidad del LFO), que
+> **cambia el audio de cinco parches** y necesita verificación auditiva antes: es decisión de
+> producto, no corrección silenciosa. Todas las medidas de abajo son del estado **anterior** a la
+> corrección y se dejan como están: son el "antes" contra el que se comparó. Golden y hashes de
+> `test_lsp.cpp` no se movieron.
+
 **Criterio.** Todo lo marcado **[medido]** se obtuvo ejecutando el motor real (`RdPianoEngine`) con
 las ROM del repositorio, a 48 kHz y bloques de 512, sin sanitizadores y con `-O2`. Cuando algo es
 deducción del código y no medida, va marcado **[análisis]**. El apartado
@@ -581,18 +588,18 @@ Ninguno de los dos es medible, y se listan sólo para que no se busquen dos vece
 
 Ordenado por lo que conviene hacer primero, no por gravedad.
 
-| Orden | Qué | Arregla | Esfuerzo | ¿Mueve el golden? | Red de seguridad |
-|---|---|---|---|---|---|
-| **1** | `process()` siempre + mezcla en rampa para el bypass | **P1, P4** | ~12 líneas | **No** | `test_lsp.cpp` (intacto), `test_engine.cpp` |
-| **2** | Ignorar o traducir el program change MIDI | **P2** | ~10 líneas | No | prueba nueva en `test_engine.cpp` |
-| **3** | Cambio de parche y afinación como petición atendida por `render()`; fuera `mcuLock` | **P5, P6** | Medio | No | `test_engine.cpp` (cambio de parche en caliente) |
-| **4** | Declick de ~3 ms / ~15 ms alrededor del cambio de parche | **P3, P7** (parcial) | Bajo, sobre el 3 | No | prueba nueva: salto máximo acotado |
-| **5** | Descifrar los tres juegos de ROM en `prepare()`; cachear las 16 páginas de parámetros | **P9**, cierra **P2** | Medio, +1,25 MB | No | `test_engine.cpp` (`engine_patch_prepare`) |
-| **6** | Cambio de parche al soltar el dial, no al arrastrar | **P10** | 1 línea | No | — |
-| **7** | `setLatencySamples(67)` en `prepareToPlay` | **P8** | 1 línea | No | `rdpiano_plugin_tests` |
-| **8** | Rampa de `volume` y `patchOutputGain` dentro del bloque | **P7** | Bajo | **No** (fuera del emulador) | `test_engine.cpp` |
-| **9** | Acotar el repintado del editor | §8.3 | Bajo | No | — |
-| **10** | Escalar el LFO de chorus/phaser por `sourceRate` | **P11** | 2 líneas | **SÍ**, 5 parches | Hay que **escuchar** antes |
+| Orden | Qué | Arregla | Esfuerzo | ¿Mueve el golden? | Red de seguridad | Estado |
+|---|---|---|---|---|---|---|
+| **1** | `process()` siempre + mezcla en rampa para el bypass | **P1, P4** | ~12 líneas | **No** | `test_lsp.cpp` (intacto), `engine_effect_tail`, `engine_effect_bypass_ramp` | **hecho** |
+| **2** | Ignorar o traducir el program change MIDI | **P2** | ~10 líneas | No | `engine_program_change` | **hecho** (traducido) |
+| **3** | Cambio de parche y afinación como petición atendida por `render()`; fuera `mcuLock` | **P5, P6** | Medio | No | `test_engine.cpp` (cambio de parche en caliente) | **hecho** |
+| **4** | Declick de ~3 ms / ~15 ms alrededor del cambio de parche | **P3, P7** (parcial) | Bajo, sobre el 3 | No | `engine_patch_declick` | **hecho** |
+| **5** | Descifrar los tres juegos de ROM en `prepare()`; cachear las 16 páginas de parámetros | **P9**, cierra **P2** | Medio, +1,25 MB | No | `test_engine.cpp` (`engine_patch_prepare`) | **hecho** (al construir, no en `prepare()`: `setPatch()` puede ir antes) |
+| **6** | Cambio de parche al soltar el dial, no al arrastrar | **P10** | 1 línea | No | — | **hecho** (con el `jlimit` de la propina) |
+| **7** | `setLatencySamples(67)` en `prepareToPlay` | **P8** | 1 línea | No | `rdpiano_plugin_tests`, `engine_latency` | **hecho** |
+| **8** | Rampa de `volume` y `patchOutputGain` dentro del bloque | **P7** | Bajo | **No** (fuera del emulador) | `engine_volume_ramp` | **hecho** |
+| **9** | Acotar el repintado del editor | §8.3 | Bajo | No | — | **hecho** (el LCD se repinta él; el fondo, sólo si se movió el fader) |
+| **10** | Escalar el LFO de chorus/phaser por `sourceRate` | **P11** | 2 líneas | **SÍ**, 5 parches | Hay que **escuchar** antes | **pendiente** |
 
 Los pasos 1 a 8 **no mueven el golden ni los hashes de `test_lsp.cpp`**: la aritmética entera del
 emulador y de `lsp/` no se toca en ninguno. El paso 10 sí cambia el audio y entra en la misma
@@ -602,6 +609,21 @@ auditiva primero.
 El paso 1 por sí solo elimina el estallido que motivó este documento, cuesta el 0,3 % del
 presupuesto de CPU y no puede romper nada que las pruebas actuales no detecten. Es por donde
 empezar.
+
+**Cómo quedó** (1 sep 2026). Los nueve primeros están hechos y las pruebas nuevas reproducen los
+defectos: quitando la corrección del paso 1, `engine_effect_tail` mide un pico de 0,225 al encender
+el chorus en silencio absoluto (el estallido de §3.2); quitando la del paso 2,
+`engine_program_change` mide `rms 0,000000` (el plugin mudo de §7). Dos decisiones se apartan de lo
+escrito arriba, y las dos hacia el lado seguro:
+
+- el descifrado de los tres juegos de ROM y de las 16 páginas se hace **al construir el motor**, no
+  en `prepare()`: `setPatch()` se puede llamar antes de preparar —lo hacen el harness y las
+  pruebas— y `prepare()` se puede llamar más de una vez. Son ~9 ms y 2,75 MB por instancia;
+- `prepareRomSetFor()` no desaparece, se queda como **no-op**. Así `engine_patch_prepare` sigue
+  fijando, sin editarla, que la ruta en dos fases y la directa dan el mismo audio muestra a muestra.
+
+`setPatch()` y `setMasterTune()` siguen siendo inmediatos —el harness los necesita así—; lo que el
+plugin usa son `requestPatch()` y `requestMasterTune()`.
 
 ---
 

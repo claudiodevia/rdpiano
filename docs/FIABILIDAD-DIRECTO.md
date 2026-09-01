@@ -77,6 +77,11 @@ riesgo tímbrico tiene.
 
 ## 2. N1 · CRÍTICO — Un Program Change MIDI deja el plugin mudo para siempre  **[medido]**
 
+> **RESUELTO** (1 sep 2026). `RdPianoEngine::pushMidi()` intercepta el Program Change y lo trata
+> como lo que es —un cambio de parche completo, con su página de parámetros— en vez de reenviarlo al
+> firmware. Lo fija `engine_program_change` en `test_engine.cpp`, que sin la corrección mide
+> `rms 0,000000`. Ver [RENDIMIENTO-DIRECTO §7](RENDIMIENTO-DIRECTO.md).
+
 Este es, con diferencia, el peor fallo para uso en directo.
 
 [`Mcu::sendMidiCmd`, mcu.cpp:592-595](../librdpiano/src/mcu.cpp#L592-L595) reenvía el Program Change
@@ -560,12 +565,13 @@ El `CMakeLists.txt` ya fuerza ASan por defecto. Un segundo job que compile el e2
 
 Independiente del código, y aplicable ya:
 
-- [ ] **Desactivar el envío de Program Change** hacia la pista de RdPiano hasta que N1 esté
-      corregido. Es el fallo con peor consecuencia y activación más probable.
+- [x] ~~**Desactivar el envío de Program Change** hacia la pista de RdPiano hasta que N1 esté
+      corregido.~~ N1 está corregido: el Program Change cambia de parche de verdad.
 - [ ] Fijar el **tamaño de bloque** del interfaz y no cambiarlo con la sesión abierta (evita A4).
 - [ ] Fijar la **frecuencia de muestreo** en 44,1 o 48 kHz (evita A1).
-- [ ] **Elegir el parche antes de empezar** y no tocar el dial alfa durante la interpretación; si hay
-      que cambiar de sonido, usar los botones y hacerlo entre temas (N4, N5).
+- [ ] **Elegir el parche antes de empezar**; el dial alfa ya no encadena un cambio por evento de
+      arrastre —sólo cambia al soltarlo— y el cambio va con rampa, pero sigue cortando lo que suene
+      (N4, N5).
 - [ ] Dejar **6 dB de margen** en el fader del canal, o un limitador después del plugin (N3).
 - [ ] Tener una **segunda instancia ya cargada** con el sonido de repuesto en otra pista silenciada:
       hoy no hay panic ni recarga rápida, y una instancia limpia es el único «reset» fiable.

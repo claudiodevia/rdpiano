@@ -257,7 +257,22 @@ void RdPiano_juceAudioProcessorEditor::sliderValueChanged(juce::Slider *slider)
 
     if (mode == kModePatch)
     {
-        audioProcessor.setCurrentProgram((int)((value + 1) * 8));
+        // Con jlimit: `(value + 1) * 8` da 16 en el tope del dial, que
+        // setCurrentProgram rechaza por fuera de rango, así que el último parche
+        // no se podía elegir con el dial.
+        const int patch = juce::jlimit(0, NUM_PATCHES - 1, (int)((value + 1) * 8));
+
+        // Mientras se arrastra sólo se enseña el nombre: cambiar de parche en
+        // cada evento del dial son quince cortes de audio en un solo gesto. El
+        // cambio de verdad va en sliderDragEnded.
+        if (dialDragging)
+        {
+            dialPatchPreview = patch;
+            updateValues();
+            return;
+        }
+
+        audioProcessor.setCurrentProgram(patch);
         return;
     }
 
@@ -275,13 +290,35 @@ void RdPiano_juceAudioProcessorEditor::sliderValueChanged(juce::Slider *slider)
     updateValues();
 }
 
+void RdPiano_juceAudioProcessorEditor::sliderDragStarted(juce::Slider *slider)
+{
+    if (slider == &alphaDial)
+        dialDragging = true;
+}
+
+void RdPiano_juceAudioProcessorEditor::sliderDragEnded(juce::Slider *slider)
+{
+    if (slider != &alphaDial)
+        return;
+
+    dialDragging = false;
+
+    if (mode == kModePatch && dialPatchPreview >= 0)
+        audioProcessor.setCurrentProgram(dialPatchPreview);
+
+    dialPatchPreview = -1;
+    updateValues();
+}
+
 void RdPiano_juceAudioProcessorEditor::visibilityChanged() { updateValues(); }
 
 void RdPiano_juceAudioProcessorEditor::changeListenerCallback(juce::ChangeBroadcaster *) { updateValues(); }
 
 void RdPiano_juceAudioProcessorEditor::updateValues()
 {
-    const int patch = audioProcessor.currentPatch;
+    // Con el dial de parches en la mano manda su posición: el parche todavía no
+    // ha cambiado, pero el panel ya enseña cuál se va a poner al soltar.
+    const int patch = dialPatchPreview >= 0 ? dialPatchPreview : audioProcessor.currentPatch;
     const bool alternativeMode = modeSpecs[mode].countsAsAlternative;
 
     for (int i = 0; i < kNumButtons; i++)
@@ -308,7 +345,11 @@ void RdPiano_juceAudioProcessorEditor::updateValues()
             break;
         }
 
-        buttons[i].enabled = lit;
+        if (buttons[i].enabled != lit)
+        {
+            buttons[i].enabled = lit;
+            buttons[i].repaint();
+        }
     }
 
     uint8_t line[Lcd::kChars];
@@ -341,8 +382,20 @@ void RdPiano_juceAudioProcessorEditor::updateValues()
     }
 
     lcd.setText(line);
-    alphaDial.setValue(dial, juce::dontSendNotification);
-    volumeSlider.setValue(audioProcessor.paramValue(kVolume), juce::dontSendNotification);
 
-    this->repaint();
+    // Mover el dial que se está arrastrando lo pelearía con el ratón.
+    if (!dialDragging)
+        alphaDial.setValue(dial, juce::dontSendNotification);
+
+    // Lo único que `paint()` dibuja y depende de los valores es la posición del
+    // fader. Repintar la ventana entera —lo que se hacía aquí— reescala el fondo
+    // de 6140x1503 en cada evento del dial; el resto de controles son
+    // componentes y se repintan solos.
+    const float volume = audioProcessor.paramValue(kVolume);
+    volumeSlider.setValue(volume, juce::dontSendNotification);
+    if (volume != paintedVolume)
+    {
+        paintedVolume = volume;
+        repaint(volumeSlider.getBounds());
+    }
 }

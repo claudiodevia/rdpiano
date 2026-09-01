@@ -34,16 +34,33 @@ RdPiano_juceAudioProcessor::RdPiano_juceAudioProcessor()
         jassert(paramValues[i] != nullptr);
         apvts.addParameterListener(rdParamSpecs[i].id, this);
     }
+
+    startTimerHz(10);
 }
 
 RdPiano_juceAudioProcessor::~RdPiano_juceAudioProcessor()
 {
+    stopTimer();
+
     for (int i = 0; i < kNumRdParams; i++)
         apvts.removeParameterListener(rdParamSpecs[i].id, this);
 }
 
 //==============================================================================
 void RdPiano_juceAudioProcessor::parameterChanged(const juce::String &, float) { sendChangeMessage(); }
+
+// Un program change MIDI cambia el parche dentro del motor, sin pasar por
+// `setCurrentProgram`. Aquí se recoge para que el panel y el preset lo sepan.
+void RdPiano_juceAudioProcessor::timerCallback()
+{
+    const int enginePatch = engine->patch();
+    if (enginePatch == currentPatch)
+        return;
+
+    currentPatch = enginePatch;
+    updateHostDisplay();
+    sendChangeMessage();
+}
 
 //==============================================================================
 // Acceso por índice de tabla: es lo que deja al editor recorrer descriptores en
@@ -86,15 +103,11 @@ void RdPiano_juceAudioProcessor::setCurrentProgram(int index)
     if (index < 0 || index >= getNumPrograms() || index == currentPatch)
         return;
 
-    // Los ~2,9 ms de descifrar las ROM de onda del juego nuevo van FUERA del
-    // cerrojo: escriben en el juego de reserva del chip, que render() no lee.
-    // Bajo cerrojo sólo queda publicarlo y remapear la página (~0,03 ms), que
-    // es lo que el hilo de audio puede llegar a esperar.
-    engine->prepareRomSetFor(index);
-
-    mcuLock.enter();
-    engine->setPatch(index);
-    mcuLock.exit();
+    // Publicar la petición y volver: la aplica `render()` en el hilo de audio,
+    // con su rampa, en unos microsegundos. Ya no hay nada caro que hacer aquí
+    // —las tres ROM y las dieciséis páginas se descifraron al construir el
+    // motor— ni cerrojo que tomar.
+    engine->requestPatch(index);
 
     currentPatch = index;
     sendChangeMessage();
@@ -119,12 +132,10 @@ void RdPiano_juceAudioProcessor::setMasterTune(int16_t tune)
 
     masterTune = tune;
 
-    // El switcharoo y la codificación viven en el núcleo. Del plugin es
-    // serializarlo: esto corre el emulador desde el hilo de UI (trampa 4 de
-    // CLAUDE.md).
-    mcuLock.enter();
-    engine->setMasterTune(tune);
-    mcuLock.exit();
+    // El switcharoo y la codificación viven en el núcleo. Afinar corre el
+    // emulador (trampa 4 de CLAUDE.md), así que también va como petición: la
+    // atiende `render()` y las repeticiones del dial se colapsan solas.
+    engine->requestMasterTune(tune);
 
     sendChangeMessage();
 }
@@ -154,45 +165,15 @@ void RdPiano_juceAudioProcessor::prepareToPlay(double sampleRate, int samplesPer
     // hay que volver a seleccionar el parche: boot() reinicia el firmware, no el
     // mapeo de la página de params, y re-aplicarlo cambiaría el audio (trampa 8
     // de CLAUDE.md).
-    mcuLock.enter();
     engine->prepare(sampleRate, samplesPerBlock);
-    mcuLock.exit();
 
-    // Lo que el hilo de audio está dispuesto a esperar por el cerrojo: un cuarto
-    // del bloque. Cubre de sobra al único que puede tenerlo tomado un rato
-    // —setMasterTune, ~0,36 ms— sin llegar nunca a comerse el bloque entero.
-    const double blockSeconds = sampleRate > 0.0 ? (double)samplesPerBlock / sampleRate : 0.0;
-    mcuLockTimeoutTicks.store((juce::int64)(juce::Time::getHighResolutionTicksPerSecond() * blockSeconds * 0.25),
-                              std::memory_order_relaxed);
+    // El retardo de grupo del remuestreador, que el anfitrión tiene que
+    // compensar al grabar. Es el peor caso y no se vuelve a mover: renegociar la
+    // latencia en cada cambio de parche no le sienta bien a ningún host.
+    setLatencySamples(engine->latencySamples());
 }
 
-// El hilo de UI puede tener el cerrojo y ser desalojado por el planificador:
-// esperarlo sin límite desde el hilo de audio es la inversión de prioridad de
-// libro. Aquí la espera está acotada y el que no llega a tiempo es el bloque,
-// no el callback entero.
-bool RdPiano_juceAudioProcessor::acquireEngineLock()
-{
-    if (mcuLock.tryEnter())
-        return true;
-
-    const juce::int64 deadline =
-        juce::Time::getHighResolutionTicks() + mcuLockTimeoutTicks.load(std::memory_order_relaxed);
-    do
-    {
-        juce::Thread::yield();
-        if (mcuLock.tryEnter())
-            return true;
-    } while (juce::Time::getHighResolutionTicks() < deadline);
-
-    return false;
-}
-
-void RdPiano_juceAudioProcessor::releaseResources()
-{
-    mcuLock.enter();
-    engine->release();
-    mcuLock.exit();
-}
+void RdPiano_juceAudioProcessor::releaseResources() { engine->release(); }
 
 bool RdPiano_juceAudioProcessor::isBusesLayoutSupported(const BusesLayout &layouts) const
 {
@@ -234,17 +215,7 @@ void RdPiano_juceAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer, 
                          n > 2 ? raw[2] : (juce::uint8)0);
     }
 
-    // Los eventos ya están en la cola del motor: si este bloque se pierde, el
-    // siguiente render() los entrega igualmente en vez de tragárselos.
-    if (!acquireEngineLock())
-    {
-        buffer.clear();
-        blocksPreempted.fetch_add(1, std::memory_order_relaxed);
-        return;
-    }
-
     engine->render(buffer.getWritePointer(0), buffer.getWritePointer(1), numSamples);
-    mcuLock.exit();
 }
 
 //==============================================================================

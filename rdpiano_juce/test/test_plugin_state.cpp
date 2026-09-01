@@ -238,3 +238,23 @@ TEST_SUITE(plugin_programs)
     p.setCurrentProgram(NUM_PATCHES);
     CHECK_EQ(p.getCurrentProgram(), 5);
 }
+
+// El retardo de grupo del remuestreador, declarado al anfitrión: sin esto todo
+// lo que toque el plugin queda 1,4 ms tarde respecto de lo que el DAW cree.
+TEST_SUITE(plugin_latency)
+{
+    RdPiano_juceAudioProcessor p;
+
+    p.prepareToPlay(48000.0, 512);
+
+    CHECK(p.getLatencySamples() > 0);
+    CHECK_EQ(p.getLatencySamples(), p.engine->latencySamples());
+
+    // Y no se renegocia al cambiar de sonido: declarar latencia nueva en mitad
+    // de una sesión es justo lo que a los anfitriones no les gusta.
+    const int declared = p.getLatencySamples();
+    p.setCurrentProgram(11);
+    CHECK_EQ(p.getLatencySamples(), declared);
+
+    p.releaseResources();
+}
