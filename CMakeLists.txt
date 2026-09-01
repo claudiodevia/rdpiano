@@ -43,5 +43,5 @@ if(RDPIANO_BUILD_PLUGIN AND EXISTS "${RDPIANO_JUCE_DIR}/CMakeLists.txt")
 elseif(RDPIANO_BUILD_PLUGIN)
   message(STATUS
     "JUCE no está en ${RDPIANO_JUCE_DIR}: se omite el plugin. "
-    "Ejecuta `bash scripts/download-juce.sh` para compilarlo.")
+    "Ejecuta `sh scripts/download-juce.sh` para compilarlo.")
 endif()

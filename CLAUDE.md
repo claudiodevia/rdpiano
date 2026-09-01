@@ -11,8 +11,9 @@ CPU HD63701 emulada + chips de síntesis reimplementados gate-level. C++23 (`res
 | `rdpiano_juce/` | Plugin JUCE 9.0.1 (VST3/AU/AUv3/LV2/Standalone), solo macOS. |
 | `roms/` | Dumps, empotrados como `BinaryData` vía `juce_add_binary_data`. |
 | `re_stuff/` | Ingeniería inversa (Verilog, disasm). **No se compila.** |
-| `scripts/` | `download-juce.sh`, `build-osx.sh` (los mismos que la CI). |
+| `scripts/` | `download-juce.sh`, `build-osx.sh` (los mismos que la CI, POSIX `sh`) sobre `common.sh` (colores, log, pasos, trap). |
 | `ui/`, `docs/` | Assets del panel; capturas. |
+| `logs/` | Log completo de cada ejecución de los scripts, `<script>-<fecha>-<hora>.log`. Ignorado por git; se puede borrar entero. |
 | `build/` | Todo lo generado y nada más: `juce/` (la descarga), `plugin/`, `core/`, `core-asan/`. Ignorado por git: `rm -rf build` deja el árbol como recién clonado; `rm -rf build/plugin build/core*` limpia lo compilado sin volver a bajar JUCE. |
 
 ## Cadena
@@ -115,10 +116,35 @@ descartan (el firmware RD200 solo escribe ahí ceros de arranque).
 ## Build (solo CMake; no hay Projucer ni `.jucer`)
 
 ```bash
-bash scripts/download-juce.sh   # JUCE 9.0.1 → build/juce (var de caché RDPIANO_JUCE_DIR)
-bash scripts/build-osx.sh ALL   # cinco formatos, generador Xcode
+sh scripts/download-juce.sh   # JUCE 9.0.1 → build/juce (var de caché RDPIANO_JUCE_DIR)
+sh scripts/build-osx.sh ALL   # cinco formatos universales, generador Xcode
+sh scripts/build-osx.sh AU nativo   # sólo esta arquitectura, la mitad de tiempo
 # productos en build/plugin/rdpiano_juce/rdpiano_juce_artefacts/Release/<FORMATO>/
 ```
+Los dos scripts son POSIX `sh` y **no imprimen la salida de CMake/Xcode**: por pantalla va una
+etiqueta por paso (`==> Configurando CMake…`) y al final tiempo, número de avisos y ruta de los
+productos; todo lo demás se acumula en `logs/<script>-<fecha>-<hora>.log`. Si un paso falla, el
+script vuelca las últimas 40 líneas de ese log y sale con el mismo estado.
+Todo eso —paleta, apertura del log, `paso`, `cmd`, `fatal`, `fin` y el trap de salida— vive una
+sola vez en `scripts/common.sh`, que los dos incluyen con `.`; cada script se queda con su lógica.
+Hay color sólo si la salida es una terminal (`NO_COLOR`, `TERM=dumb` o redirigida a fichero → texto
+pelado, que es lo que ve la CI; `FORCE_COLOR=1` lo impone). Si el script define `limpiar()`, el trap
+la llama al salir (así borra `download-juce.sh` el zip y el temporal). La CI los invoca con
+`sh ./scripts/…` (antes `bash -ex`, que volvía a llenar la salida de traza).
+
+Ninguno de los dos repite trabajo hecho:
+- `download-juce.sh` **no baja nada** si `build/juce` ya es la versión que toca (lo dice el
+  `project(JUCE VERSION …)` de su raíz, no un sello aparte); `--forzar` lo baja igualmente.
+- `build-osx.sh` **sólo configura CMake** si la caché de su binary dir no sirve —no existe, otro
+  generador, otras arquitecturas, o se configuró sin JUCE y no hay plugin—; el proyecto Xcode lo
+  regenera CMake solo cuando cambia un `CMakeLists`. Son ~3,4 s por invocación.
+- El segundo argumento de `build-osx.sh` elige arquitecturas: `universal` (por omisión,
+  `arm64;x86_64`, en `build/plugin`) o `nativo` (sólo la de la máquina, en `build/plugin-nativo`).
+  **Binary dir distinto a propósito**: compartirlo invalidaría la caché en cada cambio de modo y
+  obligaría a recompilarlo todo cada vez.
+- `common.sh` deja **10 logs por script** (`LOGS_QUE_QUEDAN`) y poda el resto al abrir uno nuevo, y
+  cuenta avisos *distintos*: en universal cada uno sale una vez por arquitectura y el total salía
+  doblado.
 Generador **Xcode** a propósito (AUv3 solo existe con él). Deployment target 11.0, y hay que
 pasárselo a `juceaide` por `MACOSX_DEPLOYMENT_TARGET` (invocación anidada que no hereda la caché).
 El plugin **enlaza** el target `librdpiano`: añadir un `.cpp` al núcleo es una línea en

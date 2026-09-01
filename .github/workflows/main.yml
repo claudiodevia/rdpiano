@@ -57,14 +57,14 @@ jobs:
         fetch-depth: 0
         submodules: recursive
     - name: "Download JUCE"
-      run: bash -ex ./scripts/download-juce.sh
+      run: sh ./scripts/download-juce.sh
       shell: bash
     # Desde la fase 3 el plugin sale del CMakeLists de la raíz, no del
     # Projucer (REFACTORIZACION §16.3). El script sigue siendo el mismo punto
     # de entrada; ALL son los cinco formatos —el script exige el argumento, no
     # tiene defecto.
     - name: "Build macOS"
-      run: bash -ex ./scripts/build-osx.sh ALL
+      run: sh ./scripts/build-osx.sh ALL
       shell: bash
     # La ida y vuelta de presets: es una app de consola del mismo build, así
     # que aquí ya está compilada la mitad de lo que necesita.

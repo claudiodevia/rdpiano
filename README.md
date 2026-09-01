@@ -27,7 +27,7 @@ Más información en esta guía: https://www.osirisguitar.com/2020/04/01/how-to-
 - **rdpiano_juce**: versión del emulador como plugin (VSTi/AU), para usar con DAWs
 - **librdpiano**: versión del emulador sin dependencias, para usar como biblioteca en otro software; también compila una app standalone de prueba con SDL
 - **re_stuff**: herramientas usadas durante el proceso de ingeniería inversa, sobre todo con fines educativos
-- **scripts**: los dos scripts de compilación — `download-juce.sh` (descarga el árbol de JUCE) y `build-osx.sh` (configura y compila un formato de plugin, o `ALL` para los cinco); la CI ejecuta estos mismos dos
+- **scripts**: los dos scripts de compilación, POSIX `sh` — `download-juce.sh` (descarga el árbol de JUCE) y `build-osx.sh` (configura y compila un formato de plugin, o `ALL` para los cinco); la CI ejecuta estos mismos dos. Por pantalla sólo sacan la etiqueta de cada paso: la salida entera va a `logs/<script>-<fecha>-<hora>.log` (directorio ignorado por git), y si algo falla vuelcan las últimas líneas de ese log
 
 ## Compilación
 
@@ -36,12 +36,17 @@ Solo macOS, requiere Xcode.
 
 ```bash
 git clone <este repo> && cd rdpiano
-bash scripts/download-juce.sh   # descarga JUCE 9.0.1 en build/juce
-bash scripts/build-osx.sh ALL # VST3, AU, AUv3, LV2 y Standalone
+sh scripts/download-juce.sh   # descarga JUCE 9.0.1 en build/juce (no la repite si ya está)
+sh scripts/build-osx.sh ALL   # VST3, AU, AUv3, LV2 y Standalone
                               # o un solo formato: AU, AUv3, LV2, Standalone, VST3
 ```
 
-Los plugins quedan en `build/plugin/rdpiano_juce/rdpiano_juce_artefacts/Release/`.
+Los binarios son universales (arm64 y x86_64). Para probar en esta máquina y tardar la mitad, un
+segundo argumento: `sh scripts/build-osx.sh AU nativo`, que compila sólo la arquitectura local en
+`build/plugin-nativo`.
+
+Los plugins quedan en `build/plugin/rdpiano_juce/rdpiano_juce_artefacts/Release/`, y el log
+completo de la compilación en `logs/`.
 
 Todo lo generado — la descarga de JUCE incluida — vive bajo `build/`: `build/juce` (la
 descarga), `build/plugin` (la compilación desde la raíz) y `build/core`, `build/core-asan` (las del

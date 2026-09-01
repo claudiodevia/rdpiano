@@ -8,6 +8,7 @@
 *nikon*
 *nikpa*
 build
+logs
 node_modules
 out.json
 out.v
