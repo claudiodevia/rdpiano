@@ -210,8 +210,13 @@ void RdPiano_juceAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer, 
     for (int ch = getTotalNumInputChannels(); ch < getTotalNumOutputChannels(); ++ch)
         buffer.clear(ch, 0, numSamples);
 
+    // Limpiando: el bus es estéreo, pero si el host entrega otra cosa hay que
+    // devolver silencio, no lo que trajera el búfer.
     if (buffer.getNumChannels() < 2 || numSamples <= 0)
+    {
+        buffer.clear();
         return;
+    }
 
     syncParamsToEngine();
 

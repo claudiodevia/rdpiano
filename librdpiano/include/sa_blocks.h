@@ -17,14 +17,18 @@ struct SA_Part
     uint32_t sub_phase = 0;
     uint32_t env_value = 0;
 
-    uint16_t pitch_lut_i;
-    uint8_t wave_addr_loop;
-    uint8_t wave_addr_high;
-    uint8_t env_dest;
-    uint8_t env_speed;
-    bool flags_0;
-    bool flags_1;
-    uint8_t env_offset;
+    // Todos con inicializador: update() corre antes de los primeros ciclos de
+    // CPU, así que la primera muestra lee estos campos antes de que el firmware
+    // escriba un solo registro. Con env_dest indeterminado la salida rápida de
+    // SoundChip::update() no salta y la parte se procesa con basura.
+    uint16_t pitch_lut_i = 0;
+    uint8_t wave_addr_loop = 0;
+    uint8_t wave_addr_high = 0;
+    uint8_t env_dest = 0;
+    uint8_t env_speed = 0;
+    bool flags_0 = false;
+    bool flags_1 = false;
+    uint8_t env_offset = 0;
 };
 
 // LUT de la velocidad de la envolvente (IC19) y de la dirección (IC8).
@@ -126,7 +130,12 @@ inline Ic9Out tick_ic9(SA_Part &part, const SA_Part &flags, const SaTables &tabl
     adder1_and |= (!flags.flags_1 ? 0 : (adder2_co ? adder2 : (adder1 >> 16))) << 16;
 
     part.sub_phase = adder1_and;
-    out.waverom_addr = (part.wave_addr_high << 11) | ((part.sub_phase >> 9) & 0x7ff);
+    // El bus de direcciones de la wave ROM tiene 17 bits (lo confirma el uso de
+    // BIT(waverom_addr, 16) justo debajo), pero wave_addr_high es un byte
+    // entero: sin la máscara la dirección llega a 0x7FFFF sobre tablas de
+    // 0x20000. En el camino nominal el firmware nunca pasa de 0x3F, así que la
+    // máscara no cambia el audio.
+    out.waverom_addr = ((part.wave_addr_high << 11) | ((part.sub_phase >> 9) & 0x7ff)) & 0x1ffff;
 
     out.sel_sample_type = BIT(out.waverom_addr, 16) || BIT(out.waverom_addr, 15) || BIT(out.waverom_addr, 14) ||
                           !((BIT(out.waverom_addr, 13) && !BIT(out.waverom_addr, 11) && !BIT(out.waverom_addr, 12)) ||

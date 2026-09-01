@@ -8,13 +8,17 @@ Cada hallazgo marcado **[verificado]** se comprobó ejecutando el núcleo del em
 reales del repositorio, compilado con ASan/UBSan e instrumentado. El apartado
 [§20](#20-cómo-reproducir-las-mediciones) explica cómo reproducirlo.
 
-> **Estado a 2026-09-01 — los tres CRÍTICOS están resueltos.** Las líneas que cita el informe son
-> las del commit auditado; desde entonces la cadena de audio se sacó del plugin a
+> **Estado a 2026-09-01 — los tres CRÍTICOS y los seis ALTOS están resueltos.** Las líneas que cita
+> el informe son las del commit auditado; desde entonces la cadena de audio se sacó del plugin a
 > `RdPianoEngine` ([librdpiano/src/rd_engine.cpp](../librdpiano/src/rd_engine.cpp)), así que los
 > enlaces a `PluginProcessor.cpp` ya no apuntan a donde estaba el problema. Ver
 > [§1](#1-crítico--silencio-total-por-debajo-de-32-khz),
 > [§2](#2-crítico--el-resampler-se-construye-dentro-del-hilo-de-audio--verificado) y
 > [§3](#3-crítico--loadsounds-bajo-spinlock-desde-el-hilo-de-ui--verificado).
+>
+> Los ALTOS §4, §5, §8 y §9 cayeron con esa misma extracción; §6, §7 y §16 se cerraron después y
+> llevan su propia nota al pie de cada apartado. Lo que queda abierto son los MEDIOS (§10–§15, §17)
+> y los detalles de §18.
 
 ---
 
@@ -25,19 +29,19 @@ reales del repositorio, compilado con ASan/UBSan e instrumentado. El apartado
 | 1 | ~~**CRÍTICO**~~ **RESUELTO** | Silencio total del plugin a cualquier frecuencia de muestreo < 32 kHz (buffer mal dimensionado) | [PluginProcessor.cpp:337](rdpiano_juce/Source/PluginProcessor.cpp#L337) |
 | 2 | ~~**CRÍTICO**~~ **RESUELTO** | `resample_open()` (2,5–3,2 ms × 2 + ~1,2 MB de `malloc`) se ejecuta en el hilo de audio | [PluginProcessor.cpp:497](rdpiano_juce/Source/PluginProcessor.cpp#L497) |
 | 3 | ~~**CRÍTICO**~~ **RESUELTO** | `loadSounds()` (1,7–2,7 ms) corre desde el hilo de UI con un **spinlock** que bloquea al hilo de audio | [PluginProcessor.cpp:250-259](rdpiano_juce/Source/PluginProcessor.cpp#L250-L259) |
-| 4 | **ALTO** | Desbordamiento de escritura si `buffer.getNumSamples() > samplesPerBlock` | [PluginProcessor.cpp:428](rdpiano_juce/Source/PluginProcessor.cpp#L428) |
-| 5 | **ALTO** | Toda la temporización MIDI se colapsa al inicio del bloque (condición invertida) + `O(n²)` con `std::vector` en el hilo de audio | [PluginProcessor.cpp:433-457](rdpiano_juce/Source/PluginProcessor.cpp#L433-L457) |
-| 6 | **ALTO** | `SA_Part` sin inicializar → índice de wave ROM fuera de rango (0x52FEC sobre un array de 0x20000) | [sound_chip.h:38-45](librdpiano/include/sound_chip.h#L38-L45), [sound_chip.cpp:284](librdpiano/src/sound_chip.cpp#L284) |
-| 7 | **ALTO** | `printf()` + `fflush()` en el hilo de audio (emulador y plugin) | [mcu.cpp:501](librdpiano/src/mcu.cpp#L501), [PluginProcessor.cpp:413](rdpiano_juce/Source/PluginProcessor.cpp#L413) |
-| 8 | **ALTO** | `return` temprano en `processBlock` sin limpiar el buffer de salida | [PluginProcessor.cpp:411-423](rdpiano_juce/Source/PluginProcessor.cpp#L411-L423) |
-| 9 | **ALTO** | Fuga de ~1,2 MB por instancia: los resamplers nunca se cierran | [PluginProcessor.cpp:210](rdpiano_juce/Source/PluginProcessor.cpp#L210) |
+| 4 | ~~**ALTO**~~ **RESUELTO** | Desbordamiento de escritura si `buffer.getNumSamples() > samplesPerBlock` | [PluginProcessor.cpp:428](rdpiano_juce/Source/PluginProcessor.cpp#L428) |
+| 5 | ~~**ALTO**~~ **RESUELTO** | Toda la temporización MIDI se colapsa al inicio del bloque (condición invertida) + `O(n²)` con `std::vector` en el hilo de audio | [PluginProcessor.cpp:433-457](rdpiano_juce/Source/PluginProcessor.cpp#L433-L457) |
+| 6 | ~~**ALTO**~~ **RESUELTO** | `SA_Part` sin inicializar → índice de wave ROM fuera de rango (0x52FEC sobre un array de 0x20000) | [sound_chip.h:38-45](librdpiano/include/sound_chip.h#L38-L45), [sound_chip.cpp:284](librdpiano/src/sound_chip.cpp#L284) |
+| 7 | ~~**ALTO**~~ **RESUELTO** | `printf()` + `fflush()` en el hilo de audio (emulador y plugin) | [mcu.cpp:501](librdpiano/src/mcu.cpp#L501), [PluginProcessor.cpp:413](rdpiano_juce/Source/PluginProcessor.cpp#L413) |
+| 8 | ~~**ALTO**~~ **RESUELTO** | `return` temprano en `processBlock` sin limpiar el buffer de salida | [PluginProcessor.cpp:411-423](rdpiano_juce/Source/PluginProcessor.cpp#L411-L423) |
+| 9 | ~~**ALTO**~~ **RESUELTO** | Fuga de ~1,2 MB por instancia: los resamplers nunca se cierran | [PluginProcessor.cpp:210](rdpiano_juce/Source/PluginProcessor.cpp#L210) |
 | 10 | **MEDIO** | Desbordamiento de entero con signo en `m_icount` a los ~5,9 min de reproducción | [mcu.cpp:372](librdpiano/src/mcu.cpp#L372) |
 | 11 | **MEDIO** | Coeficientes IIR reasignados (con `malloc`) en cada bloque de audio | [PluginProcessor.cpp:541](rdpiano_juce/Source/PluginProcessor.cpp#L541) |
 | 12 | **MEDIO** | Fuga en `prepareToPlay()` si el host no intercala `releaseResources()` | [PluginProcessor.cpp:339-342](rdpiano_juce/Source/PluginProcessor.cpp#L339-L342) |
 | 13 | **MEDIO** | `Lcd::setText()` copia 34 bytes fijos de una `juce::String` arbitraria; `"\xff"` genera UTF-8 inválido | [Lcd.cpp:21](rdpiano_juce/Source/lcd/Lcd.cpp#L21) |
 | 14 | **MEDIO** | Decodificación de registros del chip: `offset % 8` pliega los bytes +8..+F sobre +0..+7 | [sound_chip.cpp:175](librdpiano/src/sound_chip.cpp#L175) |
 | 15 | **MEDIO** | `Mcu::reset()` no reinicia el `SoundChip`, la RAM, el latch, el timer ni la cola de comandos | [mcu.cpp:262](librdpiano/src/mcu.cpp#L262) |
-| 16 | **ALTO** (standalone) | Carrera de datos y *use-after-free* en `test/standalone.cpp` | [standalone.cpp:131,204](librdpiano/test/standalone.cpp#L131) |
+| 16 | ~~**ALTO** (standalone)~~ **RESUELTO** | Carrera de datos y *use-after-free* en `test/standalone.cpp` | [standalone.cpp:131,204](librdpiano/test/standalone.cpp#L131) |
 | 17 | **MEDIO** | CI: acción de release de terceros archivada y sin fijar (`@latest`) con `GITHUB_TOKEN` | [.github/workflows/main.yml](.github/workflows/main.yml) |
 
 ---
@@ -209,6 +213,12 @@ búferes remuestreados. Un bloque mayor que `samplesPerBlock` escribe fuera del 
 `buffer.getNumSamples()` lo supera; y dimensionar por `getNumSamples()`, no por el valor de
 `prepareToPlay`.
 
+> **RESUELTO.** `RdPianoEngine::prepare()` guarda el tamaño de bloque preparado (`maxBlock`,
+> legible por `preparedBlockSize()`) y dimensiona con él tanto los búferes de salida
+> (`outCapacity`) como el del emulador. `render()` comprueba `numFrames > outCapacity` **antes** de
+> escribir nada: devuelve silencio y suma `stats.blockTooLarge`. `test_engine.cpp` entrega bloques
+> irregulares y por encima del preparado.
+
 ---
 
 ## 5. ALTO — La temporización MIDI está rota, y el reparto es `O(n²)` con reservas en RT
@@ -247,6 +257,14 @@ existe únicamente para tapar (1); con la comparación correcta sobra.
 `getRawData()[1]` y `[2]` sin mirar `getRawDataSize()`. Para mensajes cortos JUCE usa
 almacenamiento interno de 4 bytes y no hay lectura fuera de límites, pero un SysEx de 2 bytes
 (`F0 F7`) sí reside en el montículo y se leería un byte de más.
+
+> **RESUELTO.** El reparto vive ahora en `RdPianoEngine::render()`: un índice `nextEvent` que
+> avanza en paralelo al bucle de muestras, sin contenedor auxiliar ni `std::find` —y sin reservas,
+> porque la cola es un anillo fijo (`kMidiQueueSize`) que llena `pushMidi()`. La comparación va en
+> el sentido bueno y convierte de muestras de host a muestras de emulador con
+> `hostToEmu = sourceRate/destSampleRate`, así que la resolución intra-bloque se conserva. El
+> vaciado final solo recoge lo que quede fuera de orden. En el plugin, `processBlock` mira
+> `metadata.numBytes` antes de leer `data[1]`/`data[2]`.
 
 ---
 
@@ -306,6 +324,17 @@ como si fueran muestras, con salida de amplitud arbitraria.
 **Corrección (dos líneas).** Inicializar todos los miembros de `SA_Part` a `0`, y enmascarar
 `waverom_addr &= 0x1FFFF`.
 
+> **RESUELTO**, las dos líneas, en [sa_blocks.h](../librdpiano/include/sa_blocks.h): los diez
+> miembros de `SA_Part` llevan inicializador y `tick_ic9()` cierra la dirección con `& 0x1ffff`.
+> La máscara no toca `sel_sample_type` ni `phase_hi` (solo miran bits ≤ 16) y en el camino nominal
+> el firmware nunca pasa de `wave_addr_high = 0x3F`, así que **no mueve el audio**: los 16 hashes
+> de `golden.txt` y los 2.256 vectores de `ic_blocks.txt` siguen en verde sin tocarlos.
+>
+> Comprobado con la misma sonda de §20 —`placement new` sobre un búfer relleno de `0xA5`, 4.096
+> muestras, `-fsanitize=undefined -fno-sanitize-recover=all`—: el código anterior emite las cargas
+> de `bool` inválidas (`load of value 165`) en cinco puntos de `sa_blocks.h`; con el arreglo la
+> sonda termina limpia.
+
 ---
 
 ## 7. ALTO — `printf()` en el hilo de audio
@@ -336,6 +365,14 @@ Peor aún, `printf("Too many samples to render")` se ejecuta **en cada bloque** 
 intercambiados respecto a las otras dos trazas (`addr` y `PCD` al revés), lo que hace engañoso el
 diagnóstico.
 
+> **RESUELTO.** No queda un solo `printf` en el núcleo ni en el plugin: toda la traza sale por
+> `RD_TRACE` ([rd_trace.h](../librdpiano/include/rd_trace.h)), que sin `-DRDPIANO_TRACE` compila a
+> nada —los argumentos ni se evalúan— y con ella va a donde diga `rdpiano_set_trace_sink()`, no a
+> `stdout`. `mcu_ops.h` conserva su `logerror` de MAME, redefinido a `RD_TRACE`. Los caminos de §1
+> y §8 son ahora contadores en `RdEngineStats` (`blockTooLarge`, `tooFewFrames`, `tooManyFrames`,
+> `midiDropped`) que la UI puede consultar. La nota menor también: la traza de lectura no mapeada
+> imprime ya `PCD` primero, como las otras dos.
+
 ---
 
 ## 8. ALTO — Retorno temprano sin limpiar la salida
@@ -357,6 +394,10 @@ silencio se emite basura o realimentación en cada bloque.
 
 **Corrección.** `buffer.clear(); return;` en ambos caminos, y eliminar el bus de entrada si el
 plugin es un sintetizador puro.
+
+> **RESUELTO.** Los cuatro retornos tempranos de `RdPianoEngine::render()` llaman a `silence()`
+> sobre el bloque entero antes de salir, y en el plugin los dos de `processBlock` —bloque
+> preemptado por el cerrojo, y buffer sin los dos canales— hacen `buffer.clear()`.
 
 ---
 
@@ -380,6 +421,11 @@ En un DAW que instancia, escanea y destruye plugins repetidamente (o al duplicar
 acumula sin techo.
 
 **Corrección.** Cerrar ambos en el destructor y en `releaseResources()`, poniéndolos a `nullptr`.
+
+> **RESUELTO.** `RdPianoEngine::release()` cierra los dos manejadores con `resample_close()` y los
+> pone a `nullptr`; la llaman tanto `releaseResources()` como el destructor del motor, y
+> `prepare()` de entrada, así que un `prepareToPlay()` repetido tampoco fuga (eso cubre §12 por el
+> lado del motor).
 
 ---
 
@@ -553,6 +599,22 @@ Es una herramienta de desarrollo, pero es **el único mecanismo de verificación
 (no hay tests): que produzca artefactos propios contamina el criterio auditivo con el que se validan
 los cambios en `sound_chip.cpp`.
 
+> **RESUELTO**, los siete. Ya no es el único mecanismo de verificación —hoy hay 39 suites unitarias
+> y el harness e2e con hash por parche—, pero sigue siendo el oído del proyecto y tenía que dejar
+> de meter ruido propio:
+>
+> | Antes | Ahora |
+> |---|---|
+> | `sendMidiCmd()` concurrente con el callback | `SDL_LockAudioDevice`/`Unlock` alrededor del envío |
+> | `SDL_CloseAudio()` no cierra el dispositivo | `SDL_CloseAudioDevice(sdl_audio)`, y a 0 |
+> | `while (Pm_Read(...))` — negativo es cierto | `> 0`, y `MIDI_Quit()` cierra el stream |
+> | `s16 sample = generate_next_sample()` | `s32` con recorte a ±32767 (el rango real llega a −83.371) |
+> | `fread` sin comprobar | se compara con `len` y aborta |
+> | bucle principal girando al 100 % | `SDL_Delay(1)` |
+> | `MIDI_Init()` devolvía 1 siempre | comprueba `Pm_Initialize`, `Pm_CreateVirtualInput` y `Pm_OpenInput`; `MIDI_Update()` sale si el stream es nulo |
+>
+> El *use-after-free* era real: el callback seguía activo durante el `delete mcu` del final.
+
 ---
 
 ## 17. MEDIO — Cadena de suministro en CI
@@ -602,17 +664,18 @@ LGPL/BSD de libresample).
 ~~§2 y §3 (dropout garantizado al cambiar patch)~~ · ~~§5 (temporización MIDI)~~ ·
 ~~§8 (basura en la salida)~~ · ~~§9 (fuga de 1,2 MB)~~ — **todos resueltos**.
 
-**A continuación** (UB latente y robustez): §4 · §6 · §7 · §12 · §15.
+**A continuación** (UB latente y robustez): ~~§4~~ · ~~§6~~ · ~~§7~~ — **resueltos**; quedan
+§12 · §15.
 
-**Cuando se toque esa zona:** §10 · §11 · §13 · §14 · §16 · §17.
+**Cuando se toque esa zona:** §10 · §11 · §13 · §14 · ~~§16~~ (**resuelto**) · §17.
 
-> **Advertencia del propio proyecto, que conviene repetir aquí.** No existe suite de tests y la
-> verificación es auditiva. Los cambios en §6 y §14 tocan `sound_chip.cpp`, y §10 toca el modelo de
-> temporización de la CPU: los tres son de **alto riesgo sin red de seguridad**. Corregir §6 y §14 es
-> mecánico (una máscara y dos inicializadores) y no debería alterar el audio en el camino nominal
-> —precisamente porque hoy ese camino solo funciona por accidente—, pero hay que confirmarlo de oído
-> con el standalone antes de dar nada por bueno. §10, en cambio, cambiaría la temporización efectiva
-> del firmware y **sí** alteraría el sonido: no debe abordarse como una simple corrección de UB.
+> **Advertencia del propio proyecto.** Cuando se escribió esto no existía suite de tests y la
+> verificación era auditiva; hoy la red son los 16 hashes de `golden.txt` y los 2.256 vectores de
+> `ic_blocks.txt`. §6 ya se corrigió con esa red puesta y no movió ni un hash, como se esperaba: el
+> camino nominal nunca pasaba por la parte rota. §14 sigue tocando `sound_chip.cpp` y §10 el modelo
+> de temporización de la CPU. §10, además, **cambiaría la temporización efectiva del firmware y con
+> ella el sonido**: no es una simple corrección de UB, y el golden lo detectaría pero no lo
+> juzgaría — ahí hace falta oído.
 
 ---
 

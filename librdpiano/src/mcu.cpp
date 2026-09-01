@@ -531,7 +531,7 @@ u8 Mcu::readCpuRegister(u16 addr)
     if (addr == 0x000e)
         return (m_input_capture >> 8) & 0xff;
 
-    RD_TRACE("%04x: unk device read %04x\n", addr, PCD);
+    RD_TRACE("%04x: unk device read %04x\n", PCD, addr);
     return 0xFF;
 }
 

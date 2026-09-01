@@ -17,13 +17,21 @@ Mcu *mcu;
 
 void audio_callback(void * /*userdata*/, Uint8 *stream, int len)
 {
-    len /= 4;
+    const int frames = len / 4;
 
-    for (size_t i = 0; i < len; i++)
+    for (int i = 0; i < frames; i++)
     {
-        s16 sample = mcu->generate_next_sample();
-        ((int16_t *)stream)[i * 2] = sample;
-        ((int16_t *)stream)[i * 2 + 1] = sample;
+        // generate_next_sample() devuelve s32 y se sale de ±32767 con un acorde
+        // de tres notas: truncar a s16 da wraparound (chasquidos duros) en vez
+        // de recorte. El plugin escala en coma flotante; aquí basta con acotar.
+        s32 sample = mcu->generate_next_sample();
+        if (sample > 32767)
+            sample = 32767;
+        else if (sample < -32768)
+            sample = -32768;
+
+        ((int16_t *)stream)[i * 2] = (int16_t)sample;
+        ((int16_t *)stream)[i * 2 + 1] = (int16_t)sample;
     }
 }
 
@@ -106,38 +114,77 @@ int MCU_OpenAudio(int deviceIndex, int pageSize, int pageNum)
     return 1;
 }
 
-void MCU_CloseAudio(void) { SDL_CloseAudio(); }
+// SDL_CloseAudio() es la API antigua y NO cierra un dispositivo abierto con
+// SDL_OpenAudioDevice: el callback seguía vivo durante el `delete mcu` del
+// final (use-after-free).
+void MCU_CloseAudio(void)
+{
+    if (sdl_audio)
+    {
+        SDL_CloseAudioDevice(sdl_audio);
+        sdl_audio = 0;
+    }
+}
 
 static PmStream *midiInStream;
 
 int MIDI_Init()
 {
-    Pm_Initialize();
+    if (Pm_Initialize() != pmNoError)
+        return 0;
 
     int in_id = Pm_CreateVirtualInput("RdPiano", NULL, NULL);
+    if (in_id < 0)
+        return 0;
 
-    Pm_OpenInput(&midiInStream, in_id, NULL, 0, NULL, NULL);
+    // Sin comprobar esto, midiInStream se queda nulo y MIDI_Update() lo usa.
+    if (Pm_OpenInput(&midiInStream, in_id, NULL, 0, NULL, NULL) != pmNoError || midiInStream == NULL)
+    {
+        midiInStream = NULL;
+        return 0;
+    }
+
     Pm_SetFilter(midiInStream, PM_FILT_ACTIVE | PM_FILT_CLOCK | PM_FILT_SYSEX);
 
     // Empty the buffer, just in case anything got through
     PmEvent receiveBuffer[1];
-    while (Pm_Poll(midiInStream))
+    while (Pm_Poll(midiInStream) > 0)
     {
-        Pm_Read(midiInStream, receiveBuffer, 1);
+        if (Pm_Read(midiInStream, receiveBuffer, 1) < 0)
+            break;
     }
 
     return 1;
 }
 
-void MIDI_Quit() { Pm_Terminate(); }
+void MIDI_Quit()
+{
+    if (midiInStream != NULL)
+    {
+        Pm_Close(midiInStream);
+        midiInStream = NULL;
+    }
+    Pm_Terminate();
+}
 
 void MIDI_Update()
 {
+    if (midiInStream == NULL)
+        return;
+
     PmEvent event;
-    while (Pm_Read(midiInStream, &event, 1))
+    // `> 0`: Pm_Read devuelve negativo en error, y un negativo es cierto -> el
+    // bucle no terminaba nunca ante un fallo del dispositivo.
+    while (Pm_Read(midiInStream, &event, 1) > 0)
     {
+        // sendMidiCmd() empuja en la misma cola que consume el callback de
+        // audio desde otro hilo. Bloquear el dispositivo es lo que ofrece SDL
+        // para serializarlo; el plugin usa el cerrojo del motor.
+        SDL_LockAudioDevice(sdl_audio);
         mcu->sendMidiCmd(Pm_MessageStatus(event.message), Pm_MessageData1(event.message),
                          Pm_MessageData2(event.message));
+        SDL_UnlockAudioDevice(sdl_audio);
+
         printf("MIDI: %02X %02X %02X\n", Pm_MessageStatus(event.message), Pm_MessageData1(event.message),
                Pm_MessageData2(event.message));
     }
@@ -151,8 +198,14 @@ void load_rom(u8 *data, size_t len, const char *filename)
         printf("Error opening %s\n", filename);
         exit(2);
     }
-    fread(data, 1, len, f);
+    size_t read = fread(data, 1, len, f);
     fclose(f);
+
+    if (read != len)
+    {
+        printf("Error reading %s: %zu de %zu bytes\n", filename, read, len);
+        exit(2);
+    }
 }
 
 int main()
@@ -197,6 +250,10 @@ int main()
     bool quit_requested = false;
     while (!quit_requested)
     {
+        // Sin esperar, el bucle gira al 100 % de un núcleo y le quita CPU al
+        // hilo de audio.
+        SDL_Delay(1);
+
         MIDI_Update();
 
         SDL_Event sdl_event;
