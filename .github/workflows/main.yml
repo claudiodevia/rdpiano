@@ -81,6 +81,7 @@ jobs:
            (cd "$OUT/VST3" && zip -r "$OUT/rdpiano_juce.vst3.macOS.zip" rdpiano_juce.vst3)
            (cd "$OUT/AU" && zip -r "$OUT/rdpiano_juce.component.macOS.zip" rdpiano_juce.component)
            (cd "$OUT/Standalone" && zip -r "$OUT/rdpiano_juce.app.macOS.zip" rdpiano_juce.app)
+           (cd "$OUT/LV2" && zip -r "$OUT/rdpiano_juce.lv2.macOS.zip" rdpiano_juce.lv2)
       shell: bash
     - name: Upload Artifact
       uses: actions/upload-artifact@v7.0.1
@@ -90,6 +91,7 @@ jobs:
               ./build/plugin/rdpiano_juce/rdpiano_juce_artefacts/Release/rdpiano_juce.vst3.macOS.zip
               ./build/plugin/rdpiano_juce/rdpiano_juce_artefacts/Release/rdpiano_juce.component.macOS.zip
               ./build/plugin/rdpiano_juce/rdpiano_juce_artefacts/Release/rdpiano_juce.app.macOS.zip
+              ./build/plugin/rdpiano_juce/rdpiano_juce_artefacts/Release/rdpiano_juce.lv2.macOS.zip
 
   release:
     name: "Release"
