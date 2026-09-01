@@ -54,29 +54,29 @@
 #define M_RDOP_ARG(Addr) (read_byte(Addr))
 
 /* macros to access memory */
-#define IMMBYTE(b)     \
-  b = M_RDOP_ARG(PCD); \
-  PC++
-#define IMMWORD(w)                                               \
-  w.d = (M_RDOP_ARG(PCD) << 8) | M_RDOP_ARG((PCD + 1) & 0xffff); \
-  PC += 2
+#define IMMBYTE(b)       \
+    b = M_RDOP_ARG(PCD); \
+    PC++
+#define IMMWORD(w)                                                 \
+    w.d = (M_RDOP_ARG(PCD) << 8) | M_RDOP_ARG((PCD + 1) & 0xffff); \
+    PC += 2
 
 #define PUSHBYTE(b) \
-  WM(SD, b);        \
-  --S
+    WM(SD, b);      \
+    --S
 #define PUSHWORD(w) \
-  WM(SD, w.b.l);    \
-  --S;              \
-  WM(SD, w.b.h);    \
-  --S
+    WM(SD, w.b.l);  \
+    --S;            \
+    WM(SD, w.b.h);  \
+    --S
 #define PULLBYTE(b) \
-  S++;              \
-  b = RM(SD)
-#define PULLWORD(w)  \
-  S++;               \
-  w.d = RM(SD) << 8; \
-  S++;               \
-  w.d |= RM(SD)
+    S++;            \
+    b = RM(SD)
+#define PULLWORD(w)    \
+    S++;               \
+    w.d = RM(SD) << 8; \
+    S++;               \
+    w.d |= RM(SD)
 
 /* CC masks                       HI NZVC
                                 7654 3210   */
@@ -90,8 +90,8 @@
 
 /* macros for CC -- CC bits affected should be reset before calling */
 #define SET_Z(a) \
-  if (!(a))      \
-  SEZ
+    if (!(a))    \
+    SEZ
 #define SET_Z8(a) SET_Z(u8(a))
 #define SET_Z16(a) SET_Z(u16(a))
 #define SET_N8(a) CC |= (((a) & 0x80) >> 4)
@@ -103,77 +103,71 @@
 #define SET_V16(a, b, r) CC |= ((((a) ^ (b) ^ (r) ^ ((r) >> 1)) & 0x8000) >> 14)
 
 const u8 Mcu::flags8i[256] = /* increment */
-    {
-        0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-        0x0a, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08,
-        0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08,
-        0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08,
-        0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08,
-        0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08,
-        0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08,
-        0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08,
-        0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08};
+    {0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x0a, 0x08, 0x08, 0x08, 0x08,
+     0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08,
+     0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08,
+     0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08,
+     0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08,
+     0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08,
+     0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08,
+     0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08};
 
 const u8 Mcu::flags8d[256] = /* decrement */
-    {
-        0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02,
-        0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08,
-        0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08,
-        0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08,
-        0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08,
-        0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08,
-        0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08,
-        0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08,
-        0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08};
+    {0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0x08, 0x08, 0x08, 0x08, 0x08,
+     0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08,
+     0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08,
+     0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08,
+     0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08,
+     0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08,
+     0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08,
+     0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08};
 
-#define SET_FLAGS8I(a)         \
-  {                            \
-    CC |= flags8i[(a) & 0xff]; \
-  }
-#define SET_FLAGS8D(a)         \
-  {                            \
-    CC |= flags8d[(a) & 0xff]; \
-  }
+#define SET_FLAGS8I(a)             \
+    {                              \
+        CC |= flags8i[(a) & 0xff]; \
+    }
+#define SET_FLAGS8D(a)             \
+    {                              \
+        CC |= flags8d[(a) & 0xff]; \
+    }
 
 /* combos */
 #define SET_NZ8(a) \
-  {                \
-    SET_N8(a);     \
-    SET_Z8(a);     \
-  }
+    {              \
+        SET_N8(a); \
+        SET_Z8(a); \
+    }
 #define SET_NZ16(a) \
-  {                 \
-    SET_N16(a);     \
-    SET_Z16(a);     \
-  }
+    {               \
+        SET_N16(a); \
+        SET_Z16(a); \
+    }
 #define SET_FLAGS8(a, b, r) \
-  {                         \
-    SET_N8(r);              \
-    SET_Z8(r);              \
-    SET_V8(a, b, r);        \
-    SET_C8(r);              \
-  }
+    {                       \
+        SET_N8(r);          \
+        SET_Z8(r);          \
+        SET_V8(a, b, r);    \
+        SET_C8(r);          \
+    }
 #define SET_FLAGS16(a, b, r) \
-  {                          \
-    SET_N16(r);              \
-    SET_Z16(r);              \
-    SET_V16(a, b, r);        \
-    SET_C16(r);              \
-  }
+    {                        \
+        SET_N16(r);          \
+        SET_Z16(r);          \
+        SET_V16(a, b, r);    \
+        SET_C16(r);          \
+    }
 
 /* for treating an u8 as a signed s16 */
 #define SIGNED(b) (s16(b & 0x80 ? b | 0xff00 : b))
@@ -181,17 +175,17 @@ const u8 Mcu::flags8d[256] = /* decrement */
 /* Macros for addressing modes */
 #define DIRECT IMMBYTE(EAD)
 #define IMM8 EA = PC++
-#define IMM16 \
-  {           \
-    EA = PC;  \
-    PC += 2;  \
-  }
+#define IMM16    \
+    {            \
+        EA = PC; \
+        PC += 2; \
+    }
 #define EXTENDED IMMWORD(m_ea)
-#define INDEXED                   \
-  {                               \
-    EA = X + (u8)M_RDOP_ARG(PCD); \
-    PC++;                         \
-  }
+#define INDEXED                       \
+    {                                 \
+        EA = X + (u8)M_RDOP_ARG(PCD); \
+        PC++;                         \
+    }
 
 /* macros to set status flags */
 #if defined(SEC)
@@ -211,106 +205,122 @@ const u8 Mcu::flags8d[256] = /* decrement */
 #define CLI CC &= ~0x10
 
 /* macros for convenience */
-#define DIRBYTE(b) \
-  {                \
-    DIRECT;        \
-    b = RM(EAD);   \
-  }
-#define DIRWORD(w)   \
-  {                  \
-    DIRECT;          \
-    w.d = RM16(EAD); \
-  }
-#define EXTBYTE(b) \
-  {                \
-    EXTENDED;      \
-    b = RM(EAD);   \
-  }
-#define EXTWORD(w)   \
-  {                  \
-    EXTENDED;        \
-    w.d = RM16(EAD); \
-  }
+#define DIRBYTE(b)   \
+    {                \
+        DIRECT;      \
+        b = RM(EAD); \
+    }
+#define DIRWORD(w)       \
+    {                    \
+        DIRECT;          \
+        w.d = RM16(EAD); \
+    }
+#define EXTBYTE(b)   \
+    {                \
+        EXTENDED;    \
+        b = RM(EAD); \
+    }
+#define EXTWORD(w)       \
+    {                    \
+        EXTENDED;        \
+        w.d = RM16(EAD); \
+    }
 
-#define IDXBYTE(b) \
-  {                \
-    INDEXED;       \
-    b = RM(EAD);   \
-  }
-#define IDXWORD(w)   \
-  {                  \
-    INDEXED;         \
-    w.d = RM16(EAD); \
-  }
+#define IDXBYTE(b)   \
+    {                \
+        INDEXED;     \
+        b = RM(EAD); \
+    }
+#define IDXWORD(w)       \
+    {                    \
+        INDEXED;         \
+        w.d = RM16(EAD); \
+    }
 
 /* Macros for branch instructions */
-#define BRANCH(f)      \
-  {                    \
-    IMMBYTE(t);        \
-    if (f)             \
-    {                  \
-      PC += SIGNED(t); \
-    }                  \
-  }
+#define BRANCH(f)            \
+    {                        \
+        IMMBYTE(t);          \
+        if (f)               \
+        {                    \
+            PC += SIGNED(t); \
+        }                    \
+    }
 #define NXORV ((CC & 0x08) ^ ((CC & 0x02) << 2))
 #define NXORC ((CC & 0x08) ^ ((CC & 0x01) << 3))
 
 #include "../include/mcu_ops.h"
 
 const Mcu::op_func Mcu::hd63701_insn[0x100] = {
-    &Mcu::trap, &Mcu::nop, &Mcu::trap, &Mcu::trap, &Mcu::lsrd, &Mcu::asld, &Mcu::tap, &Mcu::tpa, // 0
-    &Mcu::inx, &Mcu::dex, &Mcu::clv, &Mcu::sev, &Mcu::clc, &Mcu::sec, &Mcu::cli, &Mcu::sei,
-    &Mcu::sba, &Mcu::cba, &Mcu::undoc1, &Mcu::undoc2, &Mcu::trap, &Mcu::trap, &Mcu::tab, &Mcu::tba, // 1
-    &Mcu::xgdx, &Mcu::daa, &Mcu::slp, &Mcu::aba, &Mcu::trap, &Mcu::trap, &Mcu::trap, &Mcu::trap,
-    &Mcu::bra, &Mcu::brn, &Mcu::bhi, &Mcu::bls, &Mcu::bcc, &Mcu::bcs, &Mcu::bne, &Mcu::beq, // 2
-    &Mcu::bvc, &Mcu::bvs, &Mcu::bpl, &Mcu::bmi, &Mcu::bge, &Mcu::blt, &Mcu::bgt, &Mcu::ble,
-    &Mcu::tsx, &Mcu::ins, &Mcu::pula, &Mcu::pulb, &Mcu::des, &Mcu::txs, &Mcu::psha, &Mcu::pshb, // 3
-    &Mcu::pulx, &Mcu::rts, &Mcu::abx, &Mcu::rti, &Mcu::pshx, &Mcu::mul, &Mcu::wai, &Mcu::swi,
-    &Mcu::nega, &Mcu::trap, &Mcu::trap, &Mcu::coma, &Mcu::lsra, &Mcu::trap, &Mcu::rora, &Mcu::asra, // 4
-    &Mcu::asla, &Mcu::rola, &Mcu::deca, &Mcu::trap, &Mcu::inca, &Mcu::tsta, &Mcu::trap, &Mcu::clra,
-    &Mcu::negb, &Mcu::trap, &Mcu::trap, &Mcu::comb, &Mcu::lsrb, &Mcu::trap, &Mcu::rorb, &Mcu::asrb, // 5
-    &Mcu::aslb, &Mcu::rolb, &Mcu::decb, &Mcu::trap, &Mcu::incb, &Mcu::tstb, &Mcu::trap, &Mcu::clrb,
-    &Mcu::neg_ix, &Mcu::aim_ix, &Mcu::oim_ix, &Mcu::com_ix, &Mcu::lsr_ix, &Mcu::eim_ix, &Mcu::ror_ix, &Mcu::asr_ix, // 6
-    &Mcu::asl_ix, &Mcu::rol_ix, &Mcu::dec_ix, &Mcu::tim_ix, &Mcu::inc_ix, &Mcu::tst_ix, &Mcu::jmp_ix, &Mcu::clr_ix,
-    &Mcu::neg_ex, &Mcu::aim_di, &Mcu::oim_di, &Mcu::com_ex, &Mcu::lsr_ex, &Mcu::eim_di, &Mcu::ror_ex, &Mcu::asr_ex, // 7
-    &Mcu::asl_ex, &Mcu::rol_ex, &Mcu::dec_ex, &Mcu::tim_di, &Mcu::inc_ex, &Mcu::tst_ex, &Mcu::jmp_ex, &Mcu::clr_ex,
-    &Mcu::suba_im, &Mcu::cmpa_im, &Mcu::sbca_im, &Mcu::subd_im, &Mcu::anda_im, &Mcu::bita_im, &Mcu::lda_im, &Mcu::trap, // 8
-    &Mcu::eora_im, &Mcu::adca_im, &Mcu::ora_im, &Mcu::adda_im, &Mcu::cpx_im, &Mcu::bsr, &Mcu::lds_im, &Mcu::trap,
-    &Mcu::suba_di, &Mcu::cmpa_di, &Mcu::sbca_di, &Mcu::subd_di, &Mcu::anda_di, &Mcu::bita_di, &Mcu::lda_di, &Mcu::sta_di, // 9
-    &Mcu::eora_di, &Mcu::adca_di, &Mcu::ora_di, &Mcu::adda_di, &Mcu::cpx_di, &Mcu::jsr_di, &Mcu::lds_di, &Mcu::sts_di,
-    &Mcu::suba_ix, &Mcu::cmpa_ix, &Mcu::sbca_ix, &Mcu::subd_ix, &Mcu::anda_ix, &Mcu::bita_ix, &Mcu::lda_ix, &Mcu::sta_ix, // A
-    &Mcu::eora_ix, &Mcu::adca_ix, &Mcu::ora_ix, &Mcu::adda_ix, &Mcu::cpx_ix, &Mcu::jsr_ix, &Mcu::lds_ix, &Mcu::sts_ix,
-    &Mcu::suba_ex, &Mcu::cmpa_ex, &Mcu::sbca_ex, &Mcu::subd_ex, &Mcu::anda_ex, &Mcu::bita_ex, &Mcu::lda_ex, &Mcu::sta_ex, // B
-    &Mcu::eora_ex, &Mcu::adca_ex, &Mcu::ora_ex, &Mcu::adda_ex, &Mcu::cpx_ex, &Mcu::jsr_ex, &Mcu::lds_ex, &Mcu::sts_ex,
-    &Mcu::subb_im, &Mcu::cmpb_im, &Mcu::sbcb_im, &Mcu::addd_im, &Mcu::andb_im, &Mcu::bitb_im, &Mcu::ldb_im, &Mcu::trap, // C
-    &Mcu::eorb_im, &Mcu::adcb_im, &Mcu::orb_im, &Mcu::addb_im, &Mcu::ldd_im, &Mcu::trap, &Mcu::ldx_im, &Mcu::trap,
-    &Mcu::subb_di, &Mcu::cmpb_di, &Mcu::sbcb_di, &Mcu::addd_di, &Mcu::andb_di, &Mcu::bitb_di, &Mcu::ldb_di, &Mcu::stb_di, // D
-    &Mcu::eorb_di, &Mcu::adcb_di, &Mcu::orb_di, &Mcu::addb_di, &Mcu::ldd_di, &Mcu::std_di, &Mcu::ldx_di, &Mcu::stx_di,
-    &Mcu::subb_ix, &Mcu::cmpb_ix, &Mcu::sbcb_ix, &Mcu::addd_ix, &Mcu::andb_ix, &Mcu::bitb_ix, &Mcu::ldb_ix, &Mcu::stb_ix, // E
-    &Mcu::eorb_ix, &Mcu::adcb_ix, &Mcu::orb_ix, &Mcu::addb_ix, &Mcu::ldd_ix, &Mcu::std_ix, &Mcu::ldx_ix, &Mcu::stx_ix,
-    &Mcu::subb_ex, &Mcu::cmpb_ex, &Mcu::sbcb_ex, &Mcu::addd_ex, &Mcu::andb_ex, &Mcu::bitb_ex, &Mcu::ldb_ex, &Mcu::stb_ex, // F
-    &Mcu::eorb_ex, &Mcu::adcb_ex, &Mcu::orb_ex, &Mcu::addb_ex, &Mcu::ldd_ex, &Mcu::std_ex, &Mcu::ldx_ex, &Mcu::stx_ex};
+    &Mcu::trap,    &Mcu::nop,     &Mcu::trap,    &Mcu::trap,    &Mcu::lsrd,    &Mcu::asld,
+    &Mcu::tap,     &Mcu::tpa, // 0
+    &Mcu::inx,     &Mcu::dex,     &Mcu::clv,     &Mcu::sev,     &Mcu::clc,     &Mcu::sec,
+    &Mcu::cli,     &Mcu::sei,     &Mcu::sba,     &Mcu::cba,     &Mcu::undoc1,  &Mcu::undoc2,
+    &Mcu::trap,    &Mcu::trap,    &Mcu::tab,     &Mcu::tba, // 1
+    &Mcu::xgdx,    &Mcu::daa,     &Mcu::slp,     &Mcu::aba,     &Mcu::trap,    &Mcu::trap,
+    &Mcu::trap,    &Mcu::trap,    &Mcu::bra,     &Mcu::brn,     &Mcu::bhi,     &Mcu::bls,
+    &Mcu::bcc,     &Mcu::bcs,     &Mcu::bne,     &Mcu::beq, // 2
+    &Mcu::bvc,     &Mcu::bvs,     &Mcu::bpl,     &Mcu::bmi,     &Mcu::bge,     &Mcu::blt,
+    &Mcu::bgt,     &Mcu::ble,     &Mcu::tsx,     &Mcu::ins,     &Mcu::pula,    &Mcu::pulb,
+    &Mcu::des,     &Mcu::txs,     &Mcu::psha,    &Mcu::pshb, // 3
+    &Mcu::pulx,    &Mcu::rts,     &Mcu::abx,     &Mcu::rti,     &Mcu::pshx,    &Mcu::mul,
+    &Mcu::wai,     &Mcu::swi,     &Mcu::nega,    &Mcu::trap,    &Mcu::trap,    &Mcu::coma,
+    &Mcu::lsra,    &Mcu::trap,    &Mcu::rora,    &Mcu::asra, // 4
+    &Mcu::asla,    &Mcu::rola,    &Mcu::deca,    &Mcu::trap,    &Mcu::inca,    &Mcu::tsta,
+    &Mcu::trap,    &Mcu::clra,    &Mcu::negb,    &Mcu::trap,    &Mcu::trap,    &Mcu::comb,
+    &Mcu::lsrb,    &Mcu::trap,    &Mcu::rorb,    &Mcu::asrb, // 5
+    &Mcu::aslb,    &Mcu::rolb,    &Mcu::decb,    &Mcu::trap,    &Mcu::incb,    &Mcu::tstb,
+    &Mcu::trap,    &Mcu::clrb,    &Mcu::neg_ix,  &Mcu::aim_ix,  &Mcu::oim_ix,  &Mcu::com_ix,
+    &Mcu::lsr_ix,  &Mcu::eim_ix,  &Mcu::ror_ix,  &Mcu::asr_ix, // 6
+    &Mcu::asl_ix,  &Mcu::rol_ix,  &Mcu::dec_ix,  &Mcu::tim_ix,  &Mcu::inc_ix,  &Mcu::tst_ix,
+    &Mcu::jmp_ix,  &Mcu::clr_ix,  &Mcu::neg_ex,  &Mcu::aim_di,  &Mcu::oim_di,  &Mcu::com_ex,
+    &Mcu::lsr_ex,  &Mcu::eim_di,  &Mcu::ror_ex,  &Mcu::asr_ex, // 7
+    &Mcu::asl_ex,  &Mcu::rol_ex,  &Mcu::dec_ex,  &Mcu::tim_di,  &Mcu::inc_ex,  &Mcu::tst_ex,
+    &Mcu::jmp_ex,  &Mcu::clr_ex,  &Mcu::suba_im, &Mcu::cmpa_im, &Mcu::sbca_im, &Mcu::subd_im,
+    &Mcu::anda_im, &Mcu::bita_im, &Mcu::lda_im,  &Mcu::trap, // 8
+    &Mcu::eora_im, &Mcu::adca_im, &Mcu::ora_im,  &Mcu::adda_im, &Mcu::cpx_im,  &Mcu::bsr,
+    &Mcu::lds_im,  &Mcu::trap,    &Mcu::suba_di, &Mcu::cmpa_di, &Mcu::sbca_di, &Mcu::subd_di,
+    &Mcu::anda_di, &Mcu::bita_di, &Mcu::lda_di,  &Mcu::sta_di, // 9
+    &Mcu::eora_di, &Mcu::adca_di, &Mcu::ora_di,  &Mcu::adda_di, &Mcu::cpx_di,  &Mcu::jsr_di,
+    &Mcu::lds_di,  &Mcu::sts_di,  &Mcu::suba_ix, &Mcu::cmpa_ix, &Mcu::sbca_ix, &Mcu::subd_ix,
+    &Mcu::anda_ix, &Mcu::bita_ix, &Mcu::lda_ix,  &Mcu::sta_ix, // A
+    &Mcu::eora_ix, &Mcu::adca_ix, &Mcu::ora_ix,  &Mcu::adda_ix, &Mcu::cpx_ix,  &Mcu::jsr_ix,
+    &Mcu::lds_ix,  &Mcu::sts_ix,  &Mcu::suba_ex, &Mcu::cmpa_ex, &Mcu::sbca_ex, &Mcu::subd_ex,
+    &Mcu::anda_ex, &Mcu::bita_ex, &Mcu::lda_ex,  &Mcu::sta_ex, // B
+    &Mcu::eora_ex, &Mcu::adca_ex, &Mcu::ora_ex,  &Mcu::adda_ex, &Mcu::cpx_ex,  &Mcu::jsr_ex,
+    &Mcu::lds_ex,  &Mcu::sts_ex,  &Mcu::subb_im, &Mcu::cmpb_im, &Mcu::sbcb_im, &Mcu::addd_im,
+    &Mcu::andb_im, &Mcu::bitb_im, &Mcu::ldb_im,  &Mcu::trap, // C
+    &Mcu::eorb_im, &Mcu::adcb_im, &Mcu::orb_im,  &Mcu::addb_im, &Mcu::ldd_im,  &Mcu::trap,
+    &Mcu::ldx_im,  &Mcu::trap,    &Mcu::subb_di, &Mcu::cmpb_di, &Mcu::sbcb_di, &Mcu::addd_di,
+    &Mcu::andb_di, &Mcu::bitb_di, &Mcu::ldb_di,  &Mcu::stb_di, // D
+    &Mcu::eorb_di, &Mcu::adcb_di, &Mcu::orb_di,  &Mcu::addb_di, &Mcu::ldd_di,  &Mcu::std_di,
+    &Mcu::ldx_di,  &Mcu::stx_di,  &Mcu::subb_ix, &Mcu::cmpb_ix, &Mcu::sbcb_ix, &Mcu::addd_ix,
+    &Mcu::andb_ix, &Mcu::bitb_ix, &Mcu::ldb_ix,  &Mcu::stb_ix, // E
+    &Mcu::eorb_ix, &Mcu::adcb_ix, &Mcu::orb_ix,  &Mcu::addb_ix, &Mcu::ldd_ix,  &Mcu::std_ix,
+    &Mcu::ldx_ix,  &Mcu::stx_ix,  &Mcu::subb_ex, &Mcu::cmpb_ex, &Mcu::sbcb_ex, &Mcu::addd_ex,
+    &Mcu::andb_ex, &Mcu::bitb_ex, &Mcu::ldb_ex,  &Mcu::stb_ex, // F
+    &Mcu::eorb_ex, &Mcu::adcb_ex, &Mcu::orb_ex,  &Mcu::addb_ex, &Mcu::ldd_ex,  &Mcu::std_ex,
+    &Mcu::ldx_ex,  &Mcu::stx_ex};
 
 #define XX 4 // illegal opcode unknown cycle count
-const u8 Mcu::cycles_63701[256] =
-    {
-        /* 0  1  2  3  4  5  6  7  8  9  A  B  C  D  E  F */
-        /*0*/ XX, 1, XX, XX, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
-        /*1*/ 1, 1, XX, XX, XX, XX, 1, 1, 2, 2, 4, 1, XX, XX, XX, XX,
-        /*2*/ 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3,
-        /*3*/ 1, 1, 3, 3, 1, 1, 4, 4, 4, 5, 1, 10, 5, 7, 9, 12,
-        /*4*/ 1, XX, XX, 1, 1, XX, 1, 1, 1, 1, 1, XX, 1, 1, XX, 1,
-        /*5*/ 1, XX, XX, 1, 1, XX, 1, 1, 1, 1, 1, XX, 1, 1, XX, 1,
-        /*6*/ 6, 7, 7, 6, 6, 7, 6, 6, 6, 6, 6, 5, 6, 4, 3, 5,
-        /*7*/ 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 4, 6, 4, 3, 5,
-        /*8*/ 2, 2, 2, 3, 2, 2, 2, XX, 2, 2, 2, 2, 3, 5, 3, XX,
-        /*9*/ 3, 3, 3, 4, 3, 3, 3, 3, 3, 3, 3, 3, 4, 5, 4, 4,
-        /*A*/ 4, 4, 4, 5, 4, 4, 4, 4, 4, 4, 4, 4, 5, 5, 5, 5,
-        /*B*/ 4, 4, 4, 5, 4, 4, 4, 4, 4, 4, 4, 4, 5, 6, 5, 5,
-        /*C*/ 2, 2, 2, 3, 2, 2, 2, XX, 2, 2, 2, 2, 3, XX, 3, XX,
-        /*D*/ 3, 3, 3, 4, 3, 3, 3, 3, 3, 3, 3, 3, 4, 4, 4, 4,
-        /*E*/ 4, 4, 4, 5, 4, 4, 4, 4, 4, 4, 4, 4, 5, 5, 5, 5,
-        /*F*/ 4, 4, 4, 5, 4, 4, 4, 4, 4, 4, 4, 4, 5, 5, 5, 5};
+const u8 Mcu::cycles_63701[256] = {
+    /* 0  1  2  3  4  5  6  7  8  9  A  B  C  D  E  F */
+    /*0*/ XX, 1,  XX, XX, 1,  1,  1, 1,  1, 1, 1, 1,  1,  1,  1,  1,
+    /*1*/ 1,  1,  XX, XX, XX, XX, 1, 1,  2, 2, 4, 1,  XX, XX, XX, XX,
+    /*2*/ 3,  3,  3,  3,  3,  3,  3, 3,  3, 3, 3, 3,  3,  3,  3,  3,
+    /*3*/ 1,  1,  3,  3,  1,  1,  4, 4,  4, 5, 1, 10, 5,  7,  9,  12,
+    /*4*/ 1,  XX, XX, 1,  1,  XX, 1, 1,  1, 1, 1, XX, 1,  1,  XX, 1,
+    /*5*/ 1,  XX, XX, 1,  1,  XX, 1, 1,  1, 1, 1, XX, 1,  1,  XX, 1,
+    /*6*/ 6,  7,  7,  6,  6,  7,  6, 6,  6, 6, 6, 5,  6,  4,  3,  5,
+    /*7*/ 6,  6,  6,  6,  6,  6,  6, 6,  6, 6, 6, 4,  6,  4,  3,  5,
+    /*8*/ 2,  2,  2,  3,  2,  2,  2, XX, 2, 2, 2, 2,  3,  5,  3,  XX,
+    /*9*/ 3,  3,  3,  4,  3,  3,  3, 3,  3, 3, 3, 3,  4,  5,  4,  4,
+    /*A*/ 4,  4,  4,  5,  4,  4,  4, 4,  4, 4, 4, 4,  5,  5,  5,  5,
+    /*B*/ 4,  4,  4,  5,  4,  4,  4, 4,  4, 4, 4, 4,  5,  6,  5,  5,
+    /*C*/ 2,  2,  2,  3,  2,  2,  2, XX, 2, 2, 2, 2,  3,  XX, 3,  XX,
+    /*D*/ 3,  3,  3,  4,  3,  3,  3, 3,  3, 3, 3, 3,  4,  4,  4,  4,
+    /*E*/ 4,  4,  4,  5,  4,  4,  4, 4,  4, 4, 4, 4,  5,  5,  5,  5,
+    /*F*/ 4,  4,  4,  5,  4,  4,  4, 4,  4, 4, 4, 4,  5,  5,  5,  5};
 
 #define TCSR_IEDG 0x02
 #define TCSR_EICI 0x10
@@ -322,190 +332,184 @@ const u8 Mcu::cycles_63701[256] =
 Mcu::Mcu(const u8 *temp_ic5, const u8 *temp_ic6, const u8 *temp_ic7, const u8 *temp_progrom, const u8 *temp_paramsrom)
     : board(temp_ic5, temp_ic6, temp_ic7, temp_progrom, temp_paramsrom)
 {
-  board.attach(this);
+    board.attach(this);
 }
 
 void Mcu::reset()
 {
-  m_ppc.d = 0;
-  m_pc.d = 0;
-  m_s.d = 0;
-  m_x.d = 0;
-  m_d.d = 0;
-  m_cc = 0;
-  m_wai_state = 0;
-  m_nmi_state = 0;
-  m_nmi_pending = 0;
-  std::fill(std::begin(m_irq_state), std::end(m_irq_state), 0);
+    m_ppc.d = 0;
+    m_pc.d = 0;
+    m_s.d = 0;
+    m_x.d = 0;
+    m_d.d = 0;
+    m_cc = 0;
+    m_wai_state = 0;
+    m_nmi_state = 0;
+    m_nmi_pending = 0;
+    std::fill(std::begin(m_irq_state), std::end(m_irq_state), 0);
 
-  m_cc = 0xc0;
-  SEI; /* IRQ disabled */
-  PCD = RM16(0xfffe);
+    m_cc = 0xc0;
+    SEI; /* IRQ disabled */
+    PCD = RM16(0xfffe);
 
-  m_wai_state = 0;
-  m_nmi_state = 0;
-  m_nmi_pending = 0;
+    m_wai_state = 0;
+    m_nmi_state = 0;
+    m_nmi_pending = 0;
 
-  // We need to run the CPU for a bit before being able to send commands to it
-  for (size_t i = 0; i < 1024 * 8; i++)
-    execute_one();
+    // We need to run the CPU for a bit before being able to send commands to it
+    for (size_t i = 0; i < 1024 * 8; i++)
+        execute_one();
 }
 
 Mcu::~Mcu() {}
 
-void Mcu::take_trap()
-{
-  enter_interrupt("TRAP", 0xffee);
-}
+void Mcu::take_trap() { enter_interrupt("TRAP", 0xffee); }
 
 /* check the IRQ lines for pending interrupts */
 void Mcu::check_irq_lines()
 {
-  if (m_nmi_pending)
-  {
-    m_wai_state &= ~M6800_SLP;
-    m_nmi_pending = false;
-    enter_interrupt("NMI", 0xfffc);
-  }
-  else if (m_irq_state[M6800_IRQ_LINE] != CLEAR_LINE)
-  {
-    /* standard IRQ */
-    m_wai_state &= ~M6800_SLP;
-
-    if (!(CC & 0x10))
+    if (m_nmi_pending)
     {
-      // standard_irq_callback(M6800_IRQ_LINE, m_pc.w.l);
-      enter_interrupt("IRQ1", 0xfff8);
+        m_wai_state &= ~M6800_SLP;
+        m_nmi_pending = false;
+        enter_interrupt("NMI", 0xfffc);
     }
-  }
-  else if ((m_tcsr & (TCSR_EICI | TCSR_ICF)) == (TCSR_EICI | TCSR_ICF))
-  {
-    // if (!(m_cc & 0x10))
-    // 	standard_irq_callback(M6801_TIN_LINE, m_pc.w.l);
+    else if (m_irq_state[M6800_IRQ_LINE] != CLEAR_LINE)
+    {
+        /* standard IRQ */
+        m_wai_state &= ~M6800_SLP;
 
-    m_wai_state &= ~M6800_SLP;
+        if (!(CC & 0x10))
+        {
+            // standard_irq_callback(M6800_IRQ_LINE, m_pc.w.l);
+            enter_interrupt("IRQ1", 0xfff8);
+        }
+    }
+    else if ((m_tcsr & (TCSR_EICI | TCSR_ICF)) == (TCSR_EICI | TCSR_ICF))
+    {
+        // if (!(m_cc & 0x10))
+        // 	standard_irq_callback(M6801_TIN_LINE, m_pc.w.l);
 
-    if (!(CC & 0x10))
-      enter_interrupt("ICI", 0xfff6);
-  }
+        m_wai_state &= ~M6800_SLP;
+
+        if (!(CC & 0x10))
+            enter_interrupt("ICI", 0xfff6);
+    }
 }
 
 void Mcu::eat_cycles()
 {
-  if (m_icount > 0)
-    increment_counter(m_icount);
+    if (m_icount > 0)
+        increment_counter(m_icount);
 }
 
 u32 Mcu::RM16(u32 Addr)
 {
-  u32 result = RM(Addr) << 8;
-  return result | RM((Addr + 1) & 0xffff);
+    u32 result = RM(Addr) << 8;
+    return result | RM((Addr + 1) & 0xffff);
 }
 
 void Mcu::WM16(u32 Addr, PAIR *p)
 {
-  WM(Addr, p->b.h);
-  WM((Addr + 1) & 0xffff, p->b.l);
+    WM(Addr, p->b.h);
+    WM((Addr + 1) & 0xffff, p->b.l);
 }
 
 /* IRQ enter */
 void Mcu::enter_interrupt(const char *message, u16 irq_vector)
 {
-  int cycles_to_eat = 0;
+    int cycles_to_eat = 0;
 
-  if (m_wai_state & M6800_WAI)
-  {
-    cycles_to_eat = 4;
-    m_wai_state &= ~M6800_WAI;
-  }
-  else
-  {
-    PUSHWORD(pPC);
-    PUSHWORD(pX);
-    PUSHBYTE(A);
-    PUSHBYTE(B);
-    PUSHBYTE(CC);
-    cycles_to_eat = 12;
-  }
-  SEI;
-  PCD = RM16(irq_vector);
+    if (m_wai_state & M6800_WAI)
+    {
+        cycles_to_eat = 4;
+        m_wai_state &= ~M6800_WAI;
+    }
+    else
+    {
+        PUSHWORD(pPC);
+        PUSHWORD(pX);
+        PUSHBYTE(A);
+        PUSHBYTE(B);
+        PUSHBYTE(CC);
+        cycles_to_eat = 12;
+    }
+    SEI;
+    PCD = RM16(irq_vector);
 
-  increment_counter(cycles_to_eat);
+    increment_counter(cycles_to_eat);
 }
 
-void Mcu::increment_counter(int amount)
-{
-  m_icount -= amount;
-}
+void Mcu::increment_counter(int amount) { m_icount -= amount; }
 
 void Mcu::execute_set_input(int irqline, int state)
 {
-  switch (irqline)
-  {
-  case INPUT_LINE_NMI:
-    if (!m_nmi_state && state != CLEAR_LINE)
-      m_nmi_pending = true;
-    m_nmi_state = state;
-    break;
-
-  case M6801_TIN_LINE:
-    if (state != m_irq_state[M6801_TIN_LINE])
+    switch (irqline)
     {
-      RD_TRACE("irq state %x\n", m_irq_state[irqline]);
-      m_irq_state[M6801_TIN_LINE] = state;
-      // edge = (state == CLEAR_LINE) ? 2 : 0;
-      if (((m_tcsr & TCSR_IEDG) ^ (state == CLEAR_LINE ? TCSR_IEDG : 0)) == 0)
-        return;
-      /* active edge in */
-      m_tcsr |= TCSR_ICF;
-      m_pending_tcsr |= TCSR_ICF;
-      m_input_capture = CT;
-    }
-    break;
+    case INPUT_LINE_NMI:
+        if (!m_nmi_state && state != CLEAR_LINE)
+            m_nmi_pending = true;
+        m_nmi_state = state;
+        break;
 
-  default:
-    m_irq_state[irqline] = state;
-    break;
-  }
+    case M6801_TIN_LINE:
+        if (state != m_irq_state[M6801_TIN_LINE])
+        {
+            RD_TRACE("irq state %x\n", m_irq_state[irqline]);
+            m_irq_state[M6801_TIN_LINE] = state;
+            // edge = (state == CLEAR_LINE) ? 2 : 0;
+            if (((m_tcsr & TCSR_IEDG) ^ (state == CLEAR_LINE ? TCSR_IEDG : 0)) == 0)
+                return;
+            /* active edge in */
+            m_tcsr |= TCSR_ICF;
+            m_pending_tcsr |= TCSR_ICF;
+            m_input_capture = CT;
+        }
+        break;
+
+    default:
+        m_irq_state[irqline] = state;
+        break;
+    }
 }
 
 void Mcu::execute_run()
 {
-  if (!board.commandPort().queue().empty())
-    execute_set_input(M6801_TIN_LINE, ASSERT_LINE);
+    if (!board.commandPort().queue().empty())
+        execute_set_input(M6801_TIN_LINE, ASSERT_LINE);
 
-  if (board.soundChip().m_irq_triggered)
-    execute_set_input(0, ASSERT_LINE);
-  check_irq_lines();
+    if (board.soundChip().m_irq_triggered)
+        execute_set_input(0, ASSERT_LINE);
+    check_irq_lines();
 
-  // Una instrucción por llamada: el reloj maestro es el audio, no la CPU.
-  // (Hubo un bucle por presupuesto de ciclos; ver docs/FIRMWARE.md §4.)
-  execute_one();
+    // Una instrucción por llamada: el reloj maestro es el audio, no la CPU.
+    // (Hubo un bucle por presupuesto de ciclos; ver docs/FIRMWARE.md §4.)
+    execute_one();
 }
 
 void Mcu::execute_one()
 {
-  pPPC = pPC;
-  u8 ireg = M_RDOP(PCD);
-  PC++;
-  RD_TRACE("PC: %04x, ireg: %02x\n", PCD, ireg);
-  (this->*hd63701_insn[ireg])();
-  increment_counter(cycles_63701[ireg]);
+    pPPC = pPC;
+    u8 ireg = M_RDOP(PCD);
+    PC++;
+    RD_TRACE("PC: %04x, ireg: %02x\n", PCD, ireg);
+    (this->*hd63701_insn[ireg])();
+    increment_counter(cycles_63701[ireg]);
 }
 
 u8 Mcu::tcsr_r()
 {
-  m_pending_tcsr = 0;
-  return m_tcsr;
+    m_pending_tcsr = 0;
+    return m_tcsr;
 }
 
 void Mcu::tcsr_w(u8 data)
 {
-  data &= 0x1f;
+    data &= 0x1f;
 
-  m_tcsr = data | (m_tcsr & 0xe0);
-  m_pending_tcsr &= m_tcsr;
-  check_irq_lines();
+    m_tcsr = data | (m_tcsr & 0xe0);
+    m_pending_tcsr &= m_tcsr;
+    check_irq_lines();
 }
 
 // Los registros internos del chip que caen dentro de 0x0000-0x001F. La placa
@@ -513,129 +517,121 @@ void Mcu::tcsr_w(u8 data)
 // lo que la CPU no reconoce vale 0xFF, igual que antes de partir el mapa.
 u8 Mcu::readCpuRegister(u16 addr)
 {
-  // tcsr
-  if (addr == 0x0008)
-    return tcsr_r();
+    // tcsr
+    if (addr == 0x0008)
+        return tcsr_r();
 
-  // captura de entrada
-  if (addr == 0x000d)
-  {
-    if (!(m_pending_tcsr & TCSR_ICF))
-      m_tcsr &= ~TCSR_ICF;
-    return (m_input_capture >> 0) & 0xff;
-  }
-  if (addr == 0x000e)
-    return (m_input_capture >> 8) & 0xff;
+    // captura de entrada
+    if (addr == 0x000d)
+    {
+        if (!(m_pending_tcsr & TCSR_ICF))
+            m_tcsr &= ~TCSR_ICF;
+        return (m_input_capture >> 0) & 0xff;
+    }
+    if (addr == 0x000e)
+        return (m_input_capture >> 8) & 0xff;
 
-  RD_TRACE("%04x: unk device read %04x\n", addr, PCD);
-  return 0xFF;
+    RD_TRACE("%04x: unk device read %04x\n", addr, PCD);
+    return 0xFF;
 }
 
 void Mcu::writeCpuRegister(u16 addr, u8 data)
 {
-  // tcsr
-  if (addr == 0x0008)
-  {
-    tcsr_w(data);
-    return;
-  }
+    // tcsr
+    if (addr == 0x0008)
+    {
+        tcsr_w(data);
+        return;
+    }
 
-  RD_TRACE("%04x unk device write %04x=%02x\n", PCD, addr, data);
+    RD_TRACE("%04x unk device write %04x=%02x\n", PCD, addr, data);
 }
 
 s32 Mcu::generate_next_sample(bool sampleRate32)
 {
-  s32 sample = board.soundChip().update();
+    s32 sample = board.soundChip().update();
 
-  // 20kHz sample rate, 2000kHz CPU clock
-  for (size_t cycle = 0; cycle < (sampleRate32 ? 62 : 100); cycle++)
-  {
-    execute_run();
-  }
+    // 20kHz sample rate, 2000kHz CPU clock
+    for (size_t cycle = 0; cycle < (sampleRate32 ? 62 : 100); cycle++)
+    {
+        execute_run();
+    }
 
-  return sample;
+    return sample;
 }
 
 void Mcu::sendMidiCmd(u8 data1, u8 data2, u8 data3)
 {
-  uint8_t command = data1 >> 4;
+    uint8_t command = data1 >> 4;
 
-  // program change
-  if (command == 0xC)
-  {
-    board.commandPort().programChange(data2 & 0xF);
-  }
+    // program change
+    if (command == 0xC)
+    {
+        board.commandPort().programChange(data2 & 0xF);
+    }
 
-  // note off
-  else if (command == 0x8 || (command == 0x9 && data3 == 0))
-  {
-    board.commandPort().noteOff(data2);
-  }
+    // note off
+    else if (command == 0x8 || (command == 0x9 && data3 == 0))
+    {
+        board.commandPort().noteOff(data2);
+    }
 
-  // note on
-  else if (command == 0x9)
-  {
-    board.commandPort().noteOn(data2, data3);
-  }
+    // note on
+    else if (command == 0x9)
+    {
+        board.commandPort().noteOn(data2, data3);
+    }
 
-  // sustain
-  else if (command == 0xB && data2 == 64)
-  {
-    board.commandPort().sustain(data3 >= 64);
-  }
+    // sustain
+    else if (command == 0xB && data2 == 64)
+    {
+        board.commandPort().sustain(data3 >= 64);
+    }
 }
 
 void Mcu::boot(int16_t masterTune, bool warmupRate32)
 {
-  reset();
+    reset();
 
-  board.commandPort().programChange(0);
-  board.commandPort().masterTune(masterTune);
+    board.commandPort().programChange(0);
+    board.commandPort().masterTune(masterTune);
 
-  for (size_t sample = 0; sample < 1024; sample++)
-    generate_next_sample(warmupRate32);
+    for (size_t sample = 0; sample < 1024; sample++)
+        generate_next_sample(warmupRate32);
 
-  board.commandPort().reloadPatch();
+    board.commandPort().reloadPatch();
 }
 
-void Mcu::reloadPatch()
-{
-  board.commandPort().reloadPatch();
-}
+void Mcu::reloadPatch() { board.commandPort().reloadPatch(); }
 
 void Mcu::setMasterTune(int16_t tune)
 {
-  // TODO: hace falta este switcharoo horrible porque cambiar la afinación en
-  // parches distintos del 0 no funciona. Corre el emulador, así que el
-  // llamante tiene que serializarlo con el hilo de audio.
-  board.commandPort().programChange(0);
-  for (size_t cycle = 0; cycle < 100; cycle++)
-    generate_next_sample();
+    // TODO: hace falta este switcharoo horrible porque cambiar la afinación en
+    // parches distintos del 0 no funciona. Corre el emulador, así que el
+    // llamante tiene que serializarlo con el hilo de audio.
+    board.commandPort().programChange(0);
+    for (size_t cycle = 0; cycle < 100; cycle++)
+        generate_next_sample();
 
-  board.commandPort().masterTune(tune);
-  for (size_t cycle = 0; cycle < 100; cycle++)
-    generate_next_sample();
+    board.commandPort().masterTune(tune);
+    for (size_t cycle = 0; cycle < 100; cycle++)
+        generate_next_sample();
 
-  board.commandPort().programChange(0);
+    board.commandPort().programChange(0);
 }
 
-void Mcu::allNotesOff()
-{
-  board.commandPort().allNotesOff();
-}
+void Mcu::allNotesOff() { board.commandPort().allNotesOff(); }
 
 void Mcu::loadRomSet(const u8 *temp_ic5, const u8 *temp_ic6, const u8 *temp_ic7, const u8 *temp_paramsrom)
 {
-  board.loadRomSet(temp_ic5, temp_ic6, temp_ic7, temp_paramsrom);
+    board.loadRomSet(temp_ic5, temp_ic6, temp_ic7, temp_paramsrom);
 }
 
-void Mcu::selectPatch(size_t from_addr)
-{
-  board.selectPatch(from_addr);
-}
+void Mcu::selectPatch(size_t from_addr) { board.selectPatch(from_addr); }
 
-void Mcu::loadSounds(const u8 *temp_ic5, const u8 *temp_ic6, const u8 *temp_ic7, const u8 *temp_paramsrom, size_t from_addr)
+void Mcu::loadSounds(const u8 *temp_ic5, const u8 *temp_ic6, const u8 *temp_ic7, const u8 *temp_paramsrom,
+                     size_t from_addr)
 {
-  loadRomSet(temp_ic5, temp_ic6, temp_ic7, temp_paramsrom);
-  selectPatch(from_addr);
+    loadRomSet(temp_ic5, temp_ic6, temp_ic7, temp_paramsrom);
+    selectPatch(from_addr);
 }

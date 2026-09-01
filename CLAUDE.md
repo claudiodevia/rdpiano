@@ -160,11 +160,11 @@ decírselo al usuario**.
 
 ## Convenciones
 
-- 2 espacios, llave aparte (Allman), 80 columnas. Deuda conocida: tabs heredados de MAME (`mcu.h`),
-  4 espacios en `sound_chip.cpp`/`patches.h` — se salda al tocarlos.
+- 4 espacios, llave aparte (Allman), 120 columnas: lo que dice `.clang-format`, y así está ya todo
+  el árbol propio (formateo masivo). Solo quedan tabs de MAME en los archivos exceptuados.
 - **Todo archivo C/C++ nuevo o modificado se formatea** con Format Document (`⇧⌥F`) antes de darlo
   por terminado; `.clang-format` de la raíz da lo mismo por CLI. Excepciones: `mcu_ops.h`,
-  `mame_utils.h`, `lsp/`, `resample/`. Masivo solo en commit aislado:
+  `mame_utils.h`, `lsp/`, `resample/` y `re_stuff/`. Masivo solo en commit aislado:
   ```bash
   CF=~/.vscode/extensions/ms-vscode.cpptools-*/LLVM/bin/clang-format
   git diff --name-only --diff-filter=ACMR -- '*.c' '*.h' '*.cpp' | xargs $CF -i

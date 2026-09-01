@@ -13,29 +13,26 @@
 
 enum RomSetId
 {
-  ROMSET_MKS20_A = 0,
-  ROMSET_MKS20_B = 1,
-  ROMSET_MK80 = 2,
+    ROMSET_MKS20_A = 0,
+    ROMSET_MKS20_B = 1,
+    ROMSET_MK80 = 2,
 
-  ROMSET_COUNT
+    ROMSET_COUNT
 };
 
 inline constexpr int NUM_PATCHES = 16;
 
 inline constexpr const char *patchNames[NUM_PATCHES] = {
-    "MKS-20: Piano 1",     "MKS-20: Piano 2",   "MKS-20: Piano 3",
-    "MKS-20: Harpsichord", "MKS-20: Clavi",     "MKS-20: Vibraphone",
-    "MKS-20: E-Piano 1",   "MKS-20: E-Piano 2",
+    "MKS-20: Piano 1",   "MKS-20: Piano 2",    "MKS-20: Piano 3",   "MKS-20: Harpsichord",
+    "MKS-20: Clavi",     "MKS-20: Vibraphone", "MKS-20: E-Piano 1", "MKS-20: E-Piano 2",
 
-    "MK-80: Classic",      "MK-80: Special",    "MK-80: Blend",
-    "MK-80: Contemporary", "MK-80: A. Piano 1", "MK-80: A. Piano 2",
-    "MK-80: Clavi",        "MK-80: Vibraphone"};
+    "MK-80: Classic",    "MK-80: Special",     "MK-80: Blend",      "MK-80: Contemporary",
+    "MK-80: A. Piano 1", "MK-80: A. Piano 2",  "MK-80: Clavi",      "MK-80: Vibraphone"};
 
-inline constexpr int patchToRomSetId[NUM_PATCHES] = {
-    ROMSET_MKS20_A, ROMSET_MKS20_A, ROMSET_MKS20_A, ROMSET_MKS20_B,
-    ROMSET_MKS20_B, ROMSET_MKS20_B, ROMSET_MKS20_B, ROMSET_MKS20_B,
-    ROMSET_MK80,    ROMSET_MK80,    ROMSET_MK80,    ROMSET_MK80,
-    ROMSET_MK80,    ROMSET_MK80,    ROMSET_MK80,    ROMSET_MK80};
+inline constexpr int patchToRomSetId[NUM_PATCHES] = {ROMSET_MKS20_A, ROMSET_MKS20_A, ROMSET_MKS20_A, ROMSET_MKS20_B,
+                                                     ROMSET_MKS20_B, ROMSET_MKS20_B, ROMSET_MKS20_B, ROMSET_MKS20_B,
+                                                     ROMSET_MK80,    ROMSET_MK80,    ROMSET_MK80,    ROMSET_MK80,
+                                                     ROMSET_MK80,    ROMSET_MK80,    ROMSET_MK80,    ROMSET_MK80};
 
 // Offset dentro de la params ROM donde empieza cada parche.
 inline constexpr size_t patchToOffset[NUM_PATCHES] = {
@@ -128,21 +125,19 @@ inline constexpr float patchOutputGain[NUM_PATCHES] = {
 // los mismos, y esta es la única lista.
 enum RomChip
 {
-  ROM_IC5 = 0,  // onda
-  ROM_IC6 = 1,  // onda
-  ROM_IC7 = 2,  // onda
-  ROM_IC18 = 3, // params
+    ROM_IC5 = 0,  // onda
+    ROM_IC6 = 1,  // onda
+    ROM_IC7 = 2,  // onda
+    ROM_IC18 = 3, // params
 
-  ROM_CHIP_COUNT
+    ROM_CHIP_COUNT
 };
 
 inline constexpr const char *romSetFiles[ROMSET_COUNT][ROM_CHIP_COUNT] = {
     // ROMSET_MKS20_A
-    {"mks20_15179738.BIN", "mks20_15179737.BIN", "mks20_15179736.BIN",
-     "mks20_15179757.BIN"},
+    {"mks20_15179738.BIN", "mks20_15179737.BIN", "mks20_15179736.BIN", "mks20_15179757.BIN"},
     // ROMSET_MKS20_B
-    {"mks20_15179741.BIN", "mks20_15179740.BIN", "mks20_15179739.BIN",
-     "mks20_15179757.BIN"},
+    {"mks20_15179741.BIN", "mks20_15179740.BIN", "mks20_15179739.BIN", "mks20_15179757.BIN"},
     // ROMSET_MK80
     {"MK80_IC5.bin", "MK80_IC6.bin", "MK80_IC7.bin", "MK80_IC18.bin"},
 };
@@ -160,61 +155,58 @@ inline constexpr size_t PROG_ROM_SIZE = 0x2000;
 namespace patches_detail
 {
 
-  template <typename T, size_t N> constexpr size_t count(const T (&)[N])
-  {
-    return N;
-  }
+    template <typename T, size_t N> constexpr size_t count(const T (&)[N]) { return N; }
 
-  constexpr bool offsets_in_range()
-  {
-    for (int i = 0; i < NUM_PATCHES; i++)
-      if (patchToOffset[i] >= WAVE_ROM_SIZE)
-        return false;
-    return true;
-  }
+    constexpr bool offsets_in_range()
+    {
+        for (int i = 0; i < NUM_PATCHES; i++)
+            if (patchToOffset[i] >= WAVE_ROM_SIZE)
+                return false;
+        return true;
+    }
 
-  constexpr bool rom_sets_in_range()
-  {
-    for (int i = 0; i < NUM_PATCHES; i++)
-      if (patchToRomSetId[i] < 0 || patchToRomSetId[i] >= ROMSET_COUNT)
-        return false;
-    return true;
-  }
+    constexpr bool rom_sets_in_range()
+    {
+        for (int i = 0; i < NUM_PATCHES; i++)
+            if (patchToRomSetId[i] < 0 || patchToRomSetId[i] >= ROMSET_COUNT)
+                return false;
+        return true;
+    }
 
-  constexpr bool sample_rates_known()
-  {
-    for (int i = 0; i < NUM_PATCHES; i++)
-      if (patchSampleRates[i] != 20000 && patchSampleRates[i] != 32000)
-        return false;
-    return true;
-  }
+    constexpr bool sample_rates_known()
+    {
+        for (int i = 0; i < NUM_PATCHES; i++)
+            if (patchSampleRates[i] != 20000 && patchSampleRates[i] != 32000)
+                return false;
+        return true;
+    }
 
-  constexpr bool gains_in_range()
-  {
-    // Ni mudo ni un impulsor: una compensación fuera de este margen es un
-    // error de la tabla, no una decisión de producto.
-    for (int i = 0; i < NUM_PATCHES; i++)
-      if (!(patchOutputGain[i] > 0.05f) || !(patchOutputGain[i] < 4.0f))
-        return false;
-    return true;
-  }
+    constexpr bool gains_in_range()
+    {
+        // Ni mudo ni un impulsor: una compensación fuera de este margen es un
+        // error de la tabla, no una decisión de producto.
+        for (int i = 0; i < NUM_PATCHES; i++)
+            if (!(patchOutputGain[i] > 0.05f) || !(patchOutputGain[i] < 4.0f))
+                return false;
+        return true;
+    }
 
-  constexpr bool names_present()
-  {
-    for (int i = 0; i < NUM_PATCHES; i++)
-      if (patchNames[i] == nullptr || patchNames[i][0] == '\0')
-        return false;
-    return true;
-  }
+    constexpr bool names_present()
+    {
+        for (int i = 0; i < NUM_PATCHES; i++)
+            if (patchNames[i] == nullptr || patchNames[i][0] == '\0')
+                return false;
+        return true;
+    }
 
-  constexpr bool rom_files_present()
-  {
-    for (int s = 0; s < ROMSET_COUNT; s++)
-      for (int c = 0; c < ROM_CHIP_COUNT; c++)
-        if (romSetFiles[s][c] == nullptr || romSetFiles[s][c][0] == '\0')
-          return false;
-    return true;
-  }
+    constexpr bool rom_files_present()
+    {
+        for (int s = 0; s < ROMSET_COUNT; s++)
+            for (int c = 0; c < ROM_CHIP_COUNT; c++)
+                if (romSetFiles[s][c] == nullptr || romSetFiles[s][c][0] == '\0')
+                    return false;
+        return true;
+    }
 
 } // namespace patches_detail
 

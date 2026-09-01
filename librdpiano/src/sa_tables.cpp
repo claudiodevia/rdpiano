@@ -37,30 +37,163 @@ void sa_tables_generate(SaTables &out)
         uint8_t param_bus_3 = ((i / 0x1000) >> 3) & 1;
 
         // Copy pasted from silicon
-        bool result_b0 = (!r11_6 && !param_bus_0 && !param_bus_1 && !param_bus_2 && !param_bus_3) || (!r11_5 && param_bus_0 && !param_bus_1 && !param_bus_2 && !param_bus_3) || (r11_4 && !param_bus_0 && param_bus_1 && !param_bus_2 && !param_bus_3) || (r11_3 && param_bus_0 && param_bus_1 && !param_bus_2 && !param_bus_3) || (r11_2 && !param_bus_0 && !param_bus_1 && param_bus_2 && !param_bus_3) || (r11_1 && param_bus_0 && !param_bus_1 && param_bus_2 && !param_bus_3) || (r11_0 && !param_bus_0 && param_bus_1 && param_bus_2 && !param_bus_3) || (param_bus_0 && !param_bus_1 && !param_bus_2 && param_bus_3 && param_bus_0 && param_bus_1 && param_bus_2 && !param_bus_3);
-        bool result_b1 = (!r11_7 && !param_bus_0 && !param_bus_1 && !param_bus_2 && !param_bus_3) || (!r11_6 && param_bus_0 && !param_bus_1 && !param_bus_2 && !param_bus_3) || (!r11_5 && !param_bus_0 && param_bus_1 && !param_bus_2 && !param_bus_3) || (r11_4 && param_bus_0 && param_bus_1 && !param_bus_2 && !param_bus_3) || (r11_3 && !param_bus_0 && !param_bus_1 && param_bus_2 && !param_bus_3) || (r11_2 && param_bus_0 && !param_bus_1 && param_bus_2 && !param_bus_3) || (r11_1 && !param_bus_0 && param_bus_1 && param_bus_2 && !param_bus_3) || (r11_0 && param_bus_0 && param_bus_1 && param_bus_2 && !param_bus_3);
-        bool result_b2 = !(!((!r11_8 && !param_bus_0 && !param_bus_1 && !param_bus_2 && !param_bus_3) || (!r11_7 && param_bus_0 && !param_bus_1 && !param_bus_2 && !param_bus_3) || (!r11_6 && !param_bus_0 && param_bus_1 && !param_bus_2 && !param_bus_3) || (!r11_5 && param_bus_0 && param_bus_1 && !param_bus_2 && !param_bus_3) || (r11_4 && !param_bus_0 && !param_bus_1 && param_bus_2 && !param_bus_3) || (r11_3 && param_bus_0 && !param_bus_1 && param_bus_2 && !param_bus_3) || (r11_2 && !param_bus_0 && param_bus_1 && param_bus_2 && !param_bus_3) || (r11_1 && param_bus_0 && param_bus_1 && param_bus_2 && !param_bus_3)) && !(r11_0 && !param_bus_0 && !param_bus_1 && !param_bus_2 && param_bus_3));
-        bool result_b3 = !(!((!r11_9 && !param_bus_0 && !param_bus_1 && !param_bus_2 && !param_bus_3) || (!r11_8 && param_bus_0 && !param_bus_1 && !param_bus_2 && !param_bus_3) || (!r11_7 && !param_bus_0 && param_bus_1 && !param_bus_2 && !param_bus_3) || (!r11_6 && param_bus_0 && param_bus_1 && !param_bus_2 && !param_bus_3) || (!r11_5 && !param_bus_0 && !param_bus_1 && param_bus_2 && !param_bus_3) || (r11_4 && param_bus_0 && !param_bus_1 && param_bus_2 && !param_bus_3) || (r11_3 && !param_bus_0 && param_bus_1 && param_bus_2 && !param_bus_3) || (r11_2 && param_bus_0 && param_bus_1 && param_bus_2 && !param_bus_3)) && !((r11_1 && !param_bus_0 && !param_bus_1 && !param_bus_2 && param_bus_3) || (r11_0 && param_bus_0 && !param_bus_1 && !param_bus_2 && param_bus_3)));
-        bool result_b4 = !(!((!r11_10 && !param_bus_0 && !param_bus_1 && !param_bus_2 && !param_bus_3) || (!r11_9 && param_bus_0 && !param_bus_1 && !param_bus_2 && !param_bus_3) || (!r11_8 && !param_bus_0 && param_bus_1 && !param_bus_2 && !param_bus_3) || (!r11_7 && param_bus_0 && param_bus_1 && !param_bus_2 && !param_bus_3) || (!r11_6 && !param_bus_0 && !param_bus_1 && param_bus_2 && !param_bus_3) || (!r11_5 && param_bus_0 && !param_bus_1 && param_bus_2 && !param_bus_3) || (r11_4 && !param_bus_0 && param_bus_1 && param_bus_2 && !param_bus_3) || (r11_3 && param_bus_0 && param_bus_1 && param_bus_2 && !param_bus_3)) && !((r11_2 && !param_bus_0 && !param_bus_1 && !param_bus_2 && param_bus_3) || (r11_1 && param_bus_0 && !param_bus_1 && !param_bus_2 && param_bus_3) || (r11_0 && !param_bus_0 && param_bus_1 && !param_bus_2 && param_bus_3) || (0 && param_bus_0 && param_bus_1 && !param_bus_2 && param_bus_3)));
-        bool result_b5 = !(!((!r11_11 && !param_bus_0 && !param_bus_1 && !param_bus_2 && !param_bus_3) || (!r11_10 && param_bus_0 && !param_bus_1 && !param_bus_2 && !param_bus_3) || (!r11_9 && !param_bus_0 && param_bus_1 && !param_bus_2 && !param_bus_3) || (!r11_8 && param_bus_0 && param_bus_1 && !param_bus_2 && !param_bus_3) || (!r11_7 && !param_bus_0 && !param_bus_1 && param_bus_2 && !param_bus_3) || (!r11_6 && param_bus_0 && !param_bus_1 && param_bus_2 && !param_bus_3) || (!r11_5 && !param_bus_0 && param_bus_1 && param_bus_2 && !param_bus_3) || (r11_4 && param_bus_0 && param_bus_1 && param_bus_2 && !param_bus_3)) && !((r11_3 && !param_bus_0 && !param_bus_1 && !param_bus_2 && param_bus_3) || (r11_2 && param_bus_0 && !param_bus_1 && !param_bus_2 && param_bus_3) || (r11_1 && !param_bus_0 && param_bus_1 && !param_bus_2 && param_bus_3) || (r11_0 && param_bus_0 && param_bus_1 && !param_bus_2 && param_bus_3)));
-        bool result_b6 = !(!((!r11_12 && !param_bus_0 && !param_bus_1 && !param_bus_2 && !param_bus_3) || (!r11_11 && param_bus_0 && !param_bus_1 && !param_bus_2 && !param_bus_3) || (!r11_10 && !param_bus_0 && param_bus_1 && !param_bus_2 && !param_bus_3) || (!r11_9 && param_bus_0 && param_bus_1 && !param_bus_2 && !param_bus_3) || (!r11_8 && !param_bus_0 && !param_bus_1 && param_bus_2 && !param_bus_3) || (!r11_7 && param_bus_0 && !param_bus_1 && param_bus_2 && !param_bus_3) || (!r11_6 && !param_bus_0 && param_bus_1 && param_bus_2 && !param_bus_3) || (!r11_5 && param_bus_0 && param_bus_1 && param_bus_2 && !param_bus_3)) && !((r11_4 && !param_bus_0 && !param_bus_1 && !param_bus_2 && param_bus_3) || (r11_3 && param_bus_0 && !param_bus_1 && !param_bus_2 && param_bus_3) || (r11_2 && !param_bus_0 && param_bus_1 && !param_bus_2 && param_bus_3) || (r11_1 && param_bus_0 && param_bus_1 && !param_bus_2 && param_bus_3)));
-        bool result_b7 = !(!((1 && !param_bus_0 && !param_bus_1 && !param_bus_2 && !param_bus_3) || (!r11_12 && param_bus_0 && !param_bus_1 && !param_bus_2 && !param_bus_3) || (!r11_11 && !param_bus_0 && param_bus_1 && !param_bus_2 && !param_bus_3) || (!r11_10 && param_bus_0 && param_bus_1 && !param_bus_2 && !param_bus_3) || (!r11_9 && !param_bus_0 && !param_bus_1 && param_bus_2 && !param_bus_3) || (!r11_8 && param_bus_0 && !param_bus_1 && param_bus_2 && !param_bus_3) || (!r11_7 && !param_bus_0 && param_bus_1 && param_bus_2 && !param_bus_3) || (!r11_6 && param_bus_0 && param_bus_1 && param_bus_2 && !param_bus_3)) && !((!r11_5 && !param_bus_0 && !param_bus_1 && !param_bus_2 && param_bus_3) || (r11_4 && param_bus_0 && !param_bus_1 && !param_bus_2 && param_bus_3) || (r11_3 && !param_bus_0 && param_bus_1 && !param_bus_2 && param_bus_3) || (r11_2 && param_bus_0 && param_bus_1 && !param_bus_2 && param_bus_3)));
-        bool result_b8 = !(!((0 && !param_bus_0 && !param_bus_1 && !param_bus_2 && !param_bus_3) || (1 && param_bus_0 && !param_bus_1 && !param_bus_2 && !param_bus_3) || (!r11_12 && !param_bus_0 && param_bus_1 && !param_bus_2 && !param_bus_3) || (!r11_11 && param_bus_0 && param_bus_1 && !param_bus_2 && !param_bus_3) || (!r11_10 && !param_bus_0 && !param_bus_1 && param_bus_2 && !param_bus_3) || (!r11_9 && param_bus_0 && !param_bus_1 && param_bus_2 && !param_bus_3) || (!r11_8 && !param_bus_0 && param_bus_1 && param_bus_2 && !param_bus_3) || (!r11_7 && param_bus_0 && param_bus_1 && param_bus_2 && !param_bus_3)) && !((!r11_6 && !param_bus_0 && !param_bus_1 && !param_bus_2 && param_bus_3) || (!r11_5 && param_bus_0 && !param_bus_1 && !param_bus_2 && param_bus_3) || (r11_4 && !param_bus_0 && param_bus_1 && !param_bus_2 && param_bus_3) || (r11_3 && param_bus_0 && param_bus_1 && !param_bus_2 && param_bus_3)));
-        bool result_b9 = !(!((1 && !param_bus_0 && param_bus_1 && !param_bus_2 && !param_bus_3) || (!r11_12 && param_bus_0 && param_bus_1 && !param_bus_2 && !param_bus_3) || (!r11_11 && !param_bus_0 && !param_bus_1 && param_bus_2 && !param_bus_3) || (!r11_10 && param_bus_0 && !param_bus_1 && param_bus_2 && !param_bus_3) || (!r11_9 && !param_bus_0 && param_bus_1 && param_bus_2 && !param_bus_3) || (!r11_8 && param_bus_0 && param_bus_1 && param_bus_2 && !param_bus_3) || (!r11_7 && !param_bus_0 && !param_bus_1 && !param_bus_2 && param_bus_3) || (!r11_6 && param_bus_0 && !param_bus_1 && !param_bus_2 && param_bus_3)) && !((!r11_5 && !param_bus_0 && param_bus_1 && !param_bus_2 && param_bus_3) || (r11_4 && param_bus_0 && param_bus_1 && !param_bus_2 && param_bus_3)));
-        bool result_b10 = !(!((1 && param_bus_0 && param_bus_1 && !param_bus_2 && !param_bus_3) || (!r11_12 && !param_bus_0 && !param_bus_1 && param_bus_2 && !param_bus_3) || (!r11_11 && param_bus_0 && !param_bus_1 && param_bus_2 && !param_bus_3) || (!r11_10 && !param_bus_0 && param_bus_1 && param_bus_2 && !param_bus_3) || (!r11_9 && param_bus_0 && param_bus_1 && param_bus_2 && !param_bus_3) || (!r11_8 && !param_bus_0 && !param_bus_1 && !param_bus_2 && param_bus_3) || (!r11_7 && param_bus_0 && !param_bus_1 && !param_bus_2 && param_bus_3) || (!r11_6 && !param_bus_0 && param_bus_1 && !param_bus_2 && param_bus_3)) && !(!r11_5 && param_bus_0 && param_bus_1 && !param_bus_2 && param_bus_3));
-        bool result_b11 = (1 && !param_bus_0 && !param_bus_1 && param_bus_2 && !param_bus_3) || (!r11_12 && param_bus_0 && !param_bus_1 && param_bus_2 && !param_bus_3) || (!r11_11 && !param_bus_0 && param_bus_1 && param_bus_2 && !param_bus_3) || (!r11_10 && param_bus_0 && param_bus_1 && param_bus_2 && !param_bus_3) || (!r11_9 && !param_bus_0 && !param_bus_1 && !param_bus_2 && param_bus_3) || (!r11_8 && param_bus_0 && !param_bus_1 && !param_bus_2 && param_bus_3) || (!r11_7 && !param_bus_0 && param_bus_1 && !param_bus_2 && param_bus_3) || (!r11_6 && param_bus_0 && param_bus_1 && !param_bus_2 && param_bus_3);
-        bool result_b12 = (0 && !param_bus_0 && !param_bus_1 && param_bus_2 && !param_bus_3) || (1 && param_bus_0 && !param_bus_1 && param_bus_2 && !param_bus_3) || (!r11_12 && !param_bus_0 && param_bus_1 && param_bus_2 && !param_bus_3) || (!r11_11 && param_bus_0 && param_bus_1 && param_bus_2 && !param_bus_3) || (!r11_10 && !param_bus_0 && !param_bus_1 && !param_bus_2 && param_bus_3) || (!r11_9 && param_bus_0 && !param_bus_1 && !param_bus_2 && param_bus_3) || (!r11_8 && !param_bus_0 && param_bus_1 && !param_bus_2 && param_bus_3) || (!r11_7 && param_bus_0 && param_bus_1 && !param_bus_2 && param_bus_3);
-        bool result_b13 = (1 && !param_bus_0 && param_bus_1 && param_bus_2 && !param_bus_3) || (!r11_12 && param_bus_0 && param_bus_1 && param_bus_2 && !param_bus_3) || (!r11_11 && !param_bus_0 && !param_bus_1 && !param_bus_2 && param_bus_3) || (!r11_10 && param_bus_0 && !param_bus_1 && !param_bus_2 && param_bus_3) || (!r11_9 && !param_bus_0 && param_bus_1 && !param_bus_2 && param_bus_3) || (!r11_8 && param_bus_0 && param_bus_1 && !param_bus_2 && param_bus_3);
-        bool result_b14 = !(1 && !(1 && param_bus_0 && param_bus_1 && param_bus_2 && !param_bus_3) && !(!r11_12 && !param_bus_0 && !param_bus_1 && !param_bus_2 && param_bus_3) && !(!r11_11 && param_bus_0 && !param_bus_1 && !param_bus_2 && param_bus_3) && !(!r11_10 && !param_bus_0 && param_bus_1 && !param_bus_2 && param_bus_3) && !(!r11_9 && param_bus_0 && param_bus_1 && !param_bus_2 && param_bus_3));
-        bool result_b15 = !(!(!param_bus_0 && !param_bus_1 && !param_bus_2 && param_bus_3) && !(!r11_12 && param_bus_0 && !param_bus_1 && !param_bus_2 && param_bus_3) && !(!r11_11 && !param_bus_0 && param_bus_1 && !param_bus_2 && param_bus_3) && !(!r11_10 && param_bus_0 && param_bus_1 && !param_bus_2 && param_bus_3));
-        bool result_b16 = !(!(param_bus_0 && !param_bus_1 && !param_bus_2 && param_bus_3) && !(!r11_12 && !param_bus_0 && param_bus_1 && !param_bus_2 && param_bus_3) && !(!r11_11 && param_bus_0 && param_bus_1 && !param_bus_2 && param_bus_3));
-        bool result_b17 = !(!(!param_bus_0 && param_bus_1 && !param_bus_2 && param_bus_3) && !(!r11_12 && param_bus_0 && param_bus_1 && !param_bus_2 && param_bus_3));
+        bool result_b0 = (!r11_6 && !param_bus_0 && !param_bus_1 && !param_bus_2 && !param_bus_3) ||
+                         (!r11_5 && param_bus_0 && !param_bus_1 && !param_bus_2 && !param_bus_3) ||
+                         (r11_4 && !param_bus_0 && param_bus_1 && !param_bus_2 && !param_bus_3) ||
+                         (r11_3 && param_bus_0 && param_bus_1 && !param_bus_2 && !param_bus_3) ||
+                         (r11_2 && !param_bus_0 && !param_bus_1 && param_bus_2 && !param_bus_3) ||
+                         (r11_1 && param_bus_0 && !param_bus_1 && param_bus_2 && !param_bus_3) ||
+                         (r11_0 && !param_bus_0 && param_bus_1 && param_bus_2 && !param_bus_3) ||
+                         (param_bus_0 && !param_bus_1 && !param_bus_2 && param_bus_3 && param_bus_0 && param_bus_1 &&
+                          param_bus_2 && !param_bus_3);
+        bool result_b1 = (!r11_7 && !param_bus_0 && !param_bus_1 && !param_bus_2 && !param_bus_3) ||
+                         (!r11_6 && param_bus_0 && !param_bus_1 && !param_bus_2 && !param_bus_3) ||
+                         (!r11_5 && !param_bus_0 && param_bus_1 && !param_bus_2 && !param_bus_3) ||
+                         (r11_4 && param_bus_0 && param_bus_1 && !param_bus_2 && !param_bus_3) ||
+                         (r11_3 && !param_bus_0 && !param_bus_1 && param_bus_2 && !param_bus_3) ||
+                         (r11_2 && param_bus_0 && !param_bus_1 && param_bus_2 && !param_bus_3) ||
+                         (r11_1 && !param_bus_0 && param_bus_1 && param_bus_2 && !param_bus_3) ||
+                         (r11_0 && param_bus_0 && param_bus_1 && param_bus_2 && !param_bus_3);
+        bool result_b2 = !(!((!r11_8 && !param_bus_0 && !param_bus_1 && !param_bus_2 && !param_bus_3) ||
+                             (!r11_7 && param_bus_0 && !param_bus_1 && !param_bus_2 && !param_bus_3) ||
+                             (!r11_6 && !param_bus_0 && param_bus_1 && !param_bus_2 && !param_bus_3) ||
+                             (!r11_5 && param_bus_0 && param_bus_1 && !param_bus_2 && !param_bus_3) ||
+                             (r11_4 && !param_bus_0 && !param_bus_1 && param_bus_2 && !param_bus_3) ||
+                             (r11_3 && param_bus_0 && !param_bus_1 && param_bus_2 && !param_bus_3) ||
+                             (r11_2 && !param_bus_0 && param_bus_1 && param_bus_2 && !param_bus_3) ||
+                             (r11_1 && param_bus_0 && param_bus_1 && param_bus_2 && !param_bus_3)) &&
+                           !(r11_0 && !param_bus_0 && !param_bus_1 && !param_bus_2 && param_bus_3));
+        bool result_b3 = !(!((!r11_9 && !param_bus_0 && !param_bus_1 && !param_bus_2 && !param_bus_3) ||
+                             (!r11_8 && param_bus_0 && !param_bus_1 && !param_bus_2 && !param_bus_3) ||
+                             (!r11_7 && !param_bus_0 && param_bus_1 && !param_bus_2 && !param_bus_3) ||
+                             (!r11_6 && param_bus_0 && param_bus_1 && !param_bus_2 && !param_bus_3) ||
+                             (!r11_5 && !param_bus_0 && !param_bus_1 && param_bus_2 && !param_bus_3) ||
+                             (r11_4 && param_bus_0 && !param_bus_1 && param_bus_2 && !param_bus_3) ||
+                             (r11_3 && !param_bus_0 && param_bus_1 && param_bus_2 && !param_bus_3) ||
+                             (r11_2 && param_bus_0 && param_bus_1 && param_bus_2 && !param_bus_3)) &&
+                           !((r11_1 && !param_bus_0 && !param_bus_1 && !param_bus_2 && param_bus_3) ||
+                             (r11_0 && param_bus_0 && !param_bus_1 && !param_bus_2 && param_bus_3)));
+        bool result_b4 = !(!((!r11_10 && !param_bus_0 && !param_bus_1 && !param_bus_2 && !param_bus_3) ||
+                             (!r11_9 && param_bus_0 && !param_bus_1 && !param_bus_2 && !param_bus_3) ||
+                             (!r11_8 && !param_bus_0 && param_bus_1 && !param_bus_2 && !param_bus_3) ||
+                             (!r11_7 && param_bus_0 && param_bus_1 && !param_bus_2 && !param_bus_3) ||
+                             (!r11_6 && !param_bus_0 && !param_bus_1 && param_bus_2 && !param_bus_3) ||
+                             (!r11_5 && param_bus_0 && !param_bus_1 && param_bus_2 && !param_bus_3) ||
+                             (r11_4 && !param_bus_0 && param_bus_1 && param_bus_2 && !param_bus_3) ||
+                             (r11_3 && param_bus_0 && param_bus_1 && param_bus_2 && !param_bus_3)) &&
+                           !((r11_2 && !param_bus_0 && !param_bus_1 && !param_bus_2 && param_bus_3) ||
+                             (r11_1 && param_bus_0 && !param_bus_1 && !param_bus_2 && param_bus_3) ||
+                             (r11_0 && !param_bus_0 && param_bus_1 && !param_bus_2 && param_bus_3) ||
+                             (0 && param_bus_0 && param_bus_1 && !param_bus_2 && param_bus_3)));
+        bool result_b5 = !(!((!r11_11 && !param_bus_0 && !param_bus_1 && !param_bus_2 && !param_bus_3) ||
+                             (!r11_10 && param_bus_0 && !param_bus_1 && !param_bus_2 && !param_bus_3) ||
+                             (!r11_9 && !param_bus_0 && param_bus_1 && !param_bus_2 && !param_bus_3) ||
+                             (!r11_8 && param_bus_0 && param_bus_1 && !param_bus_2 && !param_bus_3) ||
+                             (!r11_7 && !param_bus_0 && !param_bus_1 && param_bus_2 && !param_bus_3) ||
+                             (!r11_6 && param_bus_0 && !param_bus_1 && param_bus_2 && !param_bus_3) ||
+                             (!r11_5 && !param_bus_0 && param_bus_1 && param_bus_2 && !param_bus_3) ||
+                             (r11_4 && param_bus_0 && param_bus_1 && param_bus_2 && !param_bus_3)) &&
+                           !((r11_3 && !param_bus_0 && !param_bus_1 && !param_bus_2 && param_bus_3) ||
+                             (r11_2 && param_bus_0 && !param_bus_1 && !param_bus_2 && param_bus_3) ||
+                             (r11_1 && !param_bus_0 && param_bus_1 && !param_bus_2 && param_bus_3) ||
+                             (r11_0 && param_bus_0 && param_bus_1 && !param_bus_2 && param_bus_3)));
+        bool result_b6 = !(!((!r11_12 && !param_bus_0 && !param_bus_1 && !param_bus_2 && !param_bus_3) ||
+                             (!r11_11 && param_bus_0 && !param_bus_1 && !param_bus_2 && !param_bus_3) ||
+                             (!r11_10 && !param_bus_0 && param_bus_1 && !param_bus_2 && !param_bus_3) ||
+                             (!r11_9 && param_bus_0 && param_bus_1 && !param_bus_2 && !param_bus_3) ||
+                             (!r11_8 && !param_bus_0 && !param_bus_1 && param_bus_2 && !param_bus_3) ||
+                             (!r11_7 && param_bus_0 && !param_bus_1 && param_bus_2 && !param_bus_3) ||
+                             (!r11_6 && !param_bus_0 && param_bus_1 && param_bus_2 && !param_bus_3) ||
+                             (!r11_5 && param_bus_0 && param_bus_1 && param_bus_2 && !param_bus_3)) &&
+                           !((r11_4 && !param_bus_0 && !param_bus_1 && !param_bus_2 && param_bus_3) ||
+                             (r11_3 && param_bus_0 && !param_bus_1 && !param_bus_2 && param_bus_3) ||
+                             (r11_2 && !param_bus_0 && param_bus_1 && !param_bus_2 && param_bus_3) ||
+                             (r11_1 && param_bus_0 && param_bus_1 && !param_bus_2 && param_bus_3)));
+        bool result_b7 = !(!((1 && !param_bus_0 && !param_bus_1 && !param_bus_2 && !param_bus_3) ||
+                             (!r11_12 && param_bus_0 && !param_bus_1 && !param_bus_2 && !param_bus_3) ||
+                             (!r11_11 && !param_bus_0 && param_bus_1 && !param_bus_2 && !param_bus_3) ||
+                             (!r11_10 && param_bus_0 && param_bus_1 && !param_bus_2 && !param_bus_3) ||
+                             (!r11_9 && !param_bus_0 && !param_bus_1 && param_bus_2 && !param_bus_3) ||
+                             (!r11_8 && param_bus_0 && !param_bus_1 && param_bus_2 && !param_bus_3) ||
+                             (!r11_7 && !param_bus_0 && param_bus_1 && param_bus_2 && !param_bus_3) ||
+                             (!r11_6 && param_bus_0 && param_bus_1 && param_bus_2 && !param_bus_3)) &&
+                           !((!r11_5 && !param_bus_0 && !param_bus_1 && !param_bus_2 && param_bus_3) ||
+                             (r11_4 && param_bus_0 && !param_bus_1 && !param_bus_2 && param_bus_3) ||
+                             (r11_3 && !param_bus_0 && param_bus_1 && !param_bus_2 && param_bus_3) ||
+                             (r11_2 && param_bus_0 && param_bus_1 && !param_bus_2 && param_bus_3)));
+        bool result_b8 = !(!((0 && !param_bus_0 && !param_bus_1 && !param_bus_2 && !param_bus_3) ||
+                             (1 && param_bus_0 && !param_bus_1 && !param_bus_2 && !param_bus_3) ||
+                             (!r11_12 && !param_bus_0 && param_bus_1 && !param_bus_2 && !param_bus_3) ||
+                             (!r11_11 && param_bus_0 && param_bus_1 && !param_bus_2 && !param_bus_3) ||
+                             (!r11_10 && !param_bus_0 && !param_bus_1 && param_bus_2 && !param_bus_3) ||
+                             (!r11_9 && param_bus_0 && !param_bus_1 && param_bus_2 && !param_bus_3) ||
+                             (!r11_8 && !param_bus_0 && param_bus_1 && param_bus_2 && !param_bus_3) ||
+                             (!r11_7 && param_bus_0 && param_bus_1 && param_bus_2 && !param_bus_3)) &&
+                           !((!r11_6 && !param_bus_0 && !param_bus_1 && !param_bus_2 && param_bus_3) ||
+                             (!r11_5 && param_bus_0 && !param_bus_1 && !param_bus_2 && param_bus_3) ||
+                             (r11_4 && !param_bus_0 && param_bus_1 && !param_bus_2 && param_bus_3) ||
+                             (r11_3 && param_bus_0 && param_bus_1 && !param_bus_2 && param_bus_3)));
+        bool result_b9 = !(!((1 && !param_bus_0 && param_bus_1 && !param_bus_2 && !param_bus_3) ||
+                             (!r11_12 && param_bus_0 && param_bus_1 && !param_bus_2 && !param_bus_3) ||
+                             (!r11_11 && !param_bus_0 && !param_bus_1 && param_bus_2 && !param_bus_3) ||
+                             (!r11_10 && param_bus_0 && !param_bus_1 && param_bus_2 && !param_bus_3) ||
+                             (!r11_9 && !param_bus_0 && param_bus_1 && param_bus_2 && !param_bus_3) ||
+                             (!r11_8 && param_bus_0 && param_bus_1 && param_bus_2 && !param_bus_3) ||
+                             (!r11_7 && !param_bus_0 && !param_bus_1 && !param_bus_2 && param_bus_3) ||
+                             (!r11_6 && param_bus_0 && !param_bus_1 && !param_bus_2 && param_bus_3)) &&
+                           !((!r11_5 && !param_bus_0 && param_bus_1 && !param_bus_2 && param_bus_3) ||
+                             (r11_4 && param_bus_0 && param_bus_1 && !param_bus_2 && param_bus_3)));
+        bool result_b10 = !(!((1 && param_bus_0 && param_bus_1 && !param_bus_2 && !param_bus_3) ||
+                              (!r11_12 && !param_bus_0 && !param_bus_1 && param_bus_2 && !param_bus_3) ||
+                              (!r11_11 && param_bus_0 && !param_bus_1 && param_bus_2 && !param_bus_3) ||
+                              (!r11_10 && !param_bus_0 && param_bus_1 && param_bus_2 && !param_bus_3) ||
+                              (!r11_9 && param_bus_0 && param_bus_1 && param_bus_2 && !param_bus_3) ||
+                              (!r11_8 && !param_bus_0 && !param_bus_1 && !param_bus_2 && param_bus_3) ||
+                              (!r11_7 && param_bus_0 && !param_bus_1 && !param_bus_2 && param_bus_3) ||
+                              (!r11_6 && !param_bus_0 && param_bus_1 && !param_bus_2 && param_bus_3)) &&
+                            !(!r11_5 && param_bus_0 && param_bus_1 && !param_bus_2 && param_bus_3));
+        bool result_b11 = (1 && !param_bus_0 && !param_bus_1 && param_bus_2 && !param_bus_3) ||
+                          (!r11_12 && param_bus_0 && !param_bus_1 && param_bus_2 && !param_bus_3) ||
+                          (!r11_11 && !param_bus_0 && param_bus_1 && param_bus_2 && !param_bus_3) ||
+                          (!r11_10 && param_bus_0 && param_bus_1 && param_bus_2 && !param_bus_3) ||
+                          (!r11_9 && !param_bus_0 && !param_bus_1 && !param_bus_2 && param_bus_3) ||
+                          (!r11_8 && param_bus_0 && !param_bus_1 && !param_bus_2 && param_bus_3) ||
+                          (!r11_7 && !param_bus_0 && param_bus_1 && !param_bus_2 && param_bus_3) ||
+                          (!r11_6 && param_bus_0 && param_bus_1 && !param_bus_2 && param_bus_3);
+        bool result_b12 = (0 && !param_bus_0 && !param_bus_1 && param_bus_2 && !param_bus_3) ||
+                          (1 && param_bus_0 && !param_bus_1 && param_bus_2 && !param_bus_3) ||
+                          (!r11_12 && !param_bus_0 && param_bus_1 && param_bus_2 && !param_bus_3) ||
+                          (!r11_11 && param_bus_0 && param_bus_1 && param_bus_2 && !param_bus_3) ||
+                          (!r11_10 && !param_bus_0 && !param_bus_1 && !param_bus_2 && param_bus_3) ||
+                          (!r11_9 && param_bus_0 && !param_bus_1 && !param_bus_2 && param_bus_3) ||
+                          (!r11_8 && !param_bus_0 && param_bus_1 && !param_bus_2 && param_bus_3) ||
+                          (!r11_7 && param_bus_0 && param_bus_1 && !param_bus_2 && param_bus_3);
+        bool result_b13 = (1 && !param_bus_0 && param_bus_1 && param_bus_2 && !param_bus_3) ||
+                          (!r11_12 && param_bus_0 && param_bus_1 && param_bus_2 && !param_bus_3) ||
+                          (!r11_11 && !param_bus_0 && !param_bus_1 && !param_bus_2 && param_bus_3) ||
+                          (!r11_10 && param_bus_0 && !param_bus_1 && !param_bus_2 && param_bus_3) ||
+                          (!r11_9 && !param_bus_0 && param_bus_1 && !param_bus_2 && param_bus_3) ||
+                          (!r11_8 && param_bus_0 && param_bus_1 && !param_bus_2 && param_bus_3);
+        bool result_b14 = !(1 && !(1 && param_bus_0 && param_bus_1 && param_bus_2 && !param_bus_3) &&
+                            !(!r11_12 && !param_bus_0 && !param_bus_1 && !param_bus_2 && param_bus_3) &&
+                            !(!r11_11 && param_bus_0 && !param_bus_1 && !param_bus_2 && param_bus_3) &&
+                            !(!r11_10 && !param_bus_0 && param_bus_1 && !param_bus_2 && param_bus_3) &&
+                            !(!r11_9 && param_bus_0 && param_bus_1 && !param_bus_2 && param_bus_3));
+        bool result_b15 = !(!(!param_bus_0 && !param_bus_1 && !param_bus_2 && param_bus_3) &&
+                            !(!r11_12 && param_bus_0 && !param_bus_1 && !param_bus_2 && param_bus_3) &&
+                            !(!r11_11 && !param_bus_0 && param_bus_1 && !param_bus_2 && param_bus_3) &&
+                            !(!r11_10 && param_bus_0 && param_bus_1 && !param_bus_2 && param_bus_3));
+        bool result_b16 = !(!(param_bus_0 && !param_bus_1 && !param_bus_2 && param_bus_3) &&
+                            !(!r11_12 && !param_bus_0 && param_bus_1 && !param_bus_2 && param_bus_3) &&
+                            !(!r11_11 && param_bus_0 && param_bus_1 && !param_bus_2 && param_bus_3));
+        bool result_b17 = !(!(!param_bus_0 && param_bus_1 && !param_bus_2 && param_bus_3) &&
+                            !(!r11_12 && param_bus_0 && param_bus_1 && !param_bus_2 && param_bus_3));
         bool result_b18 = param_bus_0 && param_bus_1 && !param_bus_2 && param_bus_3;
 
-        uint32_t result =
-            result_b18 << 18 | result_b17 << 17 | result_b16 << 16 | result_b15 << 15 | result_b14 << 14 | result_b13 << 13 |
-            result_b12 << 12 | result_b11 << 11 | result_b10 << 10 | result_b9 << 9 | result_b8 << 8 | result_b7 << 7 |
-            result_b6 << 6 | result_b5 << 5 | result_b4 << 4 | result_b3 << 3 | result_b2 << 2 | result_b1 << 1 | result_b0 << 0;
+        uint32_t result = result_b18 << 18 | result_b17 << 17 | result_b16 << 16 | result_b15 << 15 | result_b14 << 14 |
+                          result_b13 << 13 | result_b12 << 12 | result_b11 << 11 | result_b10 << 10 | result_b9 << 9 |
+                          result_b8 << 8 | result_b7 << 7 | result_b6 << 6 | result_b5 << 5 | result_b4 << 4 |
+                          result_b3 << 3 | result_b2 << 2 | result_b1 << 1 | result_b0 << 0;
         out.phase_exp[i] = result;
     }
 
@@ -89,34 +222,263 @@ void sa_tables_generate(SaTables &out)
         uint8_t add_r_3 = ((i / 0x400) >> 3) & 1;
 
         // Copy pasted from silicon
-        bool result_b14 = !((!(!add_r_3 && !add_r_2 && !add_r_1 && !add_r_0) && !wavein_sign) || (!add_r_3 && !add_r_2 && !add_r_1 && !add_r_0 && wavein_sign));
-        bool result_b13 = !((((!r10_7 && !add_r_3 && !add_r_2 && !add_r_1 && !add_r_0) || (!add_r_3 && !add_r_2 && !add_r_1 && add_r_0)) && wavein_sign) || (!((!r10_7 && !add_r_3 && !add_r_2 && !add_r_1 && !add_r_0) || (!add_r_3 && !add_r_2 && !add_r_1 && add_r_0)) && !wavein_sign));
-        bool result_b12 = !((((!r10_6 && !add_r_3 && !add_r_2 && !add_r_1 && !add_r_0) || (!r10_7 && !add_r_3 && !add_r_2 && !add_r_1 && add_r_0) || (!add_r_3 && !add_r_2 && add_r_1 && !add_r_0)) && wavein_sign) || (!((!r10_6 && !add_r_3 && !add_r_2 && !add_r_1 && !add_r_0) || (!r10_7 && !add_r_3 && !add_r_2 && !add_r_1 && add_r_0) || (!add_r_3 && !add_r_2 && add_r_1 && !add_r_0)) && !wavein_sign));
-        bool result_b11 = !((((!r10_5 && !add_r_3 && !add_r_2 && !add_r_1 && !add_r_0) || (!r10_6 && !add_r_3 && !add_r_2 && !add_r_1 && add_r_0) || (!r10_7 && !add_r_3 && !add_r_2 && add_r_1 && !add_r_0) || (1 && !add_r_3 && !add_r_2 && add_r_1 && add_r_0)) && wavein_sign) || (!((!r10_5 && !add_r_3 && !add_r_2 && !add_r_1 && !add_r_0) || (!r10_6 && !add_r_3 && !add_r_2 && !add_r_1 && add_r_0) || (!r10_7 && !add_r_3 && !add_r_2 && add_r_1 && !add_r_0) || (1 && !add_r_3 && !add_r_2 && add_r_1 && add_r_0)) && !wavein_sign));
-        bool result_b10 = !((!((!r10_7 && !add_r_3 && !add_r_2 && add_r_1 && add_r_0) || (!r10_6 && !add_r_3 && !add_r_2 && add_r_1 && !add_r_0) || (!r10_5 && !add_r_3 && !add_r_2 && !add_r_1 && add_r_0) || (!r10_4 && !add_r_3 && !add_r_2 && !add_r_1 && !add_r_0)) && !(!add_r_3 && add_r_2 && !add_r_1 && !add_r_0) && !wavein_sign) || (!(!((!r10_7 && !add_r_3 && !add_r_2 && add_r_1 && add_r_0) || (!r10_6 && !add_r_3 && !add_r_2 && add_r_1 && !add_r_0) || (!r10_5 && !add_r_3 && !add_r_2 && !add_r_1 && add_r_0) || (!r10_4 && !add_r_3 && !add_r_2 && !add_r_1 && !add_r_0)) && !(!add_r_3 && add_r_2 && !add_r_1 && !add_r_0)) && wavein_sign));
-        bool result_b9 = !((((1 && !add_r_3 && add_r_2 && !add_r_1 && add_r_0) || (!r10_7 && !add_r_3 && add_r_2 && !add_r_1 && !add_r_0) || (!r10_6 && !add_r_3 && !add_r_2 && add_r_1 && add_r_0) || (!r10_5 && !add_r_3 && !add_r_2 && add_r_1 && !add_r_0) || (!r10_4 && !add_r_3 && !add_r_2 && !add_r_1 && add_r_0) || (!r10_3 && !add_r_3 && !add_r_2 && !add_r_1 && !add_r_0)) && wavein_sign) || (!((1 && !add_r_3 && add_r_2 && !add_r_1 && add_r_0) || (!r10_7 && !add_r_3 && add_r_2 && !add_r_1 && !add_r_0) || (!r10_6 && !add_r_3 && !add_r_2 && add_r_1 && add_r_0) || (!r10_5 && !add_r_3 && !add_r_2 && add_r_1 && !add_r_0) || (!r10_4 && !add_r_3 && !add_r_2 && !add_r_1 && add_r_0) || (!r10_3 && !add_r_3 && !add_r_2 && !add_r_1 && !add_r_0)) && !wavein_sign));
-        bool result_b8 = !((((1 && !add_r_3 && add_r_2 && add_r_1 && !add_r_0) || (!r10_7 && !add_r_3 && add_r_2 && !add_r_1 && add_r_0) || (!r10_6 && !add_r_3 && add_r_2 && !add_r_1 && !add_r_0) || (!r10_5 && !add_r_3 && !add_r_2 && add_r_1 && add_r_0) || (!r10_4 && !add_r_3 && !add_r_2 && add_r_1 && !add_r_0) || (!r10_3 && !add_r_3 && !add_r_2 && !add_r_1 && add_r_0) || (r10_2 && !add_r_3 && !add_r_2 && !add_r_1 && !add_r_0) || (1 && 0)) && wavein_sign) || (!((1 && !add_r_3 && add_r_2 && add_r_1 && !add_r_0) || (!r10_7 && !add_r_3 && add_r_2 && !add_r_1 && add_r_0) || (!r10_6 && !add_r_3 && add_r_2 && !add_r_1 && !add_r_0) || (!r10_5 && !add_r_3 && !add_r_2 && add_r_1 && add_r_0) || (!r10_4 && !add_r_3 && !add_r_2 && add_r_1 && !add_r_0) || (!r10_3 && !add_r_3 && !add_r_2 && !add_r_1 && add_r_0) || (r10_2 && !add_r_3 && !add_r_2 && !add_r_1 && !add_r_0) || (1 && 0)) && !wavein_sign));
-        bool result_b7 = !((((1 && !add_r_3 && add_r_2 && add_r_1 && add_r_0) || (!r10_7 && !add_r_3 && add_r_2 && add_r_1 && !add_r_0) || (!r10_6 && !add_r_3 && add_r_2 && !add_r_1 && add_r_0) || (!r10_5 && !add_r_3 && add_r_2 && !add_r_1 && !add_r_0) || (!r10_4 && !add_r_3 && !add_r_2 && add_r_1 && add_r_0) || (!r10_3 && !add_r_3 && !add_r_2 && add_r_1 && !add_r_0) || (r10_2 && !add_r_3 && !add_r_2 && !add_r_1 && add_r_0) || (r10_1 && !add_r_3 && !add_r_2 && !add_r_1 && !add_r_0)) && wavein_sign) || (!((1 && !add_r_3 && add_r_2 && add_r_1 && add_r_0) || (!r10_7 && !add_r_3 && add_r_2 && add_r_1 && !add_r_0) || (!r10_6 && !add_r_3 && add_r_2 && !add_r_1 && add_r_0) || (!r10_5 && !add_r_3 && add_r_2 && !add_r_1 && !add_r_0) || (!r10_4 && !add_r_3 && !add_r_2 && add_r_1 && add_r_0) || (!r10_3 && !add_r_3 && !add_r_2 && add_r_1 && !add_r_0) || (r10_2 && !add_r_3 && !add_r_2 && !add_r_1 && add_r_0) || (r10_1 && !add_r_3 && !add_r_2 && !add_r_1 && !add_r_0)) && !wavein_sign));
-        bool result_b6 = !((!((1 && add_r_3 && !add_r_2 && !add_r_1 && !add_r_0) || (!r10_7 && !add_r_3 && add_r_2 && add_r_1 && add_r_0) || (!r10_6 && !add_r_3 && add_r_2 && add_r_1 && !add_r_0) || (!r10_5 && !add_r_3 && add_r_2 && !add_r_1 && add_r_0) || (!r10_4 && !add_r_3 && add_r_2 && !add_r_1 && !add_r_0) || (!r10_3 && !add_r_3 && !add_r_2 && add_r_1 && add_r_0) || (r10_2 && !add_r_3 && !add_r_2 && add_r_1 && !add_r_0) || (r10_1 && !add_r_3 && !add_r_2 && !add_r_1 && add_r_0)) && !(r10_0 && !add_r_3 && !add_r_2 && !add_r_1 && !add_r_0) && !wavein_sign) || (!(!((1 && add_r_3 && !add_r_2 && !add_r_1 && !add_r_0) || (!r10_7 && !add_r_3 && add_r_2 && add_r_1 && add_r_0) || (!r10_6 && !add_r_3 && add_r_2 && add_r_1 && !add_r_0) || (!r10_5 && !add_r_3 && add_r_2 && !add_r_1 && add_r_0) || (!r10_4 && !add_r_3 && add_r_2 && !add_r_1 && !add_r_0) || (!r10_3 && !add_r_3 && !add_r_2 && add_r_1 && add_r_0) || (r10_2 && !add_r_3 && !add_r_2 && add_r_1 && !add_r_0) || (r10_1 && !add_r_3 && !add_r_2 && !add_r_1 && add_r_0)) && !(r10_0 && !add_r_3 && !add_r_2 && !add_r_1 && !add_r_0)) && wavein_sign));
-        bool result_b5 = !((!((!r10_7 && add_r_3 && !add_r_2 && !add_r_1 && !add_r_0) || (!r10_6 && !add_r_3 && add_r_2 && add_r_1 && add_r_0) || (!r10_5 && !add_r_3 && add_r_2 && add_r_1 && !add_r_0) || (!r10_4 && !add_r_3 && add_r_2 && !add_r_1 && add_r_0) || (!r10_3 && !add_r_3 && add_r_2 && !add_r_1 && !add_r_0) || (r10_2 && !add_r_3 && !add_r_2 && add_r_1 && add_r_0) || (r10_1 && !add_r_3 && !add_r_2 && add_r_1 && !add_r_0) || (r10_0 && !add_r_3 && !add_r_2 && !add_r_1 && add_r_0)) && !((r10_9 && !add_r_3 && !add_r_2 && !add_r_1 && !add_r_0) || (add_r_3 && !add_r_2 && !add_r_1 && add_r_0)) && !wavein_sign) || (!(!((!r10_7 && add_r_3 && !add_r_2 && !add_r_1 && !add_r_0) || (!r10_6 && !add_r_3 && add_r_2 && add_r_1 && add_r_0) || (!r10_5 && !add_r_3 && add_r_2 && add_r_1 && !add_r_0) || (!r10_4 && !add_r_3 && add_r_2 && !add_r_1 && add_r_0) || (!r10_3 && !add_r_3 && add_r_2 && !add_r_1 && !add_r_0) || (r10_2 && !add_r_3 && !add_r_2 && add_r_1 && add_r_0) || (r10_1 && !add_r_3 && !add_r_2 && add_r_1 && !add_r_0) || (r10_0 && !add_r_3 && !add_r_2 && !add_r_1 && add_r_0)) && !((r10_9 && !add_r_3 && !add_r_2 && !add_r_1 && !add_r_0) || (add_r_3 && !add_r_2 && !add_r_1 && add_r_0))) && wavein_sign));
-        bool result_b4 = !((!((r10_8 && !add_r_3 && !add_r_2 && !add_r_1 && !add_r_0) || (r10_9 && !add_r_3 && !add_r_2 && !add_r_1 && add_r_0) || (r10_0 && !add_r_3 && !add_r_2 && add_r_1 && !add_r_0) || (r10_1 && !add_r_3 && !add_r_2 && add_r_1 && add_r_0) || (r10_2 && !add_r_3 && add_r_2 && !add_r_1 && !add_r_0) || (!r10_3 && !add_r_3 && add_r_2 && !add_r_1 && add_r_0) || (!r10_4 && !add_r_3 && add_r_2 && add_r_1 && !add_r_0) || (!r10_5 && !add_r_3 && add_r_2 && add_r_1 && add_r_0)) && !((!r10_6 && add_r_3 && !add_r_2 && !add_r_1 && !add_r_0) || (!r10_7 && add_r_3 && !add_r_2 && !add_r_1 && add_r_0) || (add_r_3 && !add_r_2 && add_r_1 && !add_r_0)) && !wavein_sign) || (!(!((r10_8 && !add_r_3 && !add_r_2 && !add_r_1 && !add_r_0) || (r10_9 && !add_r_3 && !add_r_2 && !add_r_1 && add_r_0) || (r10_0 && !add_r_3 && !add_r_2 && add_r_1 && !add_r_0) || (r10_1 && !add_r_3 && !add_r_2 && add_r_1 && add_r_0) || (r10_2 && !add_r_3 && add_r_2 && !add_r_1 && !add_r_0) || (!r10_3 && !add_r_3 && add_r_2 && !add_r_1 && add_r_0) || (!r10_4 && !add_r_3 && add_r_2 && add_r_1 && !add_r_0) || (!r10_5 && !add_r_3 && add_r_2 && add_r_1 && add_r_0)) && !((!r10_6 && add_r_3 && !add_r_2 && !add_r_1 && !add_r_0) || (!r10_7 && add_r_3 && !add_r_2 && !add_r_1 && add_r_0) || (add_r_3 && !add_r_2 && add_r_1 && !add_r_0))) && wavein_sign));
-        bool result_b3 = !((!((r10_8 && !add_r_3 && !add_r_2 && !add_r_1 && add_r_0) || (r10_9 && !add_r_3 && !add_r_2 && add_r_1 && !add_r_0) || (r10_0 && !add_r_3 && !add_r_2 && add_r_1 && add_r_0) || (r10_1 && !add_r_3 && add_r_2 && !add_r_1 && !add_r_0) || (r10_2 && !add_r_3 && add_r_2 && !add_r_1 && add_r_0) || (!r10_3 && !add_r_3 && add_r_2 && add_r_1 && !add_r_0) || (!r10_4 && !add_r_3 && add_r_2 && add_r_1 && add_r_0) || (!r10_5 && add_r_3 && !add_r_2 && !add_r_1 && !add_r_0)) && !((!r10_6 && add_r_3 && !add_r_2 && !add_r_1 && add_r_0) || (!r10_7 && add_r_3 && !add_r_2 && add_r_1 && !add_r_0) || (add_r_3 && !add_r_2 && add_r_1 && add_r_0)) && !wavein_sign) || (!(!((r10_8 && !add_r_3 && !add_r_2 && !add_r_1 && add_r_0) || (r10_9 && !add_r_3 && !add_r_2 && add_r_1 && !add_r_0) || (r10_0 && !add_r_3 && !add_r_2 && add_r_1 && add_r_0) || (r10_1 && !add_r_3 && add_r_2 && !add_r_1 && !add_r_0) || (r10_2 && !add_r_3 && add_r_2 && !add_r_1 && add_r_0) || (!r10_3 && !add_r_3 && add_r_2 && add_r_1 && !add_r_0) || (!r10_4 && !add_r_3 && add_r_2 && add_r_1 && add_r_0) || (!r10_5 && add_r_3 && !add_r_2 && !add_r_1 && !add_r_0)) && !((!r10_6 && add_r_3 && !add_r_2 && !add_r_1 && add_r_0) || (!r10_7 && add_r_3 && !add_r_2 && add_r_1 && !add_r_0) || (add_r_3 && !add_r_2 && add_r_1 && add_r_0))) && wavein_sign));
-        bool result_b2 = !((!((r10_8 && !add_r_3 && !add_r_2 && add_r_1 && !add_r_0) || (r10_9 && !add_r_3 && !add_r_2 && add_r_1 && add_r_0) || (r10_0 && !add_r_3 && add_r_2 && !add_r_1 && !add_r_0) || (r10_1 && !add_r_3 && add_r_2 && !add_r_1 && add_r_0) || (r10_2 && !add_r_3 && add_r_2 && add_r_1 && !add_r_0) || (!r10_3 && !add_r_3 && add_r_2 && add_r_1 && add_r_0) || (!r10_4 && add_r_3 && !add_r_2 && !add_r_1 && !add_r_0) || (!r10_5 && add_r_3 && !add_r_2 && !add_r_1 && add_r_0)) && !((!r10_6 && add_r_3 && !add_r_2 && add_r_1 && !add_r_0) || (!r10_7 && add_r_3 && !add_r_2 && add_r_1 && add_r_0) || (add_r_3 && add_r_2 && !add_r_1 && !add_r_0)) && !wavein_sign) || (!(!((r10_8 && !add_r_3 && !add_r_2 && add_r_1 && !add_r_0) || (r10_9 && !add_r_3 && !add_r_2 && add_r_1 && add_r_0) || (r10_0 && !add_r_3 && add_r_2 && !add_r_1 && !add_r_0) || (r10_1 && !add_r_3 && add_r_2 && !add_r_1 && add_r_0) || (r10_2 && !add_r_3 && add_r_2 && add_r_1 && !add_r_0) || (!r10_3 && !add_r_3 && add_r_2 && add_r_1 && add_r_0) || (!r10_4 && add_r_3 && !add_r_2 && !add_r_1 && !add_r_0) || (!r10_5 && add_r_3 && !add_r_2 && !add_r_1 && add_r_0)) && !((!r10_6 && add_r_3 && !add_r_2 && add_r_1 && !add_r_0) || (!r10_7 && add_r_3 && !add_r_2 && add_r_1 && add_r_0) || (add_r_3 && add_r_2 && !add_r_1 && !add_r_0))) && wavein_sign));
-        bool result_b1 = !((!((r10_8 && !add_r_3 && !add_r_2 && add_r_1 && add_r_0) || (r10_9 && !add_r_3 && add_r_2 && !add_r_1 && !add_r_0) || (r10_0 && !add_r_3 && add_r_2 && !add_r_1 && add_r_0) || (r10_1 && !add_r_3 && add_r_2 && add_r_1 && !add_r_0) || (r10_2 && !add_r_3 && add_r_2 && add_r_1 && add_r_0) || (!r10_3 && add_r_3 && !add_r_2 && !add_r_1 && !add_r_0) || (!r10_4 && add_r_3 && !add_r_2 && !add_r_1 && add_r_0) || (!r10_5 && add_r_3 && !add_r_2 && add_r_1 && !add_r_0)) && !((!r10_6 && add_r_3 && !add_r_2 && add_r_1 && add_r_0) || (!r10_7 && add_r_3 && add_r_2 && !add_r_1 && !add_r_0) || (add_r_3 && add_r_2 && !add_r_1 && add_r_0)) && !wavein_sign) || (!(!((r10_8 && !add_r_3 && !add_r_2 && add_r_1 && add_r_0) || (r10_9 && !add_r_3 && add_r_2 && !add_r_1 && !add_r_0) || (r10_0 && !add_r_3 && add_r_2 && !add_r_1 && add_r_0) || (r10_1 && !add_r_3 && add_r_2 && add_r_1 && !add_r_0) || (r10_2 && !add_r_3 && add_r_2 && add_r_1 && add_r_0) || (!r10_3 && add_r_3 && !add_r_2 && !add_r_1 && !add_r_0) || (!r10_4 && add_r_3 && !add_r_2 && !add_r_1 && add_r_0) || (!r10_5 && add_r_3 && !add_r_2 && add_r_1 && !add_r_0)) && !((!r10_6 && add_r_3 && !add_r_2 && add_r_1 && add_r_0) || (!r10_7 && add_r_3 && add_r_2 && !add_r_1 && !add_r_0) || (add_r_3 && add_r_2 && !add_r_1 && add_r_0))) && wavein_sign));
-        bool result_b0 = !((!((r10_8 && !add_r_3 && add_r_2 && !add_r_1 && !add_r_0) || (r10_9 && !add_r_3 && add_r_2 && !add_r_1 && add_r_0) || (r10_0 && !add_r_3 && add_r_2 && add_r_1 && !add_r_0) || (r10_1 && !add_r_3 && add_r_2 && add_r_1 && add_r_0) || (r10_2 && add_r_3 && !add_r_2 && !add_r_1 && !add_r_0) || (!r10_3 && add_r_3 && !add_r_2 && !add_r_1 && add_r_0) || (!r10_4 && add_r_3 && !add_r_2 && add_r_1 && !add_r_0) || (!r10_5 && add_r_3 && !add_r_2 && add_r_1 && add_r_0)) && !((!r10_6 && add_r_3 && add_r_2 && !add_r_1 && !add_r_0) || (!r10_7 && add_r_3 && add_r_2 && !add_r_1 && add_r_0) || (add_r_3 && add_r_2 && add_r_1 && !add_r_0)) && !wavein_sign) || (!(!((r10_8 && !add_r_3 && add_r_2 && !add_r_1 && !add_r_0) || (r10_9 && !add_r_3 && add_r_2 && !add_r_1 && add_r_0) || (r10_0 && !add_r_3 && add_r_2 && add_r_1 && !add_r_0) || (r10_1 && !add_r_3 && add_r_2 && add_r_1 && add_r_0) || (r10_2 && add_r_3 && !add_r_2 && !add_r_1 && !add_r_0) || (!r10_3 && add_r_3 && !add_r_2 && !add_r_1 && add_r_0) || (!r10_4 && add_r_3 && !add_r_2 && add_r_1 && !add_r_0) || (!r10_5 && add_r_3 && !add_r_2 && add_r_1 && add_r_0)) && !((!r10_6 && add_r_3 && add_r_2 && !add_r_1 && !add_r_0) || (!r10_7 && add_r_3 && add_r_2 && !add_r_1 && add_r_0) || (add_r_3 && add_r_2 && add_r_1 && !add_r_0))) && wavein_sign));
+        bool result_b14 = !((!(!add_r_3 && !add_r_2 && !add_r_1 && !add_r_0) && !wavein_sign) ||
+                            (!add_r_3 && !add_r_2 && !add_r_1 && !add_r_0 && wavein_sign));
+        bool result_b13 = !((((!r10_7 && !add_r_3 && !add_r_2 && !add_r_1 && !add_r_0) ||
+                              (!add_r_3 && !add_r_2 && !add_r_1 && add_r_0)) &&
+                             wavein_sign) ||
+                            (!((!r10_7 && !add_r_3 && !add_r_2 && !add_r_1 && !add_r_0) ||
+                               (!add_r_3 && !add_r_2 && !add_r_1 && add_r_0)) &&
+                             !wavein_sign));
+        bool result_b12 = !((((!r10_6 && !add_r_3 && !add_r_2 && !add_r_1 && !add_r_0) ||
+                              (!r10_7 && !add_r_3 && !add_r_2 && !add_r_1 && add_r_0) ||
+                              (!add_r_3 && !add_r_2 && add_r_1 && !add_r_0)) &&
+                             wavein_sign) ||
+                            (!((!r10_6 && !add_r_3 && !add_r_2 && !add_r_1 && !add_r_0) ||
+                               (!r10_7 && !add_r_3 && !add_r_2 && !add_r_1 && add_r_0) ||
+                               (!add_r_3 && !add_r_2 && add_r_1 && !add_r_0)) &&
+                             !wavein_sign));
+        bool result_b11 = !((((!r10_5 && !add_r_3 && !add_r_2 && !add_r_1 && !add_r_0) ||
+                              (!r10_6 && !add_r_3 && !add_r_2 && !add_r_1 && add_r_0) ||
+                              (!r10_7 && !add_r_3 && !add_r_2 && add_r_1 && !add_r_0) ||
+                              (1 && !add_r_3 && !add_r_2 && add_r_1 && add_r_0)) &&
+                             wavein_sign) ||
+                            (!((!r10_5 && !add_r_3 && !add_r_2 && !add_r_1 && !add_r_0) ||
+                               (!r10_6 && !add_r_3 && !add_r_2 && !add_r_1 && add_r_0) ||
+                               (!r10_7 && !add_r_3 && !add_r_2 && add_r_1 && !add_r_0) ||
+                               (1 && !add_r_3 && !add_r_2 && add_r_1 && add_r_0)) &&
+                             !wavein_sign));
+        bool result_b10 = !((!((!r10_7 && !add_r_3 && !add_r_2 && add_r_1 && add_r_0) ||
+                               (!r10_6 && !add_r_3 && !add_r_2 && add_r_1 && !add_r_0) ||
+                               (!r10_5 && !add_r_3 && !add_r_2 && !add_r_1 && add_r_0) ||
+                               (!r10_4 && !add_r_3 && !add_r_2 && !add_r_1 && !add_r_0)) &&
+                             !(!add_r_3 && add_r_2 && !add_r_1 && !add_r_0) && !wavein_sign) ||
+                            (!(!((!r10_7 && !add_r_3 && !add_r_2 && add_r_1 && add_r_0) ||
+                                 (!r10_6 && !add_r_3 && !add_r_2 && add_r_1 && !add_r_0) ||
+                                 (!r10_5 && !add_r_3 && !add_r_2 && !add_r_1 && add_r_0) ||
+                                 (!r10_4 && !add_r_3 && !add_r_2 && !add_r_1 && !add_r_0)) &&
+                               !(!add_r_3 && add_r_2 && !add_r_1 && !add_r_0)) &&
+                             wavein_sign));
+        bool result_b9 = !((((1 && !add_r_3 && add_r_2 && !add_r_1 && add_r_0) ||
+                             (!r10_7 && !add_r_3 && add_r_2 && !add_r_1 && !add_r_0) ||
+                             (!r10_6 && !add_r_3 && !add_r_2 && add_r_1 && add_r_0) ||
+                             (!r10_5 && !add_r_3 && !add_r_2 && add_r_1 && !add_r_0) ||
+                             (!r10_4 && !add_r_3 && !add_r_2 && !add_r_1 && add_r_0) ||
+                             (!r10_3 && !add_r_3 && !add_r_2 && !add_r_1 && !add_r_0)) &&
+                            wavein_sign) ||
+                           (!((1 && !add_r_3 && add_r_2 && !add_r_1 && add_r_0) ||
+                              (!r10_7 && !add_r_3 && add_r_2 && !add_r_1 && !add_r_0) ||
+                              (!r10_6 && !add_r_3 && !add_r_2 && add_r_1 && add_r_0) ||
+                              (!r10_5 && !add_r_3 && !add_r_2 && add_r_1 && !add_r_0) ||
+                              (!r10_4 && !add_r_3 && !add_r_2 && !add_r_1 && add_r_0) ||
+                              (!r10_3 && !add_r_3 && !add_r_2 && !add_r_1 && !add_r_0)) &&
+                            !wavein_sign));
+        bool result_b8 = !((((1 && !add_r_3 && add_r_2 && add_r_1 && !add_r_0) ||
+                             (!r10_7 && !add_r_3 && add_r_2 && !add_r_1 && add_r_0) ||
+                             (!r10_6 && !add_r_3 && add_r_2 && !add_r_1 && !add_r_0) ||
+                             (!r10_5 && !add_r_3 && !add_r_2 && add_r_1 && add_r_0) ||
+                             (!r10_4 && !add_r_3 && !add_r_2 && add_r_1 && !add_r_0) ||
+                             (!r10_3 && !add_r_3 && !add_r_2 && !add_r_1 && add_r_0) ||
+                             (r10_2 && !add_r_3 && !add_r_2 && !add_r_1 && !add_r_0) || (1 && 0)) &&
+                            wavein_sign) ||
+                           (!((1 && !add_r_3 && add_r_2 && add_r_1 && !add_r_0) ||
+                              (!r10_7 && !add_r_3 && add_r_2 && !add_r_1 && add_r_0) ||
+                              (!r10_6 && !add_r_3 && add_r_2 && !add_r_1 && !add_r_0) ||
+                              (!r10_5 && !add_r_3 && !add_r_2 && add_r_1 && add_r_0) ||
+                              (!r10_4 && !add_r_3 && !add_r_2 && add_r_1 && !add_r_0) ||
+                              (!r10_3 && !add_r_3 && !add_r_2 && !add_r_1 && add_r_0) ||
+                              (r10_2 && !add_r_3 && !add_r_2 && !add_r_1 && !add_r_0) || (1 && 0)) &&
+                            !wavein_sign));
+        bool result_b7 = !((((1 && !add_r_3 && add_r_2 && add_r_1 && add_r_0) ||
+                             (!r10_7 && !add_r_3 && add_r_2 && add_r_1 && !add_r_0) ||
+                             (!r10_6 && !add_r_3 && add_r_2 && !add_r_1 && add_r_0) ||
+                             (!r10_5 && !add_r_3 && add_r_2 && !add_r_1 && !add_r_0) ||
+                             (!r10_4 && !add_r_3 && !add_r_2 && add_r_1 && add_r_0) ||
+                             (!r10_3 && !add_r_3 && !add_r_2 && add_r_1 && !add_r_0) ||
+                             (r10_2 && !add_r_3 && !add_r_2 && !add_r_1 && add_r_0) ||
+                             (r10_1 && !add_r_3 && !add_r_2 && !add_r_1 && !add_r_0)) &&
+                            wavein_sign) ||
+                           (!((1 && !add_r_3 && add_r_2 && add_r_1 && add_r_0) ||
+                              (!r10_7 && !add_r_3 && add_r_2 && add_r_1 && !add_r_0) ||
+                              (!r10_6 && !add_r_3 && add_r_2 && !add_r_1 && add_r_0) ||
+                              (!r10_5 && !add_r_3 && add_r_2 && !add_r_1 && !add_r_0) ||
+                              (!r10_4 && !add_r_3 && !add_r_2 && add_r_1 && add_r_0) ||
+                              (!r10_3 && !add_r_3 && !add_r_2 && add_r_1 && !add_r_0) ||
+                              (r10_2 && !add_r_3 && !add_r_2 && !add_r_1 && add_r_0) ||
+                              (r10_1 && !add_r_3 && !add_r_2 && !add_r_1 && !add_r_0)) &&
+                            !wavein_sign));
+        bool result_b6 = !((!((1 && add_r_3 && !add_r_2 && !add_r_1 && !add_r_0) ||
+                              (!r10_7 && !add_r_3 && add_r_2 && add_r_1 && add_r_0) ||
+                              (!r10_6 && !add_r_3 && add_r_2 && add_r_1 && !add_r_0) ||
+                              (!r10_5 && !add_r_3 && add_r_2 && !add_r_1 && add_r_0) ||
+                              (!r10_4 && !add_r_3 && add_r_2 && !add_r_1 && !add_r_0) ||
+                              (!r10_3 && !add_r_3 && !add_r_2 && add_r_1 && add_r_0) ||
+                              (r10_2 && !add_r_3 && !add_r_2 && add_r_1 && !add_r_0) ||
+                              (r10_1 && !add_r_3 && !add_r_2 && !add_r_1 && add_r_0)) &&
+                            !(r10_0 && !add_r_3 && !add_r_2 && !add_r_1 && !add_r_0) && !wavein_sign) ||
+                           (!(!((1 && add_r_3 && !add_r_2 && !add_r_1 && !add_r_0) ||
+                                (!r10_7 && !add_r_3 && add_r_2 && add_r_1 && add_r_0) ||
+                                (!r10_6 && !add_r_3 && add_r_2 && add_r_1 && !add_r_0) ||
+                                (!r10_5 && !add_r_3 && add_r_2 && !add_r_1 && add_r_0) ||
+                                (!r10_4 && !add_r_3 && add_r_2 && !add_r_1 && !add_r_0) ||
+                                (!r10_3 && !add_r_3 && !add_r_2 && add_r_1 && add_r_0) ||
+                                (r10_2 && !add_r_3 && !add_r_2 && add_r_1 && !add_r_0) ||
+                                (r10_1 && !add_r_3 && !add_r_2 && !add_r_1 && add_r_0)) &&
+                              !(r10_0 && !add_r_3 && !add_r_2 && !add_r_1 && !add_r_0)) &&
+                            wavein_sign));
+        bool result_b5 = !((!((!r10_7 && add_r_3 && !add_r_2 && !add_r_1 && !add_r_0) ||
+                              (!r10_6 && !add_r_3 && add_r_2 && add_r_1 && add_r_0) ||
+                              (!r10_5 && !add_r_3 && add_r_2 && add_r_1 && !add_r_0) ||
+                              (!r10_4 && !add_r_3 && add_r_2 && !add_r_1 && add_r_0) ||
+                              (!r10_3 && !add_r_3 && add_r_2 && !add_r_1 && !add_r_0) ||
+                              (r10_2 && !add_r_3 && !add_r_2 && add_r_1 && add_r_0) ||
+                              (r10_1 && !add_r_3 && !add_r_2 && add_r_1 && !add_r_0) ||
+                              (r10_0 && !add_r_3 && !add_r_2 && !add_r_1 && add_r_0)) &&
+                            !((r10_9 && !add_r_3 && !add_r_2 && !add_r_1 && !add_r_0) ||
+                              (add_r_3 && !add_r_2 && !add_r_1 && add_r_0)) &&
+                            !wavein_sign) ||
+                           (!(!((!r10_7 && add_r_3 && !add_r_2 && !add_r_1 && !add_r_0) ||
+                                (!r10_6 && !add_r_3 && add_r_2 && add_r_1 && add_r_0) ||
+                                (!r10_5 && !add_r_3 && add_r_2 && add_r_1 && !add_r_0) ||
+                                (!r10_4 && !add_r_3 && add_r_2 && !add_r_1 && add_r_0) ||
+                                (!r10_3 && !add_r_3 && add_r_2 && !add_r_1 && !add_r_0) ||
+                                (r10_2 && !add_r_3 && !add_r_2 && add_r_1 && add_r_0) ||
+                                (r10_1 && !add_r_3 && !add_r_2 && add_r_1 && !add_r_0) ||
+                                (r10_0 && !add_r_3 && !add_r_2 && !add_r_1 && add_r_0)) &&
+                              !((r10_9 && !add_r_3 && !add_r_2 && !add_r_1 && !add_r_0) ||
+                                (add_r_3 && !add_r_2 && !add_r_1 && add_r_0))) &&
+                            wavein_sign));
+        bool result_b4 = !((!((r10_8 && !add_r_3 && !add_r_2 && !add_r_1 && !add_r_0) ||
+                              (r10_9 && !add_r_3 && !add_r_2 && !add_r_1 && add_r_0) ||
+                              (r10_0 && !add_r_3 && !add_r_2 && add_r_1 && !add_r_0) ||
+                              (r10_1 && !add_r_3 && !add_r_2 && add_r_1 && add_r_0) ||
+                              (r10_2 && !add_r_3 && add_r_2 && !add_r_1 && !add_r_0) ||
+                              (!r10_3 && !add_r_3 && add_r_2 && !add_r_1 && add_r_0) ||
+                              (!r10_4 && !add_r_3 && add_r_2 && add_r_1 && !add_r_0) ||
+                              (!r10_5 && !add_r_3 && add_r_2 && add_r_1 && add_r_0)) &&
+                            !((!r10_6 && add_r_3 && !add_r_2 && !add_r_1 && !add_r_0) ||
+                              (!r10_7 && add_r_3 && !add_r_2 && !add_r_1 && add_r_0) ||
+                              (add_r_3 && !add_r_2 && add_r_1 && !add_r_0)) &&
+                            !wavein_sign) ||
+                           (!(!((r10_8 && !add_r_3 && !add_r_2 && !add_r_1 && !add_r_0) ||
+                                (r10_9 && !add_r_3 && !add_r_2 && !add_r_1 && add_r_0) ||
+                                (r10_0 && !add_r_3 && !add_r_2 && add_r_1 && !add_r_0) ||
+                                (r10_1 && !add_r_3 && !add_r_2 && add_r_1 && add_r_0) ||
+                                (r10_2 && !add_r_3 && add_r_2 && !add_r_1 && !add_r_0) ||
+                                (!r10_3 && !add_r_3 && add_r_2 && !add_r_1 && add_r_0) ||
+                                (!r10_4 && !add_r_3 && add_r_2 && add_r_1 && !add_r_0) ||
+                                (!r10_5 && !add_r_3 && add_r_2 && add_r_1 && add_r_0)) &&
+                              !((!r10_6 && add_r_3 && !add_r_2 && !add_r_1 && !add_r_0) ||
+                                (!r10_7 && add_r_3 && !add_r_2 && !add_r_1 && add_r_0) ||
+                                (add_r_3 && !add_r_2 && add_r_1 && !add_r_0))) &&
+                            wavein_sign));
+        bool result_b3 = !(
+            (!((r10_8 && !add_r_3 && !add_r_2 && !add_r_1 && add_r_0) ||
+               (r10_9 && !add_r_3 && !add_r_2 && add_r_1 && !add_r_0) ||
+               (r10_0 && !add_r_3 && !add_r_2 && add_r_1 && add_r_0) ||
+               (r10_1 && !add_r_3 && add_r_2 && !add_r_1 && !add_r_0) ||
+               (r10_2 && !add_r_3 && add_r_2 && !add_r_1 && add_r_0) ||
+               (!r10_3 && !add_r_3 && add_r_2 && add_r_1 && !add_r_0) ||
+               (!r10_4 && !add_r_3 && add_r_2 && add_r_1 && add_r_0) ||
+               (!r10_5 && add_r_3 && !add_r_2 && !add_r_1 && !add_r_0)) &&
+             !((!r10_6 && add_r_3 && !add_r_2 && !add_r_1 && add_r_0) ||
+               (!r10_7 && add_r_3 && !add_r_2 && add_r_1 && !add_r_0) || (add_r_3 && !add_r_2 && add_r_1 && add_r_0)) &&
+             !wavein_sign) ||
+            (!(!((r10_8 && !add_r_3 && !add_r_2 && !add_r_1 && add_r_0) ||
+                 (r10_9 && !add_r_3 && !add_r_2 && add_r_1 && !add_r_0) ||
+                 (r10_0 && !add_r_3 && !add_r_2 && add_r_1 && add_r_0) ||
+                 (r10_1 && !add_r_3 && add_r_2 && !add_r_1 && !add_r_0) ||
+                 (r10_2 && !add_r_3 && add_r_2 && !add_r_1 && add_r_0) ||
+                 (!r10_3 && !add_r_3 && add_r_2 && add_r_1 && !add_r_0) ||
+                 (!r10_4 && !add_r_3 && add_r_2 && add_r_1 && add_r_0) ||
+                 (!r10_5 && add_r_3 && !add_r_2 && !add_r_1 && !add_r_0)) &&
+               !((!r10_6 && add_r_3 && !add_r_2 && !add_r_1 && add_r_0) ||
+                 (!r10_7 && add_r_3 && !add_r_2 && add_r_1 && !add_r_0) ||
+                 (add_r_3 && !add_r_2 && add_r_1 && add_r_0))) &&
+             wavein_sign));
+        bool result_b2 = !(
+            (!((r10_8 && !add_r_3 && !add_r_2 && add_r_1 && !add_r_0) ||
+               (r10_9 && !add_r_3 && !add_r_2 && add_r_1 && add_r_0) ||
+               (r10_0 && !add_r_3 && add_r_2 && !add_r_1 && !add_r_0) ||
+               (r10_1 && !add_r_3 && add_r_2 && !add_r_1 && add_r_0) ||
+               (r10_2 && !add_r_3 && add_r_2 && add_r_1 && !add_r_0) ||
+               (!r10_3 && !add_r_3 && add_r_2 && add_r_1 && add_r_0) ||
+               (!r10_4 && add_r_3 && !add_r_2 && !add_r_1 && !add_r_0) ||
+               (!r10_5 && add_r_3 && !add_r_2 && !add_r_1 && add_r_0)) &&
+             !((!r10_6 && add_r_3 && !add_r_2 && add_r_1 && !add_r_0) ||
+               (!r10_7 && add_r_3 && !add_r_2 && add_r_1 && add_r_0) || (add_r_3 && add_r_2 && !add_r_1 && !add_r_0)) &&
+             !wavein_sign) ||
+            (!(!((r10_8 && !add_r_3 && !add_r_2 && add_r_1 && !add_r_0) ||
+                 (r10_9 && !add_r_3 && !add_r_2 && add_r_1 && add_r_0) ||
+                 (r10_0 && !add_r_3 && add_r_2 && !add_r_1 && !add_r_0) ||
+                 (r10_1 && !add_r_3 && add_r_2 && !add_r_1 && add_r_0) ||
+                 (r10_2 && !add_r_3 && add_r_2 && add_r_1 && !add_r_0) ||
+                 (!r10_3 && !add_r_3 && add_r_2 && add_r_1 && add_r_0) ||
+                 (!r10_4 && add_r_3 && !add_r_2 && !add_r_1 && !add_r_0) ||
+                 (!r10_5 && add_r_3 && !add_r_2 && !add_r_1 && add_r_0)) &&
+               !((!r10_6 && add_r_3 && !add_r_2 && add_r_1 && !add_r_0) ||
+                 (!r10_7 && add_r_3 && !add_r_2 && add_r_1 && add_r_0) ||
+                 (add_r_3 && add_r_2 && !add_r_1 && !add_r_0))) &&
+             wavein_sign));
+        bool result_b1 = !(
+            (!((r10_8 && !add_r_3 && !add_r_2 && add_r_1 && add_r_0) ||
+               (r10_9 && !add_r_3 && add_r_2 && !add_r_1 && !add_r_0) ||
+               (r10_0 && !add_r_3 && add_r_2 && !add_r_1 && add_r_0) ||
+               (r10_1 && !add_r_3 && add_r_2 && add_r_1 && !add_r_0) ||
+               (r10_2 && !add_r_3 && add_r_2 && add_r_1 && add_r_0) ||
+               (!r10_3 && add_r_3 && !add_r_2 && !add_r_1 && !add_r_0) ||
+               (!r10_4 && add_r_3 && !add_r_2 && !add_r_1 && add_r_0) ||
+               (!r10_5 && add_r_3 && !add_r_2 && add_r_1 && !add_r_0)) &&
+             !((!r10_6 && add_r_3 && !add_r_2 && add_r_1 && add_r_0) ||
+               (!r10_7 && add_r_3 && add_r_2 && !add_r_1 && !add_r_0) || (add_r_3 && add_r_2 && !add_r_1 && add_r_0)) &&
+             !wavein_sign) ||
+            (!(!((r10_8 && !add_r_3 && !add_r_2 && add_r_1 && add_r_0) ||
+                 (r10_9 && !add_r_3 && add_r_2 && !add_r_1 && !add_r_0) ||
+                 (r10_0 && !add_r_3 && add_r_2 && !add_r_1 && add_r_0) ||
+                 (r10_1 && !add_r_3 && add_r_2 && add_r_1 && !add_r_0) ||
+                 (r10_2 && !add_r_3 && add_r_2 && add_r_1 && add_r_0) ||
+                 (!r10_3 && add_r_3 && !add_r_2 && !add_r_1 && !add_r_0) ||
+                 (!r10_4 && add_r_3 && !add_r_2 && !add_r_1 && add_r_0) ||
+                 (!r10_5 && add_r_3 && !add_r_2 && add_r_1 && !add_r_0)) &&
+               !((!r10_6 && add_r_3 && !add_r_2 && add_r_1 && add_r_0) ||
+                 (!r10_7 && add_r_3 && add_r_2 && !add_r_1 && !add_r_0) ||
+                 (add_r_3 && add_r_2 && !add_r_1 && add_r_0))) &&
+             wavein_sign));
+        bool result_b0 = !(
+            (!((r10_8 && !add_r_3 && add_r_2 && !add_r_1 && !add_r_0) ||
+               (r10_9 && !add_r_3 && add_r_2 && !add_r_1 && add_r_0) ||
+               (r10_0 && !add_r_3 && add_r_2 && add_r_1 && !add_r_0) ||
+               (r10_1 && !add_r_3 && add_r_2 && add_r_1 && add_r_0) ||
+               (r10_2 && add_r_3 && !add_r_2 && !add_r_1 && !add_r_0) ||
+               (!r10_3 && add_r_3 && !add_r_2 && !add_r_1 && add_r_0) ||
+               (!r10_4 && add_r_3 && !add_r_2 && add_r_1 && !add_r_0) ||
+               (!r10_5 && add_r_3 && !add_r_2 && add_r_1 && add_r_0)) &&
+             !((!r10_6 && add_r_3 && add_r_2 && !add_r_1 && !add_r_0) ||
+               (!r10_7 && add_r_3 && add_r_2 && !add_r_1 && add_r_0) || (add_r_3 && add_r_2 && add_r_1 && !add_r_0)) &&
+             !wavein_sign) ||
+            (!(!((r10_8 && !add_r_3 && add_r_2 && !add_r_1 && !add_r_0) ||
+                 (r10_9 && !add_r_3 && add_r_2 && !add_r_1 && add_r_0) ||
+                 (r10_0 && !add_r_3 && add_r_2 && add_r_1 && !add_r_0) ||
+                 (r10_1 && !add_r_3 && add_r_2 && add_r_1 && add_r_0) ||
+                 (r10_2 && add_r_3 && !add_r_2 && !add_r_1 && !add_r_0) ||
+                 (!r10_3 && add_r_3 && !add_r_2 && !add_r_1 && add_r_0) ||
+                 (!r10_4 && add_r_3 && !add_r_2 && add_r_1 && !add_r_0) ||
+                 (!r10_5 && add_r_3 && !add_r_2 && add_r_1 && add_r_0)) &&
+               !((!r10_6 && add_r_3 && add_r_2 && !add_r_1 && !add_r_0) ||
+                 (!r10_7 && add_r_3 && add_r_2 && !add_r_1 && add_r_0) ||
+                 (add_r_3 && add_r_2 && add_r_1 && !add_r_0))) &&
+             wavein_sign));
 
-        uint16_t result =
-            result_b14 << 14 | result_b13 << 13 | result_b12 << 12 | result_b11 << 11 | result_b10 << 10 |
-            result_b9 << 9 | result_b8 << 8 | result_b7 << 7 | result_b6 << 6 | result_b5 << 5 |
-            result_b4 << 4 | result_b3 << 3 | result_b2 << 2 | result_b1 << 1 | result_b0 << 0;
+        uint16_t result = result_b14 << 14 | result_b13 << 13 | result_b12 << 12 | result_b11 << 11 | result_b10 << 10 |
+                          result_b9 << 9 | result_b8 << 8 | result_b7 << 7 | result_b6 << 6 | result_b5 << 5 |
+                          result_b4 << 4 | result_b3 << 3 | result_b2 << 2 | result_b1 << 1 | result_b0 << 0;
         out.samples_exp[i] = result;
     }
 }
 
 const SaTables &sa_tables()
 {
-    static const SaTables *tables = []
-    {
+    static const SaTables *tables = [] {
         SaTables *t = new SaTables();
         sa_tables_generate(*t);
         return t;

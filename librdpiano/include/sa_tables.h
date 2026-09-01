@@ -14,10 +14,10 @@
 // REFACTORIZACION §4. El contenido está fijado por test_sa_tables.cpp.
 struct SaTables
 {
-  // exp para la subfase (ROM IC11)
-  uint32_t phase_exp[0x10000];
-  // exp para decodificar muestras (ROM IC10)
-  uint16_t samples_exp[0x8000];
+    // exp para la subfase (ROM IC11)
+    uint32_t phase_exp[0x10000];
+    // exp para decodificar muestras (ROM IC10)
+    uint16_t samples_exp[0x8000];
 };
 
 // Genera las tablas en `out`. Es la transcripción a nivel de puertas; se

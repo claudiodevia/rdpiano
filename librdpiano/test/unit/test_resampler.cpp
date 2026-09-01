@@ -36,8 +36,8 @@
 // Los ratios que puede pedir el plugin: tasa del host / tasa del parche.
 struct RatioCase
 {
-  int hostRate;
-  int patchRate;
+    int hostRate;
+    int patchRate;
 };
 
 static const RatioCase kRatios[] = {
@@ -49,140 +49,135 @@ static const RatioCase kRatios[] = {
 // todos los parches a esa tasa de host, no un factor fijo.
 static void *open_for_host(int hostRate)
 {
-  double minFactor = (double)hostRate / 32000.0;
-  double maxFactor = (double)hostRate / 20000.0;
-  return resample_open(1, minFactor, maxFactor);
+    double minFactor = (double)hostRate / 32000.0;
+    double maxFactor = (double)hostRate / 20000.0;
+    return resample_open(1, minFactor, maxFactor);
 }
 
 TEST_SUITE(resampler_output_length)
 {
-  for (const RatioCase &rc : kRatios)
-  {
-    void *h = open_for_host(rc.hostRate);
-    CHECK_MSG(h != NULL, "host %d", rc.hostRate);
-    if (!h)
-      continue;
-
-    const double factor = (double)rc.hostRate / rc.patchRate;
-    const int inLen = 1024;
-    std::vector<float> in(inLen, 0.0f);
-    std::vector<float> out((size_t)(inLen * factor) + 64, 0.0f);
-
-    // Una senoide, para que haya algo que medir.
-    for (int i = 0; i < inLen; i++)
-      in[i] = 0.25f * sinf(2.0f * 3.14159265358979f * 440.0f * i / rc.patchRate);
-
-    // El primer bloque paga el retardo del filtro; se miden los siguientes,
-    // que es el régimen en el que vive el plugin.
-    long long totalIn = 0;
-    long long totalOut = 0;
-    for (int block = 0; block < 8; block++)
+    for (const RatioCase &rc : kRatios)
     {
-      int inUsed = 0;
-      int got = resample_process(h, factor, in.data(), inLen, 0, &inUsed,
-                                 out.data(), (int)out.size());
-      CHECK_MSG(got >= 0, "host %d parche %d: got %d", rc.hostRate,
-                rc.patchRate, got);
-      if (block > 0)
-      {
-        totalIn += inUsed;
-        totalOut += got;
-      }
+        void *h = open_for_host(rc.hostRate);
+        CHECK_MSG(h != NULL, "host %d", rc.hostRate);
+        if (!h)
+            continue;
+
+        const double factor = (double)rc.hostRate / rc.patchRate;
+        const int inLen = 1024;
+        std::vector<float> in(inLen, 0.0f);
+        std::vector<float> out((size_t)(inLen * factor) + 64, 0.0f);
+
+        // Una senoide, para que haya algo que medir.
+        for (int i = 0; i < inLen; i++)
+            in[i] = 0.25f * sinf(2.0f * 3.14159265358979f * 440.0f * i / rc.patchRate);
+
+        // El primer bloque paga el retardo del filtro; se miden los siguientes,
+        // que es el régimen en el que vive el plugin.
+        long long totalIn = 0;
+        long long totalOut = 0;
+        for (int block = 0; block < 8; block++)
+        {
+            int inUsed = 0;
+            int got = resample_process(h, factor, in.data(), inLen, 0, &inUsed, out.data(), (int)out.size());
+            CHECK_MSG(got >= 0, "host %d parche %d: got %d", rc.hostRate, rc.patchRate, got);
+            if (block > 0)
+            {
+                totalIn += inUsed;
+                totalOut += got;
+            }
+        }
+
+        // La relación salida/entrada tiene que ser el factor pedido, con el
+        // margen de una muestra por bloque.
+        double measured = totalIn ? (double)totalOut / (double)totalIn : 0.0;
+        CHECK_NEAR(measured, factor, 0.01);
+
+        resample_close(h);
     }
-
-    // La relación salida/entrada tiene que ser el factor pedido, con el
-    // margen de una muestra por bloque.
-    double measured = totalIn ? (double)totalOut / (double)totalIn : 0.0;
-    CHECK_NEAR(measured, factor, 0.01);
-
-    resample_close(h);
-  }
 }
 
 TEST_SUITE(resampler_finite)
 {
-  // Bordes: bloque vacío, bloque de una muestra, fondo de escala y el flag de
-  // último bloque. Nada de esto puede producir NaN ni Inf.
-  for (const RatioCase &rc : kRatios)
-  {
-    void *h = open_for_host(rc.hostRate);
-    if (!h)
-      continue;
-
-    const double factor = (double)rc.hostRate / rc.patchRate;
-    std::vector<float> out(4096, 0.0f);
-    bool finite = true;
-
-    const int lens[] = {0, 1, 2, 7, 1024};
-    for (int len : lens)
+    // Bordes: bloque vacío, bloque de una muestra, fondo de escala y el flag de
+    // último bloque. Nada de esto puede producir NaN ni Inf.
+    for (const RatioCase &rc : kRatios)
     {
-      std::vector<float> in((size_t)(len ? len : 1), 0.0f);
-      for (int i = 0; i < len; i++)
-        in[i] = (i & 1) ? 1.0f : -1.0f; // fondo de escala, alternando
+        void *h = open_for_host(rc.hostRate);
+        if (!h)
+            continue;
 
-      int inUsed = 0;
-      int got = resample_process(h, factor, in.data(), len, 0, &inUsed,
-                                 out.data(), (int)out.size());
-      for (int i = 0; i < got; i++)
-        if (!isfinite(out[i]))
-          finite = false;
+        const double factor = (double)rc.hostRate / rc.patchRate;
+        std::vector<float> out(4096, 0.0f);
+        bool finite = true;
+
+        const int lens[] = {0, 1, 2, 7, 1024};
+        for (int len : lens)
+        {
+            std::vector<float> in((size_t)(len ? len : 1), 0.0f);
+            for (int i = 0; i < len; i++)
+                in[i] = (i & 1) ? 1.0f : -1.0f; // fondo de escala, alternando
+
+            int inUsed = 0;
+            int got = resample_process(h, factor, in.data(), len, 0, &inUsed, out.data(), (int)out.size());
+            for (int i = 0; i < got; i++)
+                if (!isfinite(out[i]))
+                    finite = false;
+        }
+
+        // Último bloque: vacía el estado interno del filtro.
+        int inUsed = 0;
+        std::vector<float> in(1, 0.0f);
+        int got = resample_process(h, factor, in.data(), 1, 1, &inUsed, out.data(), (int)out.size());
+        for (int i = 0; i < got; i++)
+            if (!isfinite(out[i]))
+                finite = false;
+
+        CHECK_MSG(finite, "host %d parche %d", rc.hostRate, rc.patchRate);
+        resample_close(h);
     }
-
-    // Último bloque: vacía el estado interno del filtro.
-    int inUsed = 0;
-    std::vector<float> in(1, 0.0f);
-    int got = resample_process(h, factor, in.data(), 1, 1, &inUsed, out.data(),
-                               (int)out.size());
-    for (int i = 0; i < got; i++)
-      if (!isfinite(out[i]))
-        finite = false;
-
-    CHECK_MSG(finite, "host %d parche %d", rc.hostRate, rc.patchRate);
-    resample_close(h);
-  }
 }
 
 TEST_SUITE(resampler_no_leak)
 {
-  // AUDITORIA §9: cada handle con highQuality=1 reserva ~600 KB. Mil abiertos
-  // sin cerrar son ~600 MB; mil abiertos y cerrados no deben mover el pico de
-  // memoria del proceso.
-  //
-  // ru_maxrss es un pico: nunca baja, así que si el bucle filtrase, el delta
-  // lo delataría aunque el sistema recuperase la memoria después.
+    // AUDITORIA §9: cada handle con highQuality=1 reserva ~600 KB. Mil abiertos
+    // sin cerrar son ~600 MB; mil abiertos y cerrados no deben mover el pico de
+    // memoria del proceso.
+    //
+    // ru_maxrss es un pico: nunca baja, así que si el bucle filtrase, el delta
+    // lo delataría aunque el sistema recuperase la memoria después.
 #ifdef RD_CAN_MEASURE_RSS
-  struct rusage before;
-  getrusage(RUSAGE_SELF, &before);
+    struct rusage before;
+    getrusage(RUSAGE_SELF, &before);
 
-  int opened = 0;
-  for (int i = 0; i < 1000; i++)
-  {
-    void *h = resample_open(1, 1.0, 2.5);
-    if (!h)
-      break;
-    opened++;
-    resample_close(h);
-  }
-  CHECK_EQ(opened, 1000);
+    int opened = 0;
+    for (int i = 0; i < 1000; i++)
+    {
+        void *h = resample_open(1, 1.0, 2.5);
+        if (!h)
+            break;
+        opened++;
+        resample_close(h);
+    }
+    CHECK_EQ(opened, 1000);
 
-  struct rusage after;
-  getrusage(RUSAGE_SELF, &after);
+    struct rusage after;
+    getrusage(RUSAGE_SELF, &after);
 
-  // En Darwin ru_maxrss va en bytes.
-  double grewMB = (double)(after.ru_maxrss - before.ru_maxrss) / (1024 * 1024);
-  CHECK_MSG(grewMB < 64.0, "el pico de RSS creció %.1f MB en 1000 ciclos",
-            grewMB);
+    // En Darwin ru_maxrss va en bytes.
+    double grewMB = (double)(after.ru_maxrss - before.ru_maxrss) / (1024 * 1024);
+    CHECK_MSG(grewMB < 64.0, "el pico de RSS creció %.1f MB en 1000 ciclos", grewMB);
 #else
-  // Sin una medida de pico fiable, el bucle se ejecuta igual pero no se mide.
-  int opened = 0;
-  for (int i = 0; i < 1000; i++)
-  {
-    void *h = resample_open(1, 1.0, 2.5);
-    if (!h)
-      break;
-    opened++;
-    resample_close(h);
-  }
-  CHECK_EQ(opened, 1000);
+    // Sin una medida de pico fiable, el bucle se ejecuta igual pero no se mide.
+    int opened = 0;
+    for (int i = 0; i < 1000; i++)
+    {
+        void *h = resample_open(1, 1.0, 2.5);
+        if (!h)
+            break;
+        opened++;
+        resample_close(h);
+    }
+    CHECK_EQ(opened, 1000);
 #endif
 }

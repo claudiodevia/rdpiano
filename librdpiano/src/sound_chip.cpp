@@ -11,16 +11,12 @@
 
 // Las permutaciones de pines de las ROM viven en rom_loader.h.
 
-SoundChip::SoundChip(const u8 *temp_ic5, const u8 *temp_ic6, const u8 *temp_ic7)
-    : tables(sa_tables())
+SoundChip::SoundChip(const u8 *temp_ic5, const u8 *temp_ic6, const u8 *temp_ic7) : tables(sa_tables())
 {
     load_samples(temp_ic5, temp_ic6, temp_ic7);
 }
 
-u8 SoundChip::read(size_t offset)
-{
-    return m_irq_id;
-}
+u8 SoundChip::read(size_t offset) { return m_irq_id; }
 
 void SoundChip::write(size_t offset, u8 data)
 {
@@ -85,10 +81,8 @@ s32 SoundChip::update()
             const Ic19Out ic19 = tick_ic19(part, partFlags);
             const Ic9Out ic9 = tick_ic9(part, partFlags, tables);
             const s32 exp_val =
-                tick_ic8(part, ic19, ic9, samples_exp[ic9.waverom_addr],
-                         samples_exp_sign[ic9.waverom_addr],
-                         samples_delta[ic9.waverom_addr],
-                         samples_delta_sign[ic9.waverom_addr], tables);
+                tick_ic8(part, ic19, ic9, samples_exp[ic9.waverom_addr], samples_exp_sign[ic9.waverom_addr],
+                         samples_delta[ic9.waverom_addr], samples_delta_sign[ic9.waverom_addr], tables);
 
             // hack to prevent voices ringing when env value is 0, investigate
             if (part.env_value != 0)
@@ -114,61 +108,29 @@ void SoundChip::load_samples(const u8 *temp_ic5, const u8 *temp_ic6, const u8 *t
     // Wave rom values
     for (size_t i = 0; i < 0x20000; i++)
     {
-        size_t descrambled_i = (
-            ((i >> 0) & 1) << 0 |
-            ((~i >> 1) & 1) << 1 |
-            ((i >> 2) & 1) << 2 |
-            ((~i >> 3) & 1) << 3 |
-            ((i >> 4) & 1) << 4 |
-            ((~i >> 5) & 1) << 5 |
-            ((i >> 6) & 1) << 6 |
-            ((i >> 7) & 1) << 7 |
-            ((~i >> 8) & 1) << 8 |
-            ((~i >> 9) & 1) << 9 |
-            ((i >> 10) & 1) << 10 |
-            ((i >> 11) & 1) << 11 |
-            ((i >> 12) & 1) << 12 |
-            ((i >> 13) & 1) << 13 |
-            ((i >> 14) & 1) << 14 |
-            ((i >> 15) & 1) << 15 |
-            ((i >> 16) & 1) << 16
-        );
+        size_t descrambled_i =
+            (((i >> 0) & 1) << 0 | ((~i >> 1) & 1) << 1 | ((i >> 2) & 1) << 2 | ((~i >> 3) & 1) << 3 |
+             ((i >> 4) & 1) << 4 | ((~i >> 5) & 1) << 5 | ((i >> 6) & 1) << 6 | ((i >> 7) & 1) << 7 |
+             ((~i >> 8) & 1) << 8 | ((~i >> 9) & 1) << 9 | ((i >> 10) & 1) << 10 | ((i >> 11) & 1) << 11 |
+             ((i >> 12) & 1) << 12 | ((i >> 13) & 1) << 13 | ((i >> 14) & 1) << 14 | ((i >> 15) & 1) << 15 |
+             ((i >> 16) & 1) << 16);
 
         const u8 b5 = unscramble_data_wave(temp_ic5[unscramble_addr_wave((u32)descrambled_i)]);
         const u8 b6 = unscramble_data_wave(temp_ic6[unscramble_addr_wave((u32)descrambled_i)]);
         const u8 b7 = unscramble_data_wave(temp_ic7[unscramble_addr_wave((u32)descrambled_i)]);
 
-        uint16_t exp_sample = (
-            ((b5 >> 0) & 1) << 13 |
-            ((b6 >> 4) & 1) << 12 |
-            ((b7 >> 4) & 1) << 11 |
-            ((~b6 >> 0) & 1) << 10 |
-            ((b7 >> 7) & 1) << 9 |
-            ((b5 >> 7) & 1) << 8 |
-            ((~b5 >> 5) & 1) << 7 |
-            ((b6 >> 2) & 1) << 6 |
-            ((b7 >> 2) & 1) << 5 |
-            ((b7 >> 1) & 1) << 4 |
-            ((~b5 >> 1) & 1) << 3 |
-            ((b5 >> 3) & 1) << 2 |
-            ((b6 >> 5) & 1) << 1 |
-            ((~b6 >> 7) & 1) << 0
-        );
+        uint16_t exp_sample =
+            (((b5 >> 0) & 1) << 13 | ((b6 >> 4) & 1) << 12 | ((b7 >> 4) & 1) << 11 | ((~b6 >> 0) & 1) << 10 |
+             ((b7 >> 7) & 1) << 9 | ((b5 >> 7) & 1) << 8 | ((~b5 >> 5) & 1) << 7 | ((b6 >> 2) & 1) << 6 |
+             ((b7 >> 2) & 1) << 5 | ((b7 >> 1) & 1) << 4 | ((~b5 >> 1) & 1) << 3 | ((b5 >> 3) & 1) << 2 |
+             ((b6 >> 5) & 1) << 1 | ((~b6 >> 7) & 1) << 0);
         bool exp_sign = (~b7 >> 3) & 1;
         samples_exp[i] = exp_sample;
         samples_exp_sign[i] = exp_sign;
 
-        uint16_t delta_sample = (
-            ((~b7 >> 6) & 1) << 8 |
-            ((b5 >> 4) & 1) << 7 |
-            ((b7 >> 0) & 1) << 6 |
-            ((~b6 >> 3) & 1) << 5 |
-            ((b5 >> 2) & 1) << 4 |
-            ((~b5 >> 6) & 1) << 3 |
-            ((b6 >> 6) & 1) << 2 |
-            ((b7 >> 5) & 1) << 1 |
-            ((~b6 >> 7) & 1) << 0
-        );
+        uint16_t delta_sample = (((~b7 >> 6) & 1) << 8 | ((b5 >> 4) & 1) << 7 | ((b7 >> 0) & 1) << 6 |
+                                 ((~b6 >> 3) & 1) << 5 | ((b5 >> 2) & 1) << 4 | ((~b5 >> 6) & 1) << 3 |
+                                 ((b6 >> 6) & 1) << 2 | ((b7 >> 5) & 1) << 1 | ((~b6 >> 7) & 1) << 0);
         bool delta_sign = (b6 >> 1) & 1;
         samples_delta[i] = delta_sample;
         samples_delta_sign[i] = delta_sign;

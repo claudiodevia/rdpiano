@@ -23,24 +23,21 @@ typedef void (*TestFn)(CheckRun &);
 
 struct TestSuite
 {
-  const char *name;
-  TestFn fn;
+    const char *name;
+    TestFn fn;
 };
 
 std::vector<TestSuite> &test_registry();
 
 struct TestRegistrar
 {
-  TestRegistrar(const char *name, TestFn fn)
-  {
-    test_registry().push_back({name, fn});
-  }
+    TestRegistrar(const char *name, TestFn fn) { test_registry().push_back({name, fn}); }
 };
 
-#define TEST_SUITE(name)                              \
-  static void name(CheckRun &checks);                 \
-  static TestRegistrar name##_registrar(#name, name); \
-  static void name(CheckRun &checks)
+#define TEST_SUITE(name)                                \
+    static void name(CheckRun &checks);                 \
+    static TestRegistrar name##_registrar(#name, name); \
+    static void name(CheckRun &checks)
 
 // Directorio pasado con --roms; las suites que no leen ROMs lo ignoran.
 extern std::string g_roms_dir;
