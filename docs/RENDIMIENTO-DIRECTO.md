@@ -8,12 +8,13 @@
 oye un ruido y se nota un retardo.* ¿De dónde salen exactamente, y qué se puede hacer sin mover el
 timbre?
 
-> **Estado (1 sep 2026): los pasos 1 a 9 del plan de [§11](#11-plan-de-corrección-por-relación-beneficioriesgo)
-> están implementados**; P1–P10 corregidos. Falta sólo el paso 10 (P11, la velocidad del LFO), que
-> **cambia el audio de cinco parches** y necesita verificación auditiva antes: es decisión de
-> producto, no corrección silenciosa. Todas las medidas de abajo son del estado **anterior** a la
-> corrección y se dejan como están: son el "antes" contra el que se comparó. Golden y hashes de
-> `test_lsp.cpp` no se movieron.
+> **Estado (1 sep 2026):** los pasos 1 a 9 del plan de
+> [§11](#11-plan-de-corrección-por-relación-beneficioriesgo) están implementados, P1–P10 corregidos.
+> El paso 10 (P11) se implementó, **se escuchó y se descartó**: con el LFO "corregido" los cinco
+> parches de 32 kHz suenan peor. Queda como decisión tomada, no como pendiente — ver
+> [§10.1](#101-la-velocidad-del-chorus-depende-del-parche--análisis). Todas las medidas de abajo son
+> del estado **anterior** a la corrección y se dejan como están: son el "antes" contra el que se
+> comparó. Golden y hashes de `test_lsp.cpp` no se movieron.
 
 **Criterio.** Todo lo marcado **[medido]** se obtuvo ejecutando el motor real (`RdPianoEngine`) con
 las ROM del repositorio, a 48 kHz y bloques de 512, sin sanitizadores y con `-O2`. Cuando algo es
@@ -599,7 +600,7 @@ Ordenado por lo que conviene hacer primero, no por gravedad.
 | **7** | `setLatencySamples(67)` en `prepareToPlay` | **P8** | 1 línea | No | `rdpiano_plugin_tests`, `engine_latency` | **hecho** |
 | **8** | Rampa de `volume` y `patchOutputGain` dentro del bloque | **P7** | Bajo | **No** (fuera del emulador) | `engine_volume_ramp` | **hecho** |
 | **9** | Acotar el repintado del editor | §8.3 | Bajo | No | — | **hecho** (el LCD se repinta él; el fondo, sólo si se movió el fader) |
-| **10** | Escalar el LFO de chorus/phaser por `sourceRate` | **P11** | 2 líneas | **SÍ**, 5 parches | Hay que **escuchar** antes | **pendiente** |
+| **10** | Escalar el LFO de chorus/phaser por `sourceRate` | **P11** | 2 líneas | **SÍ**, 5 parches | `engine_lfo_rate` | **descartado**: escuchado, suena peor |
 
 Los pasos 1 a 8 **no mueven el golden ni los hashes de `test_lsp.cpp`**: la aritmética entera del
 emulador y de `lsp/` no se toca en ninguno. El paso 10 sí cambia el audio y entra en la misma
@@ -624,6 +625,43 @@ escrito arriba, y las dos hacia el lado seguro:
 
 `setPatch()` y `setMasterTune()` siguen siendo inmediatos —el harness los necesita así—; lo que el
 plugin usa son `requestPatch()` y `requestMasterTune()`.
+
+**Del paso 10: implementado, escuchado y revertido.** Se deja aquí lo que se aprendió, que es lo
+único que sobrevive del intento.
+
+Primero, una corrección al propio plan: donde §10.1 dice *"escalar `rate` por
+`sourceRate/20000`"*, el factor va **al revés**. `rate` es el incremento de fase por muestra del
+emulador y el acumulador avanza una vez por muestra (`accA += rate`,
+[spaced.cpp:172](../librdpiano/src/lsp/spaced.cpp#L172), y lo mismo en el phaser), así que a más
+muestras por segundo hay que **incrementar menos**: el factor es `20000/sourceRate`. Medido con una
+sonda que aísla la modulación —el emulador es determinista, así que la diferencia wet-dry entre dos
+pasadas idénticas, normalizada por el nivel seco, es sólo lo que añade el efecto; sobre esa
+envolvente, autocorrelación—, con el dial de chorus a tope:
+
+```
+   parche             antes      despues
+   0  Piano 1       1,180 s      1,180 s     (20 kHz, no se toca)
+   3  Harpsichord   0,730 s      1,180 s     (32 kHz)
+   8  Classic       1,180 s      1,180 s     (20 kHz)
+  11  Contemporary  0,730 s      1,180 s     (32 kHz)
+```
+
+1,180 / 0,730 = **1,616**, que es 32/20: exactamente lo que §10.1 dedujo del código. El análisis era
+correcto, la medida confirmó el mecanismo, la corrección hizo lo que decía… **y sonaba peor**. Los
+cinco parches de 32 kHz se revirtieron a su chorus rápido.
+
+Lo que queda:
+
+- **el código, sin el escalado**, con un comentario en `rd_engine.cpp` que dice que es deliberado;
+- **`engine_lfo_rate`** en `test_engine.cpp` (0,4 s), que ya no comprueba que los periodos sean
+  iguales sino que el de 32 kHz es 0,63× el de 20 kHz — es decir, **fija la decisión**: si alguien
+  vuelve a "arreglar" el LFO leyendo §10.1, la prueba falla y le manda a leer esto;
+- **el método**: aislar la modulación de un efecto comparando dos pasadas del motor —determinista—
+  con y sin él, normalizar por el nivel seco y autocorrelar la envolvente. Sirve para cualquier
+  medida de LFO que haga falta más adelante.
+
+`patchOutputGain[]` no se tocó en ningún momento: se normaliza sobre la cadena seca, que el LFO no
+afecta.
 
 ---
 

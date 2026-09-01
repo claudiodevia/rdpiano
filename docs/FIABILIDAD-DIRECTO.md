@@ -437,6 +437,13 @@ reservas, descartando por el extremo antiguo si se llena.
 
 ## 13. N11 · MEDIO — El chorus y el trémolo cambian de velocidad con el parche
 
+> **NO SE VA A CORREGIR** (1 sep 2026), y no por pereza: se implementó —escalar `rate` por
+> `20000/sourceRate`, con lo que el periodo del LFO pasa de 0,730 s a 1,180 s en los parches de
+> 32 kHz, igualándolo al de los de 20 kHz—, **se escuchó y sonaba peor**. Revertido. La velocidad
+> que depende del parche se queda como está, ahora como decisión y no como descuido; lo fija
+> `engine_lfo_rate`. Ver [RENDIMIENTO-DIRECTO §§10.1, 11](RENDIMIENTO-DIRECTO.md). El trémolo nunca
+> tuvo el problema: se calcula a la tasa del host.
+
 `spaceD->process()` se llama **una vez por muestra del emulador**, dentro del bucle de render
 ([PluginProcessor.cpp:461](../rdpiano_juce/Source/PluginProcessor.cpp#L461)), y su LFO avanza por
 muestra. Como el emulador corre a 20 000 o a 32 000 Hz según el parche, **el mismo ajuste de "Chorus

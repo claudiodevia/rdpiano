@@ -1078,3 +1078,119 @@ TEST_SUITE(engine_latency)
     delete a;
     delete b;
 }
+
+// ------------------------------------------------- velocidad del LFO
+
+// Periodo dominante de la modulación del chorus, en segundos.
+//
+// El observable es la diferencia wet-dry dividida por el nivel seco: el emulador
+// es determinista, así que dos motores idénticos —uno con chorus y otro sin él—
+// dan el mismo seco muestra a muestra, y normalizar quita la caída de la nota.
+// Sobre esa envolvente, autocorrelación. Devuelve -1 si no encuentra periodo.
+static double chorus_lfo_period(int patch, double hostRate, int block, double secs)
+{
+    std::vector<float> wet, dry;
+
+    for (int pass = 0; pass < 2; pass++)
+    {
+        RdPianoEngine *e = make_engine(hostRate, block, patch);
+        if (!e)
+            return -1.0;
+
+        e->params.chorusEnabled = pass == 0;
+        e->params.efxEnabled = false;
+        e->params.tremoloEnabled = false;
+        e->params.chorusRate = 14; // el más rápido del dial: cabe más de un ciclo
+        e->params.chorusDepth = 14;
+
+        // Pedal abajo para que la nota no se apague antes de tiempo.
+        e->pushMidi(0, 0xB0, 64, 127);
+        e->pushMidi(0, 0x90, 48, 127);
+
+        Stereo out;
+        render_into(e, out, block, (int)(secs * hostRate) / block);
+        (pass == 0 ? wet : dry) = out.l;
+
+        delete e;
+    }
+
+    const int w = (int)(0.010 * hostRate); // ventanas de 10 ms
+    std::vector<double> env;
+    for (size_t i = 0; i + (size_t)w <= wet.size(); i += (size_t)w)
+    {
+        double sd = 0, sw = 0;
+        for (int k = 0; k < w; k++)
+        {
+            const double d = dry[i + k];
+            const double diff = (double)wet[i + k] - d;
+            sd += d * d;
+            sw += diff * diff;
+        }
+        sd = sqrt(sd / w);
+        sw = sqrt(sw / w);
+        env.push_back(sd > 1e-6 ? sw / sd : 0.0);
+    }
+
+    // Fuera el arranque —ataque y rampa de la mezcla— y fuera la media.
+    if (env.size() < 40)
+        return -1.0;
+    std::vector<double> x(env.begin() + env.size() / 10, env.end());
+    double mean = 0;
+    for (double v : x)
+        mean += v;
+    mean /= (double)x.size();
+    for (double &v : x)
+        v -= mean;
+
+    // Primer máximo de la autocorrelación después del primer cruce por cero.
+    const size_t maxLag = x.size() / 2;
+    std::vector<double> ac(maxLag, 0.0);
+    for (size_t lag = 0; lag < maxLag; lag++)
+    {
+        double s = 0;
+        for (size_t i = 0; i + lag < x.size(); i++)
+            s += x[i] * x[i + lag];
+        ac[lag] = s;
+    }
+
+    size_t lag = 1;
+    while (lag < maxLag && ac[lag] > 0)
+        lag++;
+
+    size_t best = 0;
+    double bestVal = 0;
+    for (size_t i = lag; i < maxLag; i++)
+        if (ac[i] > bestVal)
+        {
+            bestVal = ac[i];
+            best = i;
+        }
+
+    return best == 0 ? -1.0 : best * 0.010;
+}
+
+TEST_SUITE(engine_lfo_rate)
+{
+    // El LFO de los efectos avanza una vez por muestra del EMULADOR, que corre a
+    // 20 o a 32 kHz según el parche, así que los cinco parches de 32 kHz modulan
+    // 32/20 = 1,6x más rápido con el mismo ajuste del panel. Medido con el dial
+    // de chorus a tope: 1,180 s a 20 kHz y 0,730 s a 32 kHz.
+    //
+    // Esto NO es un fallo por corregir, aunque lo parezca y aunque
+    // docs/RENDIMIENTO-DIRECTO.md §10.1 lo proponga: escalar `rate` por
+    // 20000/sourceRate se implementó, se escuchó y se descartó —los cinco
+    // parches sonaban peor con el LFO "corregido"—. Esta prueba está para que
+    // volver a intentarlo falle y obligue a leer esto antes.
+    const double p20 = chorus_lfo_period(0, 48000.0, 512, 4.0); // Piano 1, 20 kHz
+    const double p32 = chorus_lfo_period(3, 48000.0, 512, 4.0); // Harpsichord, 32 kHz
+
+    if (p20 < 0 || p32 < 0)
+    {
+        CHECK_MSG(false, "sin ROMs en %s, o LFO no medible (%.3f, %.3f)", g_roms_dir.c_str(), p20, p32);
+        return;
+    }
+
+    const double expected = p20 * 20000.0 / 32000.0;
+    checks.add("lfo-al-ritmo-del-emulador", fabs(p32 - expected) < p20 * 0.1,
+               check_fmt("%.3f s a 20 kHz, %.3f s a 32 kHz (x%.2f, se esperaba x0,63)", p20, p32, p32 / p20));
+}

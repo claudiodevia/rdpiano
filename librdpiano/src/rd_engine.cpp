@@ -431,6 +431,12 @@ void RdPianoEngine::render(float *left, float *right, int numFrames)
 
     const bool mode32khz = sourceRate == 32000;
 
+    // `rate` es el incremento de fase del LFO por muestra del EMULADOR, que corre
+    // a 20 o a 32 kHz según el parche: en los cinco parches de 32 kHz el chorus y
+    // el phaser van 1,6x más rápidos con el mismo ajuste del panel. **Es
+    // deliberado**: escalarlo por 20000/sourceRate se probó, se escuchó y se
+    // descartó —sonaba peor—. Lo fija `engine_lfo_rate`, que falla si alguien lo
+    // "arregla". Ver docs/RENDIMIENTO-DIRECTO.md §10.1.
     spaceD.rate = spaceDRateFromMs(1000.0f / chorusRateToMsPeriod[clamp_index(params.chorusRate, 0, 14)] / 4.0f);
     spaceD.depth = spaceDDepth(clamp_index(params.chorusDepth, 0, 14) / 15.0f);
 

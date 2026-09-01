@@ -40,6 +40,11 @@ processBlock → RdPianoEngine::pushMidi/render
   (rampa de 3 ms) y después vuelve a subir en 15 ms. Se aplica **entre bloques** siempre, porque la
   tasa del emulador cambia con el parche y el bloque entero depende de ella. El plugin **no** puede
   perder bloques por esto: `processBlock` ya no espera a nadie.
+- **El LFO de los dos efectos corre al ritmo del emulador**, así que los cinco parches de 32 kHz
+  modulan 1,6× más rápido con el mismo ajuste del panel. **Es deliberado**: escalarlo por
+  `20000/sourceRate` se implementó, se escuchó y se descartó —sonaba peor—, aunque
+  [RENDIMIENTO-DIRECTO §10.1](docs/RENDIMIENTO-DIRECTO.md) lo proponga. `engine_lfo_rate` fija la
+  decisión: si alguien lo "arregla", falla.
 - **Los efectos corren siempre**, encendidos o no: `SpaceD::process()`/`Phaser::process()` son lo
   único que avanza sus líneas de retardo, y saltárselos las congelaba con el audio de la última vez
   —que soltaban entero al reactivar el efecto—. El bypass es una mezcla en rampa de 10 ms
@@ -205,7 +210,7 @@ ctest --test-dir build/core --output-on-failure
   nota, acorde, extinción tras note-off (detector de voces colgadas), polifonía 16, rango de pico y
   **hash bit-exacto por parche** contra `test/golden.txt`. `--patch N` para iterar (~0,2 s).
   Cambios en `sound_chip.cpp`, `unscramble_*` o el MCU mueven el hash.
-- **Unitario** (`test/unit/`, 47 suites, 473 checks, 2,7 s): `test_board`, `test_patches`,
+- **Unitario** (`test/unit/`, 48 suites, 474 checks, 3,2 s): `test_board`, `test_patches`,
   `test_sa_tables`, `test_rom_loader`, `test_command_port`, `test_sound_chip_blocks` (2.256
   vectores), `test_lsp` (respuesta a impulso congelada), `test_resampler`, `test_engine`.
   Se añade con `TEST_SUITE(nombre)` + una línea en el CMakeLists; andamiaje = `test/check.h`.
@@ -215,7 +220,8 @@ ctest --test-dir build/core --output-on-failure
   (sustituye `operator new` global + vigila `stats.resamplerOpens`, porque libresample usa `malloc`).
   También es la red de los transitorios: `engine_effect_tail` (encender un efecto en silencio tiene
   que dar silencio), `engine_effect_bypass_ramp`, `engine_program_change`, `engine_patch_declick`,
-  `engine_volume_ramp` y `engine_latency`.
+  `engine_volume_ramp`, `engine_latency` y `engine_lfo_rate` (mide el periodo del LFO del chorus por
+  autocorrelación de la diferencia wet-dry, y fija que dependa de la tasa del parche).
 - **Plugin** (`rdpiano_juce/test/`, `rdpiano_plugin_tests`, 6 suites, 98 checks): presets ida y
   vuelta, valores de fábrica, programas, preset corrupto, latencia declarada. Está en el ctest de la raíz:
   ```bash
