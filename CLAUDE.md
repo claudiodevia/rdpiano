@@ -38,9 +38,27 @@ JUCE. `prepare()` reserva todo; `render()` no reserva, no bloquea, no imprime.
   pruebas, nunca con `render()` vivo en otro hilo.
 - `patch()`/`masterTune()` = intención (lo pedido aunque no atendido); `activePatch()` = lo que suena.
 
-**Declick de cambio de parche**: rampa a cero en 3 ms → aplicar → subida en 15 ms. Siempre **entre
-bloques**, porque la tasa del emulador cambia con el parche y el bloque entero depende de ella.
-`processBlock` no espera a nadie → el plugin no pierde bloques.
+**Declick de cambio de parche**: rampa a cero en 6 ms → aplicar → subida en 15 ms, o en 90 ms si el
+cambio ha tenido que volver a disparar notas (es la rampa larga la que esconde su ataque). La
+ganancia se aplica **al cuadrado**: arranca más plana que la lineal, y en 0 y en 1 no cambia nada.
+Siempre **entre bloques**, porque la tasa del emulador cambia con el parche y el bloque entero
+depende de ella. `processBlock` no espera a nadie → el plugin no pierde bloques.
+
+**Notas y pedal sobreviven al cambio de parche.** `applyPatch()` tiene que mandar el program change
+de `reloadPatch()` —única forma de que el firmware relea la página recién mapeada; sin él el timbre
+sale mal, medido—, y ese program change apaga las voces y suelta el pedal *dentro* del firmware.
+El motor lleva un espejo de lo que le ha enviado (`heldVelocity[128]` + `sustainDown`, actualizado
+en `sendTracked()`, el único camino por el que sale MIDI) y tras cambiar le devuelve el pedal y las
+teclas todavía pulsadas. Lo que estuviera sostenido **sólo por el pedal** (tecla ya soltada) no se
+resucita a propósito: serían decenas de ataques a la vez. `allNotesOff()` limpia el espejo.
+
+**Y reentran al nivel al que habían llegado, no al de su ataque**, o se oiría el golpe de tecla que
+no se ha dado: +8 a +14 dB sobre lo que sonaba, medido. Dos seguidores de la salida cruda del
+emulador —`onsetSq`, el ataque de la última nota, y `levelSq`, el nivel de ahora, ambos RMS al
+cuadrado porque con detectores de pico el ataque de un acorde suma en fase y el sustain no— dan
+cuánto ha decaído; `kDbPerVelocityUnit` (0,228 dB por unidad, medido: la curva velocidad→nivel es
+recta entre v16 y v120) lo convierte en cuánta velocidad restar. Queda en ±6 dB. Lo fija
+`engine_patch_held_notes`.
 
 **LFO de los dos efectos = ritmo del emulador** → los 5 parches de 32 kHz modulan 1,6× más rápido
 con el mismo ajuste de panel. Deliberado: escalar por `20000/sourceRate` se implementó, se escuchó y

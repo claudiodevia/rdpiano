@@ -30,8 +30,11 @@ la misma; lo que cambia es todo lo que la rodea.
 - **Volúmenes parejos.** Los dieciséis sonidos están medidos y normalizados al mismo nivel. Antes
   unos se quedaban cortos y otros saturaban al pasar de uno a otro en mitad de un tema.
 - **Sin ruidos ni clics.** El chorus y el phaser ya no sueltan de golpe el audio viejo al
-  encenderlos; encender o apagar un efecto es una transición suave, cambiar de sonido lleva su
-  propio silenciado, y mover el volumen ya no produce zumbido.
+  encenderlos; encender o apagar un efecto es una transición suave y mover el volumen ya no produce
+  zumbido.
+- **Cambiar de sonido sobre la marcha.** El cambio entra con una transición suave, y las notas que
+  estén sonando y el pedal continúan con el sonido nuevo al volumen al que iban: no se corta la
+  música ni se cuela un ataque que nadie ha tocado.
 - **Memoria bajo control.** Todo lo caro —las tablas de onda descifradas, unos 2,75 MB— se prepara
   una sola vez al arrancar, no en cada cambio de sonido. No hay fugas: el plugin ocupa lo mismo
   después de tres horas que al abrirlo.

@@ -940,6 +940,12 @@ TEST_SUITE(engine_patch_declick)
     e->params.chorusEnabled = false;
     e->pushMidi(0, 0x90, 60, 110);
 
+    // Tecla soltada: la voz sigue en su decaimiento —que es lo que hace falta
+    // para pillar el estallido— pero no queda nada pulsado, así que el cambio
+    // no re-dispara nada y aquí se mide el declick solo. El re-disparo de lo
+    // que sí sigue pulsado lo cubre engine_patch_held_notes.
+    e->pushMidi(BLOCK / 2, 0x80, 60, 0);
+
     Stereo before;
     render_into(e.get(), before, BLOCK, 24);
 
@@ -966,6 +972,93 @@ TEST_SUITE(engine_patch_declick)
     Stereo after;
     render_into(e.get(), after, BLOCK, 40);
     checks.add("declick-suena-despues", rms(after.l, 0, after.l.size()) > 1e-4, "el parche nuevo salió mudo");
+}
+
+// ------------------------------------------- notas y pedal en el cambio
+
+TEST_SUITE(engine_patch_held_notes)
+{
+    // El cambio de parche manda un program change al firmware —única forma de
+    // que relea la página de parámetros recién mapeada— y eso apaga las voces y
+    // suelta el pedal dentro del firmware: lo que estuvieras tocando se quedaba
+    // mudo hasta soltar las teclas y volver a pulsar. El motor guarda un espejo
+    // de lo pulsado y se lo devuelve al firmware tras cambiar.
+    const int BLOCK = 256;
+    auto e = make_engine(48000.0, BLOCK);
+    if (!e)
+    {
+        CHECK_MSG(false, "sin ROMs en %s", g_roms_dir.c_str());
+        return;
+    }
+
+    e->params.chorusEnabled = false;
+
+    // Pedal abajo y un acorde aguantado.
+    e->pushMidi(0, 0xb0, 64, 127);
+    e->pushMidi(0, 0x90, 60, 110);
+    e->pushMidi(0, 0x90, 64, 110);
+    e->pushMidi(0, 0x90, 67, 110);
+
+    Stereo before;
+    render_into(e.get(), before, BLOCK, 94); // ~0,5 s
+    const double levelBefore = rms(before.l, before.l.size() / 2, before.l.size());
+
+    // Al otro juego de ROM y a otra tasa de emulador, como en engine_patch_declick.
+    e->requestPatch(11);
+
+    Stereo after;
+    render_into(e.get(), after, BLOCK, 188); // 1 s
+    const double levelAfter = rms(after.l, after.l.size() / 2, after.l.size());
+
+    checks.add("acorde-sobrevive", levelAfter > levelBefore * 0.1,
+               check_fmt("RMS %.5f tras el cambio, %.5f antes", levelAfter, levelBefore));
+
+    // Y reentra sin golpe de tecla: la velocidad se escala con lo que la nota
+    // llevaba decaído, así que el pico de la reentrada se queda en el nivel que
+    // había. Disparando con la velocidad original eran +10 dB de golpe.
+    std::vector<float> lastBefore(before.l.end() - (size_t)(0.05 * 48000.0), before.l.end());
+    std::vector<float> onset(after.l.begin(), after.l.begin() + (size_t)(0.35 * 48000.0));
+    const double peakBefore = peak(lastBefore);
+    const double peakOnset = peak(onset);
+    const double jumpDb = 20.0 * log10((peakOnset + 1e-9) / (peakBefore + 1e-9));
+    checks.add("reentrada-sin-golpe", jumpDb < 6.0, check_fmt("pico de la reentrada %+.1f dB", jumpDb));
+    checks.add("reentrada-audible", jumpDb > -12.0, check_fmt("pico de la reentrada %+.1f dB", jumpDb));
+
+    // Y el pedal sigue abajo: una nota corta tiene que dejar cola al soltarla.
+    e->pushMidi(0, 0x90, 72, 110);
+    e->pushMidi(BLOCK / 2, 0x80, 72, 0);
+    Stereo pedal;
+    render_into(e.get(), pedal, BLOCK, 188);
+    const double tail = rms(pedal.l, pedal.l.size() * 3 / 4, pedal.l.size());
+    checks.add("pedal-sobrevive", tail > 1e-3, check_fmt("cola %.6f tras soltar la tecla", tail));
+
+    // Un note-on que caiga en el mismo bloque que la petición se enviaba antes
+    // del program change y lo mataba: ahora el espejo lo revive.
+    auto f = make_engine(48000.0, BLOCK);
+    f->params.chorusEnabled = false;
+    Stereo warm;
+    render_into(f.get(), warm, BLOCK, 10);
+    f->requestPatch(5);
+    f->pushMidi(0, 0x90, 60, 110);
+    Stereo sameBlock;
+    render_into(f.get(), sameBlock, BLOCK, 150);
+    checks.add("nota-del-bloque-del-cambio", peak(sameBlock.l) > 0.02, check_fmt("pico %.5f", peak(sameBlock.l)));
+
+    // Tras un pánico no se resucita nada.
+    auto g = make_engine(48000.0, BLOCK);
+    g->params.chorusEnabled = false;
+    g->pushMidi(0, 0xb0, 64, 127);
+    g->pushMidi(0, 0x90, 60, 110);
+    Stereo held;
+    render_into(g.get(), held, BLOCK, 40);
+    g->allNotesOff();
+    Stereo quiet;
+    render_into(g.get(), quiet, BLOCK, 188);
+    g->requestPatch(5);
+    Stereo afterPanic;
+    render_into(g.get(), afterPanic, BLOCK, 188);
+    checks.add("panico-no-resucita", peak(afterPanic.l) < 0.02,
+               check_fmt("pico %.5f tras el cambio", peak(afterPanic.l)));
 }
 
 // ------------------------------------------------- rampa de volumen

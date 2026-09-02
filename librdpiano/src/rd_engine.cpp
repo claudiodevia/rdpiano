@@ -48,8 +48,32 @@ static const double kTwoPi = 2.0 * 3.14159265358979323846;
 // salto duro del bypass; las dos del parche son el declick: bajar rápido, subir
 // despacio, que es como se oye menos.
 static const float kEffectMixRampMs = 10.0f;
-static const float kPatchFadeOutMs = 3.0f;
+static const float kPatchFadeOutMs = 6.0f;
 static const float kPatchFadeInMs = 15.0f;
+
+// Subida cuando el cambio ha tenido que volver a disparar lo que se estaba
+// tocando: más larga que la normal a propósito, porque es la que esconde el
+// transitorio de ataque de las notas que reentran. Con la ganancia elevada al
+// cuadrado (ver outputStage) el arranque es aún más plano.
+static const float kPatchFadeInHeldMs = 90.0f;
+
+// Cuánto baja el nivel del ataque por unidad de velocidad. Medido sobre los 16
+// parches: entre v16 y v120 la curva es recta a 0,228 dB por unidad (por debajo
+// de v16 se aplana, de ahí el suelo de la corrección). Es lo que convierte
+// "esta nota ya había decaído N dB" en la velocidad con la que hay que volver a
+// dispararla.
+static const float kDbPerVelocityUnit = 0.228f;
+
+// Tope de la corrección: más allá, la velocidad resultante se sale de la parte
+// recta de la curva y el timbre deja de parecerse al que sonaba.
+static const float kMaxRetriggerAttenDb = 30.0f;
+
+// El seguidor de nivel es un RMS de constante `kLevelTauMs`, no un detector de
+// pico: el pico del ataque de un acorde suma en fase y el del sustain no, así
+// que medir picos daba varios dB de decaimiento que no existían. La ventana de
+// ataque es más larga que la constante para que al RMS le dé tiempo a llenarse.
+static const float kLevelTauMs = 25.0f;
+static const float kOnsetWindowMs = 80.0f;
 
 // El retardo de grupo se declara al anfitrión en el peor caso —el parche más
 // lento— para no renegociar la latencia en cada cambio de sonido.
@@ -233,6 +257,17 @@ void RdPianoEngine::prepare(double newHostRate, int newMaxBlock)
     declickGain = 1.0f;
     declickPatch = -1;
 
+    // `boot()` reinicia el firmware entero, así que el espejo de lo pulsado
+    // arranca vacío con él.
+    for (int note = 0; note < 128; note++)
+        heldVelocity[note] = 0;
+    sustainDown = false;
+
+    levelSmooth = 1.0f - expf(-1.0f / (kLevelTauMs * 0.001f * (float)sourceRate));
+    levelSq = 0.0f;
+    onsetSq = 0.0f;
+    onsetHold = 0;
+
     // Arrancar en la posición que ya tienen los mandos: la rampa es para las
     // conmutaciones, no para el primer bloque.
     chorusMix = params.chorusEnabled ? 1.0f : 0.0f;
@@ -269,6 +304,84 @@ void RdPianoEngine::applyPatch(int patch)
 
     sourceRate = patchSampleRates[patch];
     effectMixStep = ramp_step(kEffectMixRampMs, sourceRate);
+
+    // La constante del seguidor de nivel va al ritmo del emulador, que acaba de
+    // cambiar con el parche.
+    levelSmooth = 1.0f - expf(-1.0f / (kLevelTauMs * 0.001f * (float)sourceRate));
+
+    // El program change de `reloadPatch()` es la única forma de que el firmware
+    // relea la página recién mapeada, y de paso apaga las voces y suelta el
+    // pedal: sin devolverle lo que había pulsado, cambiar de sonido con notas o
+    // pedal aguantados los dejaba mudos hasta soltar y volver a tocar.
+    //
+    // Si ha reentrado algo, la salida sube despacio: es lo que convierte el
+    // golpe de tecla en una entrada suave.
+    const int retriggered = restoreHeldNotes();
+    declickUpStep = ramp_step(retriggered > 0 ? kPatchFadeInHeldMs : kPatchFadeInMs, hostRate);
+}
+
+void RdPianoEngine::trackMidi(u8 status, u8 data1, u8 data2)
+{
+    const u8 command = (u8)(status >> 4);
+    const u8 note = (u8)(data1 & 0x7f);
+
+    if (command == 0x9 && data2 > 0)
+    {
+        heldVelocity[note] = (u8)(data2 & 0x7f);
+
+        // Empieza la ventana en la que se mide de qué nivel arranca la nota.
+        onsetHold = (int)(kOnsetWindowMs * 0.001f * (float)sourceRate);
+        onsetSq = 0.0f;
+    }
+    else if (command == 0x8 || (command == 0x9 && data2 == 0))
+        heldVelocity[note] = 0;
+    else if (command == 0xb && data1 == 64)
+        sustainDown = data2 >= 64;
+}
+
+void RdPianoEngine::sendTracked(u8 status, u8 data1, u8 data2)
+{
+    trackMidi(status, data1, data2);
+    mcu->sendMidiCmd(status, data1, data2);
+}
+
+// Le devuelve al firmware el pedal y las teclas que siguen pulsadas, y devuelve
+// cuántas notas han reentrado. El pedal va primero: al revés, las notas
+// reenviadas nacerían sin sostenido. Son bytes a la cola de comandos y nada
+// más, así que vale desde el hilo de audio.
+//
+// La velocidad no es la original sino la que deja la nota en el nivel al que
+// había llegado decayendo: reentrar con el ataque entero es exactamente el
+// golpe de tecla que no debe oírse al cambiar de sonido.
+int RdPianoEngine::restoreHeldNotes()
+{
+    if (sustainDown)
+        mcu->sendMidiCmd(0xb0, 64, 127);
+
+    int deltaVelocity = 0;
+    if (onsetSq > 0.0f && levelSq > 0.0f && levelSq < onsetSq)
+    {
+        // Los dos seguidores son potencias, de ahí el 10 y no el 20.
+        float attenDb = -10.0f * log10f(levelSq / onsetSq);
+        if (attenDb > kMaxRetriggerAttenDb)
+            attenDb = kMaxRetriggerAttenDb;
+        deltaVelocity = (int)(attenDb / kDbPerVelocityUnit + 0.5f);
+    }
+
+    int retriggered = 0;
+    for (int note = 0; note < 128; note++)
+    {
+        if (heldVelocity[note] == 0)
+            continue;
+
+        int velocity = (int)heldVelocity[note] - deltaVelocity;
+        if (velocity < 1)
+            velocity = 1;
+
+        mcu->sendMidiCmd(0x90, (u8)note, (u8)velocity);
+        retriggered++;
+    }
+    return retriggered;
 }
 
 void RdPianoEngine::setPatch(int patch)
@@ -325,7 +438,16 @@ void RdPianoEngine::setMasterTune(int16_t tune)
     mcu->setMasterTune(tune);
 }
 
-void RdPianoEngine::allNotesOff() { mcu->allNotesOff(); }
+void RdPianoEngine::allNotesOff()
+{
+    mcu->allNotesOff();
+
+    // El espejo también: si no, el siguiente cambio de parche resucitaría las
+    // notas que el pánico acaba de apagar.
+    for (int note = 0; note < 128; note++)
+        heldVelocity[note] = 0;
+    sustainDown = false;
+}
 
 void RdPianoEngine::pushMidi(int frame, u8 status, u8 data1, u8 data2)
 {
@@ -452,11 +574,24 @@ int RdPianoEngine::synthesise(int emuFrames)
     {
         while (nextEvent < midiCount && (int)(midiQueue[nextEvent].frame * hostToEmu) <= i)
         {
-            mcu->sendMidiCmd(midiQueue[nextEvent].status, midiQueue[nextEvent].data1, midiQueue[nextEvent].data2);
+            sendTracked(midiQueue[nextEvent].status, midiQueue[nextEvent].data1, midiQueue[nextEvent].data2);
             nextEvent++;
         }
 
         s32 sample = mcu->generate_next_sample(mode32khz);
+
+        // Nivel de la salida cruda, en potencia: `levelSq` sigue el
+        // decaimiento y `onsetSq` se queda con el ataque de la última nota.
+        // Su razón es lo que decide con cuánta fuerza reentra un acorde al
+        // cambiar de parche.
+        const float magnitude = (float)sample;
+        levelSq += (magnitude * magnitude - levelSq) * levelSmooth;
+        if (onsetHold > 0)
+        {
+            if (levelSq > onsetSq)
+                onsetSq = levelSq;
+            onsetHold--;
+        }
 
         // Los dos efectos corren SIEMPRE, encendidos o no: `process()` es lo
         // único que avanza sus líneas de retardo, y saltárselo las dejaba
@@ -572,8 +707,14 @@ void RdPianoEngine::outputStage(float *left, float *right, int numFrames)
     {
         declickGain += clamp_step(declickTarget - declickGain, -declickDownStep, declickUpStep);
 
-        left[i] = outL[i] * outputGainSmoothed * declickGain;
-        right[i] = outR[i] * outputGainSmoothed * declickGain;
+        // La rampa se aplica al cuadrado: arranca mucho más plana que la lineal,
+        // que es lo que hace falta para que el ataque de una nota que reentra no
+        // asome. En 0 y en 1 no cambia nada, así que fuera del cambio de parche
+        // la salida sigue siendo la de siempre.
+        const float declick = declickGain * declickGain;
+
+        left[i] = outL[i] * outputGainSmoothed * declick;
+        right[i] = outR[i] * outputGainSmoothed * declick;
         outputGainSmoothed += outputGainStep;
 
         tremoloPhase += tremoloStep;
@@ -631,7 +772,7 @@ void RdPianoEngine::render(float *left, float *right, int numFrames)
     // al final del bloque y que la conversión de tasas deja fuera. Se entregan
     // aquí en vez de perderse.
     for (int i = eventsSent; i < midiCount; i++)
-        mcu->sendMidiCmd(midiQueue[i].status, midiQueue[i].data1, midiQueue[i].data2);
+        sendTracked(midiQueue[i].status, midiQueue[i].data1, midiQueue[i].data2);
 
     midiCount = 0;
 }

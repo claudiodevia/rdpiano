@@ -213,6 +213,13 @@ class RdPianoEngine
     void applyPatch(int patch);
     void serviceRequests();
 
+    // Espejo de lo que el firmware cree pulsado, y su reenvío tras un cambio de
+    // parche: el program change que hace falta para releer la página de
+    // parámetros apaga las voces y suelta el pedal dentro del firmware.
+    void trackMidi(u8 status, u8 data1, u8 data2);
+    void sendTracked(u8 status, u8 data1, u8 data2);
+    int restoreHeldNotes();
+
     // Las fases de `render()`, en el orden en que corren. El orden de
     // operaciones dentro de cada una es audio: no se toca.
     void abortBlock(float *left, float *right, int numFrames);
@@ -260,6 +267,22 @@ class RdPianoEngine
 
     double samplesError = 0;
     double tremoloPhase = 0;
+
+    // Velocidad de cada nota pulsada (0 = suelta) y el pedal, tal y como los
+    // recibió el firmware. Es lo que se le devuelve tras cambiar de parche.
+    u8 heldVelocity[128] = {0};
+    bool sustainDown = false;
+
+    // Seguidores de la salida del emulador, en potencia (RMS al cuadrado), con
+    // los que se decide con cuánta fuerza reentra lo que se estaba tocando:
+    // `onsetSq` es el nivel del último ataque y `levelSq` el de ahora, así que
+    // su razón es cuánto ha decaído la nota. Sin esto reentraba con su ataque
+    // entero, hasta +14 dB sobre lo que sonaba: el golpe de tecla que no debe
+    // oírse al cambiar de sonido.
+    float levelSq = 0.0f;
+    float onsetSq = 0.0f;
+    float levelSmooth = 0.0f;
+    int onsetHold = 0;
 
     static const int kMidiQueueSize = 512;
     RdMidiEvent midiQueue[kMidiQueueSize];
