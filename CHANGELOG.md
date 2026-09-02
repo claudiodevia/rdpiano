@@ -2,6 +2,17 @@
 
 Cambios de cada versión publicada de RdPiano. La más nueva, arriba.
 
+## 1.0.1 — 2 de septiembre de 2026
+
+### Sonido
+
+- Cambiar de sonido mientras se toca ya no corta la música: las notas que
+  estuvieran sonando y el pedal siguen adelante con el sonido nuevo, y
+  reaparecen al volumen al que iban, sin el golpe de un ataque que nadie ha
+  tocado.
+- La transición del cambio es más suave y algo más larga, así que no se oye ni
+  el corte del sonido anterior ni la entrada del siguiente.
+
 ## 1.0.0 — 1 de septiembre de 2026
 
 Primera versión con número propio. El plugin ya se puede usar en un concierto.
@@ -14,10 +25,6 @@ Primera versión con número propio. El plugin ya se puede usar en un concierto.
   los enciende después de un rato apagados.
 - Encender o apagar un efecto se hace con una transición suave, sin salto.
 - Mover el volumen o cambiar de sonido ya no produce el zumbido de antes.
-- Cambiar de sonido mientras se toca ya no corta la música: entra con una
-  transición suave, y las notas que estuvieran sonando y el pedal siguen
-  adelante con el sonido nuevo, al volumen al que iban y sin el golpe de un
-  ataque que nadie ha tocado.
 
 ### Uso en directo
 
