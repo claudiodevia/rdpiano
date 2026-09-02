@@ -32,6 +32,11 @@ endif()
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-constant-logical-operand")
 
+# Avisos encendidos para el núcleo y sus pruebas. `add_compile_options` es de
+# directorio hacia abajo, así que esto no alcanza a `rdpiano_juce/`. Sin
+# `-Werror`: eso es decisión de la CI, no del árbol local.
+add_compile_options(-Wall -Wextra)
+
 include_directories("include")
 
 # library target
@@ -49,6 +54,12 @@ add_library(librdpiano src/mcu.cpp src/rd_board.cpp src/sound_chip.cpp src/sa_ta
 # núcleo en el árbol.
 target_include_directories(librdpiano PUBLIC include)
 target_include_directories(librdpiano PRIVATE src src/resample)
+
+# `resample/` es código de terceros exceptuado del estilo del árbol (trampa 5
+# de CLAUDE.md): sus comparaciones con signo no se van a arreglar, y dejarlas
+# avisando entierra los avisos que sí son accionables.
+set_source_files_properties(src/resample/resample.c src/resample/filterkit.c
+    src/resample/resamplesubs.c PROPERTIES COMPILE_OPTIONS "-Wno-sign-compare")
 
 # end-to-end test harness: sin dependencias externas, siempre se compila
 add_executable(rdpiano_e2e test/e2e.cpp)

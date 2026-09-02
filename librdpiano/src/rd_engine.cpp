@@ -418,11 +418,10 @@ void RdPianoEngine::render(float *left, float *right, int numFrames)
         return;
     }
 
-    for (int i = 0; i < emuCapacity; i++)
-    {
-        emuL[i] = 0.0f;
-        emuR[i] = 0.0f;
-    }
+    // `emuL`/`emuR` no se limpian: el bucle de síntesis les *asigna* las
+    // `renderBufferFrames` primeras posiciones y `resample_process()` no lee
+    // ninguna más. `outL`/`outR` sí, porque el remuestreador puede devolver
+    // menos de `numFrames` y la cola se lee igual.
     for (int i = 0; i < numFrames; i++)
     {
         outL[i] = 0.0f;
@@ -527,7 +526,8 @@ void RdPianoEngine::render(float *left, float *right, int numFrames)
     const double ratio = destSampleRate / sourceRate;
 
     int inUsed = 0;
-    int out = resample_process(resampleL, ratio, emuL, renderBufferFrames, 0, &inUsed, outL, numFrames);
+    [[maybe_unused]] const int out =
+        resample_process(resampleL, ratio, emuL, renderBufferFrames, 0, &inUsed, outL, numFrames);
     resample_process(resampleR, ratio, emuR, renderBufferFrames, 0, &inUsed, outR, numFrames);
     samplesError += currentError;
     if (inUsed == 0)

@@ -5,11 +5,11 @@
 #include <cstdio>
 #include <cstring>
 
-static int bgWidth = 6140;
-static int bgHeight = 1503;
-static float scaleFactor = 5;
-static int uiWidth = bgWidth / scaleFactor;
-static int uiHeight = bgHeight / scaleFactor;
+static constexpr int bgWidth = 6140;
+static constexpr int bgHeight = 1503;
+static constexpr float scaleFactor = 5;
+static constexpr int uiWidth = bgWidth / scaleFactor;
+static constexpr int uiHeight = bgHeight / scaleFactor;
 
 //==============================================================================
 // El panel entero, en coordenadas del fondo. Es la única copia: el constructor,

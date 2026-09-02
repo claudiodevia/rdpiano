@@ -20,7 +20,7 @@ SoundChip::SoundChip(const u8 *temp_ic5, const u8 *temp_ic6, const u8 *temp_ic7)
 
 SoundChip::~SoundChip() { delete[] wave_slots; }
 
-u8 SoundChip::read(size_t offset) { return m_irq_id; }
+u8 SoundChip::read(size_t) { return m_irq_id; }
 
 void SoundChip::reset()
 {
@@ -60,32 +60,37 @@ void SoundChip::write(size_t offset, u8 data)
 
     SA_Part &part = m_parts[voiceI][partI];
 
-    // flags seems to be common for all parts?
-    if (field == 0x6)
+    switch (field)
     {
-        m_parts[voiceI][0].flags_0 = data & 1;
-        m_parts[voiceI][0].flags_1 = (data >> 1) & 1;
-    }
-    else if (field == 0x0)
-    {
+    case 0x0:
         part.pitch_lut_i &= 0x00FF;
         part.pitch_lut_i |= data << 8;
-    }
-    else if (field == 0x1)
-    {
+        break;
+    case 0x1:
         part.pitch_lut_i &= 0xFF00;
         part.pitch_lut_i |= data;
-    }
-    else if (field == 0x2)
+        break;
+    case 0x2:
         part.wave_addr_loop = data;
-    else if (field == 0x3)
+        break;
+    case 0x3:
         part.wave_addr_high = data;
-    else if (field == 0x4)
+        break;
+    case 0x4:
         part.env_dest = data;
-    else if (field == 0x5)
+        break;
+    case 0x5:
         part.env_speed = data;
-    else if (field == 0x7)
+        break;
+    // flags seems to be common for all parts?
+    case 0x6:
+        m_parts[voiceI][0].flags_0 = data & 1;
+        m_parts[voiceI][0].flags_1 = (data >> 1) & 1;
+        break;
+    case 0x7:
         part.env_offset = data;
+        break;
+    }
 }
 
 s32 SoundChip::update()
@@ -160,9 +165,10 @@ void SoundChip::decode_samples(unsigned slot, const u8 *temp_ic5, const u8 *temp
              ((i >> 12) & 1) << 12 | ((i >> 13) & 1) << 13 | ((i >> 14) & 1) << 14 | ((i >> 15) & 1) << 15 |
              ((i >> 16) & 1) << 16);
 
-        const u8 b5 = unscramble_data_wave(temp_ic5[unscramble_addr_wave((u32)descrambled_i)]);
-        const u8 b6 = unscramble_data_wave(temp_ic6[unscramble_addr_wave((u32)descrambled_i)]);
-        const u8 b7 = unscramble_data_wave(temp_ic7[unscramble_addr_wave((u32)descrambled_i)]);
+        const u32 addr = unscramble_addr_wave((u32)descrambled_i);
+        const u8 b5 = unscramble_data_wave(temp_ic5[addr]);
+        const u8 b6 = unscramble_data_wave(temp_ic6[addr]);
+        const u8 b7 = unscramble_data_wave(temp_ic7[addr]);
 
         uint16_t exp_sample =
             (((b5 >> 0) & 1) << 13 | ((b6 >> 4) & 1) << 12 | ((b7 >> 4) & 1) << 11 | ((~b6 >> 0) & 1) << 10 |

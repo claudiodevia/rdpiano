@@ -121,7 +121,7 @@ const juce::String RdPiano_juceAudioProcessor::getProgramName(int index)
     return juce::String(patchNames[index]);
 }
 
-void RdPiano_juceAudioProcessor::changeProgramName(int index, const juce::String &newName) {}
+void RdPiano_juceAudioProcessor::changeProgramName(int, const juce::String &) {}
 
 void RdPiano_juceAudioProcessor::setMasterTune(int16_t tune)
 {

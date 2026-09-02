@@ -57,8 +57,8 @@ class RdPiano_juceAudioProcessorEditor : public juce::AudioProcessorEditor,
     class MksButton : public juce::Button
     {
       public:
-        int x, y, w, h;
-        float scaleFactor;
+        int x = 0, y = 0, w = 0, h = 0;
+        float scaleFactor = 1.0f;
         bool enabled = false;
         MksButton() : juce::Button("") {}
         void position(int x, int y, int w, int h, float scaleFactor)
@@ -155,11 +155,11 @@ class RdPiano_juceAudioProcessorEditor : public juce::AudioProcessorEditor,
     class KnobLF : public juce::LookAndFeel_V3
     {
       public:
-        KnobLF() {}
-        ~KnobLF() {}
+        KnobLF() = default;
+        ~KnobLF() override = default;
 
         void drawRotarySlider(juce::Graphics &g, int x, int y, int width, int height, float sliderPos,
-                              const float rotaryStartAngle, const float rotaryEndAngle, juce::Slider &slider)
+                              const float rotaryStartAngle, const float rotaryEndAngle, juce::Slider &slider) override
         {
             auto scale = (770.55 / width);
             auto centerX = x + width * 0.5f;

@@ -365,16 +365,12 @@ void Mcu::reset()
     SEI; /* IRQ disabled */
     PCD = RM16(0xfffe);
 
-    m_wai_state = 0;
-    m_nmi_state = 0;
-    m_nmi_pending = 0;
-
     // We need to run the CPU for a bit before being able to send commands to it
     for (size_t i = 0; i < 1024 * 8; i++)
         execute_one();
 }
 
-Mcu::~Mcu() {}
+Mcu::~Mcu() = default;
 
 void Mcu::take_trap() { enter_interrupt("TRAP", 0xffee); }
 
@@ -423,7 +419,7 @@ void Mcu::WM16(u32 Addr, PAIR *p)
 }
 
 /* IRQ enter */
-void Mcu::enter_interrupt(const char *message, u16 irq_vector)
+void Mcu::enter_interrupt(const char *, u16 irq_vector)
 {
     if (m_wai_state & M6800_WAI)
     {
@@ -558,32 +554,32 @@ s32 Mcu::generate_next_sample(bool sampleRate32)
     return sample;
 }
 
-void Mcu::sendMidiCmd(u8 data1, u8 data2, u8 data3)
+void Mcu::sendMidiCmd(u8 cmd, u8 data1, u8 data2)
 {
-    uint8_t command = data1 >> 4;
+    uint8_t command = cmd >> 4;
 
     // program change
     if (command == 0xC)
     {
-        board.commandPort().programChange(data2 & 0xF);
+        board.commandPort().programChange(data1 & 0xF);
     }
 
     // note off
-    else if (command == 0x8 || (command == 0x9 && data3 == 0))
+    else if (command == 0x8 || (command == 0x9 && data2 == 0))
     {
-        board.commandPort().noteOff(data2);
+        board.commandPort().noteOff(data1);
     }
 
     // note on
     else if (command == 0x9)
     {
-        board.commandPort().noteOn(data2, data3);
+        board.commandPort().noteOn(data1, data2);
     }
 
     // sustain
-    else if (command == 0xB && data2 == 64)
+    else if (command == 0xB && data1 == 64)
     {
-        board.commandPort().sustain(data3 >= 64);
+        board.commandPort().sustain(data2 >= 64);
     }
 }
 

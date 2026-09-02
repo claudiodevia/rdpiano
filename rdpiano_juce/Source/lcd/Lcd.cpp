@@ -15,7 +15,7 @@
 //==============================================================================
 Lcd::Lcd() { memset(LCD_Data, ' ', kChars); }
 
-Lcd::~Lcd() {}
+Lcd::~Lcd() = default;
 
 void Lcd::setText(const uint8_t (&chars)[kChars])
 {
@@ -47,8 +47,8 @@ void Lcd::paint(juce::Graphics &g)
     }
 }
 
-uint32_t lcd_col1 = 0xFF233336;
-uint32_t lcd_col2 = 0xFF73A5A9;
+static constexpr uint32_t lcd_col1 = 0xFF233336;
+static constexpr uint32_t lcd_col2 = 0xFF73A5A9;
 
 void Lcd::LCD_FontRenderStandard(int32_t x, int32_t y, uint8_t ch, juce::Graphics &g)
 {
