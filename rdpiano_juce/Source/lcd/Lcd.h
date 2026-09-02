@@ -36,8 +36,13 @@ class Lcd : public juce::Component
   private:
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(Lcd)
 
-    void LCD_FontRenderStandard(int32_t x, int32_t y, uint8_t ch, juce::Graphics &g);
+    void LCD_FontRenderStandard(int32_t top, int32_t left, uint8_t ch, juce::Graphics &g);
+    void renderCache(int width, int height, float physical);
 
     uint8_t LCD_Data[kChars];
     float scale = 1;
+
+    // El display ya dibujado: se rehace al cambiar el texto o la escala, no en
+    // cada repintado.
+    juce::Image cache;
 };

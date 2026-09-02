@@ -89,7 +89,13 @@ bool RdPiano_juceAudioProcessor::producesMidi() const { return false; }
 
 bool RdPiano_juceAudioProcessor::isMidiEffect() const { return false; }
 
-double RdPiano_juceAudioProcessor::getTailLengthSeconds() const { return 0.0; }
+// Lo que el motor sigue sonando tras el último note-off. Con 0 —lo que había—
+// el anfitrión deja de pedir bloques al soltar la tecla y corta el final de la
+// nota al exportar o al congelar la pista.
+double RdPiano_juceAudioProcessor::getTailLengthSeconds() const
+{
+    return engine ? engine->tailLengthSeconds() : RdPianoEngine::kTailSeconds;
+}
 
 int RdPiano_juceAudioProcessor::getNumPrograms() { return NUM_PATCHES; }
 

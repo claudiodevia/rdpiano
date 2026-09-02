@@ -41,6 +41,9 @@ static const float kOutputScaling = 0.5f;
 
 static const float kPi = 3.14159265358979323846f;
 
+// La fase del trémolo se lleva en doble: es un acumulador, no un coeficiente.
+static const double kTwoPi = 2.0 * 3.14159265358979323846;
+
 // Rampas de conmutación, en milisegundos. La de los efectos es la que evita el
 // salto duro del bypass; las dos del parche son el declick: bajar rápido, subir
 // despacio, que es como se oye menos.
@@ -537,8 +540,14 @@ void RdPianoEngine::render(float *left, float *right, int numFrames)
         RD_TRACE("engine: click (%d)", out);
     }
 
+    // Trémolo: la fase avanza por muestra y se acota a 2 pi, en vez de
+    // multiplicar un contador absoluto que acaba en cientos de miles de
+    // radianes (y da un salto al desbordar). El canal derecho es el izquierdo
+    // en oposición de fase —sen(pi + x) = -sen(x)—, así que sale del mismo
+    // sen() sin una segunda llamada.
     const float depth = clamp_index(params.tremoloDepth, 0, 14) / 14.0f;
-    const int tremRate = clamp_index(params.tremoloRate, 0, 14);
+    const double tremoloHz = clamp_index(params.tremoloRate, 0, 14) / 2.0; // el dial son Hz/2
+    const double tremoloStep = kTwoPi * tremoloHz / destSampleRate;
 
     // La compensación de headroom entra en la salida, no antes: el emulador y
     // lsp/ son aritmética entera transcrita del hardware y multiplicar dentro
@@ -562,14 +571,14 @@ void RdPianoEngine::render(float *left, float *right, int numFrames)
         right[i] = outR[i] * outputGainSmoothed * declickGain;
         outputGainSmoothed += outputGainStep;
 
-        tremoloPhase = (tremoloPhase + 1) & 0xffffffff;
+        tremoloPhase += tremoloStep;
+        if (tremoloPhase >= kTwoPi)
+            tremoloPhase -= kTwoPi;
         if (params.tremoloEnabled)
         {
-            float tremoloL = (float)(0.5 + 0.5 * sin(tremRate * 3.14159265359 * tremoloPhase / destSampleRate));
-            float tremoloR =
-                (float)(0.5 + 0.5 * sin(3.1415926535 + tremRate * 3.14159265359 * tremoloPhase / destSampleRate));
-            left[i] *= (1.0f - depth) + (tremoloL * depth);
-            right[i] *= (1.0f - depth) + (tremoloR * depth);
+            const float half = 0.5f * (float)sin(tremoloPhase);
+            left[i] *= (1.0f - depth) + ((0.5f + half) * depth);
+            right[i] *= (1.0f - depth) + ((0.5f - half) * depth);
         }
     }
     outputGainSmoothed = outputGainTarget;

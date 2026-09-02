@@ -17,6 +17,7 @@
 #include <string.h>
 
 #include <map>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -193,7 +194,7 @@ static PatchResult run_patch(int patch, RomBank &roms, std::vector<float> *wav)
     const bool rate32 = rate == 32000;
     const float wavGain = patchOutputGain[patch];
 
-    Mcu *mcu = new Mcu(ic5, ic6, ic7, prog, ic18);
+    auto mcu = std::make_unique<Mcu>(ic5, ic6, ic7, prog, ic18);
     mcu->loadSounds(ic5, ic6, ic7, ic18, patchToOffset[patch]);
 
     // El mismo arranque que el plugin, no una copia. El harness calienta al
@@ -207,7 +208,7 @@ static PatchResult run_patch(int patch, RomBank &roms, std::vector<float> *wav)
     // 1. Silencio tras el arranque: no debería sonar nada todavía.
     {
         Accum w;
-        render(mcu, rate32, (size_t)(SILENCE_SECS * rate), &total, &w, wav, wavGain);
+        render(mcu.get(), rate32, (size_t)(SILENCE_SECS * rate), &total, &w, wav, wavGain);
         r.silenceRms = w.rms();
     }
 
@@ -215,7 +216,7 @@ static PatchResult run_patch(int patch, RomBank &roms, std::vector<float> *wav)
     mcu->sendMidiCmd(0x90, 60, 100);
     {
         Accum w;
-        render(mcu, rate32, (size_t)(NOTE_SECS * rate), &total, &w, wav, wavGain);
+        render(mcu.get(), rate32, (size_t)(NOTE_SECS * rate), &total, &w, wav, wavGain);
         r.noteRms = w.rms();
     }
 
@@ -225,7 +226,7 @@ static PatchResult run_patch(int patch, RomBank &roms, std::vector<float> *wav)
     mcu->sendMidiCmd(0x90, 72, 100);
     {
         Accum w;
-        render(mcu, rate32, (size_t)(CHORD_SECS * rate), &total, &w, wav, wavGain);
+        render(mcu.get(), rate32, (size_t)(CHORD_SECS * rate), &total, &w, wav, wavGain);
         r.chordRms = w.rms();
     }
 
@@ -237,9 +238,9 @@ static PatchResult run_patch(int patch, RomBank &roms, std::vector<float> *wav)
     {
         size_t frames = (size_t)(RELEASE_SECS * rate);
         size_t tailFrames = (size_t)(TAIL_WINDOW_SECS * rate);
-        render(mcu, rate32, frames - tailFrames, &total, NULL, wav, wavGain);
+        render(mcu.get(), rate32, frames - tailFrames, &total, NULL, wav, wavGain);
         Accum w;
-        render(mcu, rate32, tailFrames, &total, &w, wav, wavGain);
+        render(mcu.get(), rate32, tailFrames, &total, &w, wav, wavGain);
         r.releaseTailRms = w.rms();
     }
 
@@ -248,7 +249,7 @@ static PatchResult run_patch(int patch, RomBank &roms, std::vector<float> *wav)
         mcu->sendMidiCmd(0x90, 48 + n, 100);
     {
         Accum w;
-        render(mcu, rate32, (size_t)(POLY_SECS * rate), &total, &w, wav, wavGain);
+        render(mcu.get(), rate32, (size_t)(POLY_SECS * rate), &total, &w, wav, wavGain);
         r.polyRms = w.rms();
     }
 
@@ -257,9 +258,9 @@ static PatchResult run_patch(int patch, RomBank &roms, std::vector<float> *wav)
     {
         size_t frames = (size_t)(POLY_RELEASE_SECS * rate);
         size_t tailFrames = (size_t)(TAIL_WINDOW_SECS * rate);
-        render(mcu, rate32, frames - tailFrames, &total, NULL, wav, wavGain);
+        render(mcu.get(), rate32, frames - tailFrames, &total, NULL, wav, wavGain);
         Accum w;
-        render(mcu, rate32, tailFrames, &total, &w, wav, wavGain);
+        render(mcu.get(), rate32, tailFrames, &total, &w, wav, wavGain);
         r.polyTailRms = w.rms();
     }
 
@@ -267,7 +268,6 @@ static PatchResult run_patch(int patch, RomBank &roms, std::vector<float> *wav)
     r.hash = total.hash;
     r.emulatedSecs = (double)total.count / rate;
 
-    delete mcu;
     return r;
 }
 

@@ -157,6 +157,14 @@ class RdPianoEngine
     // anfitrión a renegociar la latencia en cada cambio de sonido.
     int latencySamples() const { return latencyFrames; }
 
+    // Cuánto sigue sonando después del último note-off, en segundos, para que el
+    // integrador se lo declare al anfitrión: con cero, el host se cree que puede
+    // dejar de pedir bloques al soltar la tecla y corta el final de la nota al
+    // exportar o al congelar la pista. Es el peor caso de los 16 parches, con
+    // margen, y lo mide `engine_tail_length`.
+    static constexpr double kTailSeconds = 3.0;
+    double tailLengthSeconds() const { return kTailSeconds; }
+
     // Pánico: pedal arriba y las 128 notas apagadas.
     void allNotesOff();
 
@@ -243,7 +251,7 @@ class RdPianoEngine
     int outCapacity = 0;
 
     double samplesError = 0;
-    unsigned long tremoloPhase = 0;
+    double tremoloPhase = 0;
 
     static const int kMidiQueueSize = 512;
     RdMidiEvent midiQueue[kMidiQueueSize];

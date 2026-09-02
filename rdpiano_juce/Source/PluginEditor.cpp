@@ -103,8 +103,13 @@ RdPiano_juceAudioProcessorEditor::RdPiano_juceAudioProcessorEditor(RdPiano_juceA
 {
     addAndMakeVisible(lcd);
 
+    backgroundArt = juce::ImageCache::getFromMemory(BinaryData::background_png, BinaryData::background_pngSize);
+    interactableArt = juce::ImageCache::getFromMemory(BinaryData::interactable_png, BinaryData::interactable_pngSize);
+    knobLF.dial = juce::ImageCache::getFromMemory(BinaryData::alphadial_png, BinaryData::alphadial_pngSize);
+
     for (int i = 0; i < kNumButtons; i++)
     {
+        buttons[i].art = interactableArt;
         addAndMakeVisible(buttons[i]);
         buttons[i].addListener(this);
     }
@@ -159,13 +164,11 @@ void RdPiano_juceAudioProcessorEditor::paint(juce::Graphics &g)
 {
     float sfC = (float)bgWidth / getBounds().getWidth();
 
-    g.drawImage(juce::ImageCache::getFromMemory(BinaryData::background_png, BinaryData::background_pngSize),
-                getLocalBounds().toFloat());
+    g.drawImage(backgroundArt, getLocalBounds().toFloat());
 
     // Volume
     float volumeY = 660 / sfC + (1 - audioProcessor.paramValue(kVolume)) * (656 - 131) / sfC;
-    g.drawImage(juce::ImageCache::getFromMemory(BinaryData::interactable_png, BinaryData::interactable_pngSize),
-                1188 / sfC, volumeY, 100 / sfC, 131 / sfC, 1188, 1179, 100, 131);
+    g.drawImage(interactableArt, 1188 / sfC, volumeY, 100 / sfC, 131 / sfC, 1188, 1179, 100, 131);
 }
 
 void RdPiano_juceAudioProcessorEditor::buttonClicked(juce::Button *button)

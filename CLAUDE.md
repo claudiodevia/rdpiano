@@ -45,7 +45,9 @@ bloques**, porque la tasa del emulador cambia con el parche y el bloque entero d
 **LFO de los dos efectos = ritmo del emulador** → los 5 parches de 32 kHz modulan 1,6× más rápido
 con el mismo ajuste de panel. Deliberado: escalar por `20000/sourceRate` se implementó, se escuchó y
 se descartó (sonaba peor), pese a que un documento de rendimiento ya borrado lo proponía. Lo fija
-`engine_lfo_rate`: "arreglarlo" rompe el test.
+`engine_lfo_rate`: "arreglarlo" rompe el test. El **trémolo** no: va detrás del remuestreador, con
+fase propia acotada a 2π, y modula a `rate/2` Hz de reloj del host sea cual sea el parche
+(`engine_tremolo`).
 
 **Efectos siempre corriendo**, encendidos o no: `SpaceD::process()`/`Phaser::process()` son lo único
 que avanza sus líneas de retardo; saltárselos las congela y sueltan el audio viejo entero al
@@ -86,12 +88,20 @@ dejaba el motor mudo (cambiaba el número de parche, no la página mapeada).
 host; 67 muestras @48 kHz); `prepareToPlay` → `setLatencySamples()`. Peor caso (parche de 20 kHz) a
 propósito: no se renegocia al cambiar de sonido.
 
+**Cola declarada**: `tailLengthSeconds()` = 3 s (`RdPianoEngine::kTailSeconds`), el doble de la cola
+real más larga de los 16 parches (1,45 s a −60 dBFS, parche 5), que mide `engine_tail_length`. Con
+los 0 s de antes el anfitrión dejaba de pedir bloques al soltar la tecla y cortaba el final de la
+nota al exportar o al congelar la pista.
+
 **Plugin** = 3 archivos + 2 tablas: `PluginParams.h` (10 parámetros, fábrica desde `RdEngineParams`),
 `PluginProcessor` (APVTS, serializa presets), `PluginEditor` (`ButtonSpec`×17, `ModeSpec`×8). El
 procesador es además `juce::Timer` @10 Hz: recoge el parche que el motor cambie por su cuenta
 (program change MIDI) para espejo, preset y panel. El dial de parches cambia de sonido **al
 soltarlo** (`sliderDragEnded`); arrastrando solo enseña el nombre. `updateValues()` repinta el fondo
-solo si se movió el fader; cada control se repinta solo.
+solo si se movió el fader; cada control se repinta solo. Las tres hojas de arte se decodifican una
+sola vez en el constructor del editor y se reparten a los botones y al dial (nada de `ImageCache`
+dentro de un `paint()`), y el display se dibuja a una `juce::Image` que sólo se rehace al cambiar el
+texto, la escala o el tamaño: son 1.190 rectángulos de 5×7 píxeles por repintado.
 
 ## Mapa de memoria (`RdBoard::read`/`write`, [rd_board.h](librdpiano/include/rd_board.h))
 
@@ -205,7 +215,7 @@ ctest --test-dir build/core --output-on-failure
   nota, acorde, extinción tras note-off (detector de voces colgadas), polifonía 16, rango de pico y
   **hash bit-exacto por parche** contra `test/golden.txt`. `--patch N` para iterar (~0,2 s). Cambios
   en `sound_chip.cpp`, `unscramble_*` o el MCU mueven el hash.
-- **Unitario** (`test/unit/`, 48 suites, 474 checks, 3,2 s): `test_board`, `test_patches`,
+- **Unitario** (`test/unit/`, 50 suites, 482 checks, 4,5 s): `test_board`, `test_patches`,
   `test_sa_tables`, `test_rom_loader`, `test_command_port`, `test_sound_chip_blocks` (2.256
   vectores), `test_lsp` (respuesta a impulso congelada), `test_resampler`, `test_engine`. Se añade
   con `TEST_SUITE(nombre)` + una línea en el CMakeLists; andamiaje = `test/check.h`. Regla: la
@@ -216,10 +226,13 @@ ctest --test-dir build/core --output-on-failure
   Red de transitorios: `engine_effect_tail` (encender un efecto en silencio → silencio),
   `engine_effect_bypass_ramp`, `engine_program_change`, `engine_patch_declick`, `engine_volume_ramp`,
   `engine_latency`, `engine_lfo_rate` (periodo del LFO del chorus por autocorrelación de la
-  diferencia wet-dry; fija que dependa de la tasa del parche).
-- **Plugin** (`rdpiano_juce/test/`, `rdpiano_plugin_tests`, 6 suites, 98 checks): presets ida y
-  vuelta, valores de fábrica, programas, preset corrupto, latencia declarada. Está en el ctest de la
-  raíz:
+  diferencia wet-dry; fija que dependa de la tasa del parche), `engine_tremolo` (el mismo método
+  sobre la razón wet/dry por canal: periodo, oposición de fase entre canales, profundidad, y que el
+  trémolo —al revés que el chorus— vaya al ritmo del **host**) y `engine_tail_length` (la cola real
+  de los 16 parches contra la declarada).
+- **Plugin** (`rdpiano_juce/test/`, `rdpiano_plugin_tests`, 7 suites, 101 checks): presets ida y
+  vuelta, valores de fábrica, programas, preset corrupto, latencia y cola declaradas. Está en el
+  ctest de la raíz:
   ```bash
   cmake -B build/plugin -G Xcode -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64"
   cmake --build build/plugin --config Release --target rdpiano_tests rdpiano_e2e rdpiano_plugin_tests

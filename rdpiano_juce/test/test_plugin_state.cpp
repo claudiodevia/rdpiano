@@ -258,3 +258,23 @@ TEST_SUITE(plugin_latency)
 
     p.releaseResources();
 }
+
+// La cola declarada: el anfitrión decide con ella cuánto sigue pidiendo bloques
+// después del último evento. Cuánto dura de verdad lo mide engine_tail_length en
+// la suite del núcleo; aquí sólo se comprueba que el plugin declara la del motor
+// y no un cero.
+TEST_SUITE(plugin_tail_length)
+{
+    RdPiano_juceAudioProcessor p;
+
+    CHECK(p.getTailLengthSeconds() > 0.0);
+    CHECK_EQ(p.getTailLengthSeconds(), p.engine->tailLengthSeconds());
+
+    // Y sigue siendo la misma con el plugin preparado y con otro sonido puesto:
+    // renegociarla en mitad de una sesión es justo lo que no se puede hacer.
+    p.prepareToPlay(48000.0, 512);
+    p.setCurrentProgram(5);
+    CHECK_EQ(p.getTailLengthSeconds(), RdPianoEngine::kTailSeconds);
+
+    p.releaseResources();
+}

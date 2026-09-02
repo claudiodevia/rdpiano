@@ -5,6 +5,7 @@
 
 #include <string.h>
 
+#include <memory>
 #include <vector>
 
 #include "lsp/phaser.h"
@@ -14,7 +15,7 @@
 // SpaceD lleva 256 KB de ERAM: en la pila no cabe.
 static std::vector<float> impulse_response_spaced(int32_t rate, int32_t depth, int n, bool sweep)
 {
-    SpaceD *fx = new SpaceD();
+    auto fx = std::make_unique<SpaceD>();
     fx->reset();
     fx->rate = rate;
     fx->depth = depth;
@@ -39,13 +40,12 @@ static std::vector<float> impulse_response_spaced(int32_t rate, int32_t depth, i
         out.push_back((float)fx->audioOutR);
     }
 
-    delete fx;
     return out;
 }
 
 static std::vector<float> impulse_response_phaser(int32_t rate, int32_t depth, int n, bool sweep)
 {
-    Phaser *fx = new Phaser();
+    auto fx = std::make_unique<Phaser>();
     fx->reset();
     fx->rate = rate;
     fx->depth = depth;
@@ -68,7 +68,6 @@ static std::vector<float> impulse_response_phaser(int32_t rate, int32_t depth, i
         out.push_back((float)fx->audioOutR);
     }
 
-    delete fx;
     return out;
 }
 

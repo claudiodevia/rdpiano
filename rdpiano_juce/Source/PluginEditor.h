@@ -60,6 +60,13 @@ class RdPiano_juceAudioProcessorEditor : public juce::AudioProcessorEditor,
         int x = 0, y = 0, w = 0, h = 0;
         float scaleFactor = 1.0f;
         bool enabled = false;
+
+        // La hoja de arte, que carga el editor una sola vez. `juce::Image` es un
+        // asa contada, así que copiarla aquí no copia píxeles; lo que no puede
+        // haber es un `ImageCache::getFromMemory()` dentro del paint, porque
+        // toma un cerrojo global y de vez en cuando vuelve a decodificar el PNG.
+        juce::Image art;
+
         MksButton() : juce::Button("") {}
         void position(int x, int y, int w, int h, float scaleFactor)
         {
@@ -73,8 +80,7 @@ class RdPiano_juceAudioProcessorEditor : public juce::AudioProcessorEditor,
         {
             auto topLeft = getBoundsInParent().getTopLeft();
             float downShift = isButtonDown ? 8 / scaleFactor : 0;
-            g.drawImage(juce::ImageCache::getFromMemory(BinaryData::interactable_png, BinaryData::interactable_pngSize),
-                        x / scaleFactor - topLeft.x + downShift, y / scaleFactor - topLeft.y - downShift,
+            g.drawImage(art, x / scaleFactor - topLeft.x + downShift, y / scaleFactor - topLeft.y - downShift,
                         w / scaleFactor, h / scaleFactor, x, y, w, h);
 
             if (enabled)
@@ -129,6 +135,11 @@ class RdPiano_juceAudioProcessorEditor : public juce::AudioProcessorEditor,
     static const ButtonSpec buttonSpecs[kNumButtons];
     static const ModeSpec modeSpecs[kNumDisplayModes];
 
+    // Las hojas de arte, decodificadas una vez en el constructor y repartidas a
+    // los botones y al dial: ningún paint() vuelve a pasar por ImageCache.
+    juce::Image backgroundArt;
+    juce::Image interactableArt;
+
     MksButton buttons[kNumButtons];
     DisplayMode mode = kModePatch;
 
@@ -158,6 +169,9 @@ class RdPiano_juceAudioProcessorEditor : public juce::AudioProcessorEditor,
         KnobLF() = default;
         ~KnobLF() override = default;
 
+        // El dial, cargado por el editor: mismo motivo que en MksButton.
+        juce::Image dial;
+
         void drawRotarySlider(juce::Graphics &g, int x, int y, int width, int height, float sliderPos,
                               const float rotaryStartAngle, const float rotaryEndAngle, juce::Slider &slider) override
         {
@@ -169,8 +183,7 @@ class RdPiano_juceAudioProcessorEditor : public juce::AudioProcessorEditor,
             auto px = centerX + cos(angle) * radius;
             auto py = centerY + sin(angle) * radius;
 
-            g.drawImage(juce::ImageCache::getFromMemory(BinaryData::alphadial_png, BinaryData::alphadial_pngSize),
-                        px - 244 / scale / 2, py - 244 / scale / 2, 244 / scale, 244 / scale, 0, 0, 244, 244);
+            g.drawImage(dial, px - 244 / scale / 2, py - 244 / scale / 2, 244 / scale, 244 / scale, 0, 0, 244, 244);
         }
 
       private:
