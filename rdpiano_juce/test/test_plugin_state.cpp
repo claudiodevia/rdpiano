@@ -278,3 +278,49 @@ TEST_SUITE(plugin_tail_length)
 
     p.releaseResources();
 }
+
+// Los buses. Lo canónico en un instrumento sería no declarar entrada, y se
+// probó: Logic deja de cargar la AU —ventana vacía y sin sonido— aunque `auval`
+// la valide. Así que el bus de entrada estéreo se queda, y esta suite lo fija
+// para que nadie lo vuelva a quitar sin leer la trampa 12 de CLAUDE.md.
+TEST_SUITE(plugin_bus_layout)
+{
+    RdPiano_juceAudioProcessor p;
+
+    CHECK_EQ(p.getBusCount(true), 1);
+    CHECK_EQ(p.getBusCount(false), 1);
+    CHECK_EQ(p.getMainBusNumInputChannels(), 2);
+    CHECK_EQ(p.getMainBusNumOutputChannels(), 2);
+
+    // La salida estéreo se acepta; cualquier otra cosa, no.
+    juce::AudioProcessor::BusesLayout stereo;
+    stereo.inputBuses.add(juce::AudioChannelSet::stereo());
+    stereo.outputBuses.add(juce::AudioChannelSet::stereo());
+    CHECK(p.checkBusesLayoutSupported(stereo));
+
+    juce::AudioProcessor::BusesLayout mono;
+    mono.inputBuses.add(juce::AudioChannelSet::stereo());
+    mono.outputBuses.add(juce::AudioChannelSet::mono());
+    CHECK(!p.checkBusesLayoutSupported(mono));
+
+    // Y aunque haya entrada, no se lee: lo que el anfitrión traiga en el búfer
+    // no se oye, porque el plugin lo sobrescribe entero.
+    p.prepareToPlay(48000.0, 256);
+
+    juce::AudioBuffer<float> buffer(2, 256);
+    for (int ch = 0; ch < 2; ch++)
+        for (int i = 0; i < 256; i++)
+            buffer.getWritePointer(ch)[i] = 0.5f;
+
+    juce::MidiBuffer midi;
+    p.processBlock(buffer, midi);
+
+    float peak = 0.0f;
+    for (int ch = 0; ch < 2; ch++)
+        for (int i = 0; i < 256; i++)
+            peak = juce::jmax(peak, std::abs(buffer.getReadPointer(ch)[i]));
+
+    checks.add("sin notas, salida en silencio", peak < 1e-4f, check_fmt("pico %g", (double)peak));
+
+    p.releaseResources();
+}

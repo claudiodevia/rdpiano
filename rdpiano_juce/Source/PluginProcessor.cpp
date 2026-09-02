@@ -19,6 +19,9 @@ static const RdRomSet romSets[ROMSET_COUNT] = {
 
 //==============================================================================
 RdPiano_juceAudioProcessor::RdPiano_juceAudioProcessor()
+    // El bus de entrada estéreo sobra en un instrumento —nunca se lee— y quitarlo
+    // es lo normal, pero **Logic no carga la AU sin él**: la ventana sale vacía y
+    // sin sonido (probado el 2026-09-02; ver trampa 12 de CLAUDE.md). Se queda.
     : AudioProcessor(BusesProperties()
                          .withInput("Input", juce::AudioChannelSet::stereo(), true)
                          .withOutput("Output", juce::AudioChannelSet::stereo(), true)),

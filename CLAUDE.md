@@ -62,9 +62,10 @@ inline en `sa_blocks.h`; LUT IC10/IC11 compartidas en `sa_tables.h`).
 `loadRomSet()` (caro) + `selectPatch()` (barato: reubica página alta de params, parchea bytes
 0x00–0x02). `loadSounds()` = ambos.
 
-**Todo lo caro se descifra al construir el motor** (~9 ms, 2,75 MB): `SoundChip` guarda una ranura
-de tablas de onda por juego de ROM (3 × 768 KB, montón), `RdPianoEngine` las 16 páginas de params ya
-descifradas (32 KB c/u). Cambio de parche = `selectRomSet()` (un puntero) + `selectPatchPage()`
+**Todo lo caro se descifra al construir el motor** (~9 ms, 2 MB): `SoundChip` guarda una ranura
+de tablas de onda por juego de ROM (3 × 512 KB, montón; cada dirección es un `WaveEntry` de
+`exp`+`delta` con el signo en el bit 15, no cuatro tablas paralelas), `RdPianoEngine` las 16 páginas
+de params ya descifradas (32 KB c/u). Cambio de parche = `selectRomSet()` (un puntero) + `selectPatchPage()`
 (memcpy 32 KB) ≈ µs → viable desde el hilo de audio. `decodeRomSet`/`selectRomSet` suben por
 `RdBoard` y `Mcu`; `prepareRomSetFor()` sobrevive como no-op. Página cacheada ≡ descifrado:
 `engine_patch_prepare`.
@@ -102,6 +103,10 @@ solo si se movió el fader; cada control se repinta solo. Las tres hojas de arte
 sola vez en el constructor del editor y se reparten a los botones y al dial (nada de `ImageCache`
 dentro de un `paint()`), y el display se dibuja a una `juce::Image` que sólo se rehace al cambiar el
 texto, la escala o el tamaño: son 1.190 rectángulos de 5×7 píxeles por repintado.
+
+**Buses**: entrada estéreo + salida estéreo. La entrada **no se lee nunca** (`processBlock` la
+sobrescribe entera) y en un instrumento sobra, pero **quitarla rompe Logic** → trampa 12. Lo fija
+`plugin_bus_layout`, que además comprueba que lo que el host traiga en el búfer no se oye.
 
 ## Mapa de memoria (`RdBoard::read`/`write`, [rd_board.h](librdpiano/include/rd_board.h))
 
@@ -151,6 +156,20 @@ texto, la escala o el tamaño: son 1.190 rectángulos de 5×7 píxeles por repin
     árbol APVTS, con los nombres de atributo de siempre.
 11. El `.lv2` se llama `rdpiano_juce.lv2` (antes `RdPiano.lv2`: `juce_add_plugin` usa
     `PRODUCT_NAME`); el URI no cambió. Los otros cuatro formatos conservan nombre, bundle id y códigos.
+12. **El bus de entrada del plugin no se toca.** Es un instrumento y nunca lee la entrada, así que
+    lo canónico sería no declararla —y `auval` valida igual sin ella—, pero **Logic no carga la AU
+    sin bus de entrada**: la inserta, no enseña la interfaz y no suena. Probado y revertido el
+    2026-09-02 (hallazgo F13 de [docs/REVISION-CODIGO.md](docs/REVISION-CODIGO.md), que ya avisaba de
+    probarlo en un DAW). Lo fija `plugin_bus_layout`.
+13. **Abrir el Standalone desde `build/` rompe la AU en Logic.** Los cinco formatos comparten
+    `aumu RDPN GlZs`, y arrancar el `.app` registra su AUv3 empotrado: a partir de ahí el sistema
+    resuelve esos códigos al **AUv3 del directorio de compilación**, que eclipsa el `.component`
+    instalado. Logic entonces dice *"No se ha podido cargar el módulo Audio Unit RdPiano"* y lo marca
+    con el triángulo amarillo. `auval -v aumu RDPN GlZs` lo delata en una línea: *"This AudioUnit is
+    a version 3 implementation"* cuando debería decir *version 2*. Se deshace con
+    `pluginkit -r <ruta>/rdpiano_juce.app/Contents/PlugIns/rdpiano_juce.appex` y un
+    "Restablecer y volver a explorar" en el gestor de módulos. Instalado en `/Applications` no
+    estorba: lo que no se puede cargar es un `.appex` que vive en `build/`.
 
 ## Build (solo CMake; no hay Projucer ni `.jucer`)
 
@@ -230,8 +249,9 @@ ctest --test-dir build/core --output-on-failure
   sobre la razón wet/dry por canal: periodo, oposición de fase entre canales, profundidad, y que el
   trémolo —al revés que el chorus— vaya al ritmo del **host**) y `engine_tail_length` (la cola real
   de los 16 parches contra la declarada).
-- **Plugin** (`rdpiano_juce/test/`, `rdpiano_plugin_tests`, 7 suites, 101 checks): presets ida y
-  vuelta, valores de fábrica, programas, preset corrupto, latencia y cola declaradas. Está en el
+- **Plugin** (`rdpiano_juce/test/`, `rdpiano_plugin_tests`, 8 suites, 108 checks): presets ida y
+  vuelta, valores de fábrica, programas, preset corrupto, latencia y cola declaradas, y buses
+  (`plugin_bus_layout`: entrada y salida estéreo, y el búfer del host no se oye). Está en el
   ctest de la raíz:
   ```bash
   cmake -B build/plugin -G Xcode -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64"

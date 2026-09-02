@@ -362,30 +362,21 @@ static inline void silence(float *left, float *right, int numFrames)
     }
 }
 
-void RdPianoEngine::render(float *left, float *right, int numFrames)
+// Bloque que no se puede rendir: la salida se limpia —dejarla intacta devolvería
+// al host la entrada o el bloque anterior en vez de silencio— y la cola MIDI se
+// vacía, porque sus eventos ya no tienen dónde ir.
+void RdPianoEngine::abortBlock(float *left, float *right, int numFrames)
 {
-    // Cambios de parche y de afinación pedidos desde fuera: aquí, entre
-    // bloques, y no en el hilo que los pidió. Es lo que quita el cerrojo.
-    serviceRequests();
+    silence(left, right, numFrames);
+    midiCount = 0;
+}
 
-    if (numFrames <= 0)
-    {
-        midiCount = 0;
-        return;
-    }
-
-    // Los búferes se dimensionaron en prepare(): un host que entregue un bloque
-    // mayor que el anunciado no puede escribir fuera.
-    if (numFrames > outCapacity)
-    {
-        stats.blockTooLarge++;
-        silence(left, right, numFrames);
-        midiCount = 0;
-        return;
-    }
-
-    const double destSampleRate = hostRate;
-    const double renderBufferFramesFloat = (double)numFrames / destSampleRate * sourceRate;
+// Cuántas muestras del emulador pide este bloque, con la corrección de deriva.
+// Devuelve 0 si el bloque no se puede rendir; `blockError` sale con lo que hay
+// que acumular en `samplesError` si se rinde.
+int RdPianoEngine::framesForBlock(int numFrames, double *blockError)
+{
+    const double renderBufferFramesFloat = (double)numFrames / hostRate * sourceRate;
     int renderBufferFrames = (int)ceil(renderBufferFramesFloat);
     double currentError = renderBufferFrames - renderBufferFramesFloat;
 
@@ -401,36 +392,30 @@ void RdPianoEngine::render(float *left, float *right, int numFrames)
         currentError += limit;
     }
 
-    // Los dos retornos tempranos limpian la salida: dejarla intacta devolvería
-    // al host la entrada o el bloque anterior en vez de silencio. No deberían
-    // alcanzarse, pero un host puede pedir cualquier cosa.
+    // Ninguno de los dos debería alcanzarse, pero un host puede pedir cualquier
+    // cosa.
     if (renderBufferFrames < 2)
     {
         stats.tooFewFrames++;
         RD_TRACE("engine: no hay muestras que generar (%d)", renderBufferFrames);
-        silence(left, right, numFrames);
-        midiCount = 0;
-        return;
+        return 0;
     }
     if (renderBufferFrames > 20000 || renderBufferFrames > emuCapacity)
     {
         stats.tooManyFrames++;
         RD_TRACE("engine: demasiadas muestras que generar (%d > %d)", renderBufferFrames, emuCapacity);
-        silence(left, right, numFrames);
-        midiCount = 0;
-        return;
+        return 0;
     }
 
-    // `emuL`/`emuR` no se limpian: el bucle de síntesis les *asigna* las
-    // `renderBufferFrames` primeras posiciones y `resample_process()` no lee
-    // ninguna más. `outL`/`outR` sí, porque el remuestreador puede devolver
-    // menos de `numFrames` y la cola se lee igual.
-    for (int i = 0; i < numFrames; i++)
-    {
-        outL[i] = 0.0f;
-        outR[i] = 0.0f;
-    }
+    *blockError = currentError;
+    return renderBufferFrames;
+}
 
+// El bucle de síntesis: emulador, los dos efectos con sus rampas y el reparto
+// del MIDI, a `sourceRate`, hacia `emuL`/`emuR`. Devuelve cuántos eventos de la
+// cola se entregaron; los que quedan van más allá del último frame generado.
+int RdPianoEngine::synthesise(int emuFrames)
+{
     const bool mode32khz = sourceRate == 32000;
 
     // `rate` es el incremento de fase del LFO por muestra del EMULADOR, que corre
@@ -450,7 +435,7 @@ void RdPianoEngine::render(float *left, float *right, int numFrames)
     // muestras del host e `i` en muestras del emulador, así que hay que
     // convertir. La cola llega ordenada; un evento fuera de orden no se pierde,
     // se entrega en el vaciado del final.
-    const double hostToEmu = (double)sourceRate / destSampleRate;
+    const double hostToEmu = (double)sourceRate / hostRate;
     int nextEvent = 0;
 
     // `volume` se interpola dentro del bloque: leerlo una vez y saltar de golpe
@@ -458,12 +443,12 @@ void RdPianoEngine::render(float *left, float *right, int numFrames)
     // segundo. Al final del bucle se asigna el destino en vez de acumularlo, así
     // que con el mando quieto el paso es exactamente 0 y no hay deriva.
     const float volumeTarget = params.volume;
-    const float volumeStep = (volumeTarget - volumeSmoothed) / (float)renderBufferFrames;
+    const float volumeStep = (volumeTarget - volumeSmoothed) / (float)emuFrames;
 
     const float chorusTarget = params.chorusEnabled ? 1.0f : 0.0f;
     const float efxTarget = params.efxEnabled ? 1.0f : 0.0f;
 
-    for (int i = 0; i < renderBufferFrames; i++)
+    for (int i = 0; i < emuFrames; i++)
     {
         while (nextEvent < midiCount && (int)(midiQueue[nextEvent].frame * hostToEmu) <= i)
         {
@@ -526,20 +511,40 @@ void RdPianoEngine::render(float *left, float *right, int numFrames)
     }
     volumeSmoothed = volumeTarget;
 
-    const double ratio = destSampleRate / sourceRate;
+    return nextEvent;
+}
+
+// De `sourceRate` a la tasa del host: `emuL`/`emuR` entran, `outL`/`outR` salen.
+void RdPianoEngine::resampleBlock(int emuFrames, int numFrames, double blockError)
+{
+    // `emuL`/`emuR` no se limpian: el bucle de síntesis les *asigna* las
+    // `emuFrames` primeras posiciones y `resample_process()` no lee ninguna más.
+    // `outL`/`outR` sí, porque el remuestreador puede devolver menos de
+    // `numFrames` y la cola se lee igual.
+    for (int i = 0; i < numFrames; i++)
+    {
+        outL[i] = 0.0f;
+        outR[i] = 0.0f;
+    }
+
+    const double ratio = hostRate / sourceRate;
 
     int inUsed = 0;
-    [[maybe_unused]] const int out =
-        resample_process(resampleL, ratio, emuL, renderBufferFrames, 0, &inUsed, outL, numFrames);
-    resample_process(resampleR, ratio, emuR, renderBufferFrames, 0, &inUsed, outR, numFrames);
-    samplesError += currentError;
+    [[maybe_unused]] const int out = resample_process(resampleL, ratio, emuL, emuFrames, 0, &inUsed, outL, numFrames);
+    resample_process(resampleR, ratio, emuR, emuFrames, 0, &inUsed, outR, numFrames);
+    samplesError += blockError;
     if (inUsed == 0)
     {
         samplesError = 0;
         stats.clicks++;
         RD_TRACE("engine: click (%d)", out);
     }
+}
 
+// Lo que va detrás del remuestreador, ya a la tasa del host: ganancia de parche,
+// declick, trémolo y EQ.
+void RdPianoEngine::outputStage(float *left, float *right, int numFrames)
+{
     // Trémolo: la fase avanza por muestra y se acota a 2 pi, en vez de
     // multiplicar un contador absoluto que acaba en cientos de miles de
     // radianes (y da un salto al desbordar). El canal derecho es el izquierdo
@@ -547,7 +552,7 @@ void RdPianoEngine::render(float *left, float *right, int numFrames)
     // sen() sin una segunda llamada.
     const float depth = clamp_index(params.tremoloDepth, 0, 14) / 14.0f;
     const double tremoloHz = clamp_index(params.tremoloRate, 0, 14) / 2.0; // el dial son Hz/2
-    const double tremoloStep = kTwoPi * tremoloHz / destSampleRate;
+    const double tremoloStep = kTwoPi * tremoloHz / hostRate;
 
     // La compensación de headroom entra en la salida, no antes: el emulador y
     // lsp/ son aritmética entera transcrita del hardware y multiplicar dentro
@@ -587,12 +592,46 @@ void RdPianoEngine::render(float *left, float *right, int numFrames)
         left[i] = eqL.process(left[i]);
     for (int i = 0; i < numFrames; i++)
         right[i] = eqR.process(right[i]);
+}
+
+void RdPianoEngine::render(float *left, float *right, int numFrames)
+{
+    // Cambios de parche y de afinación pedidos desde fuera: aquí, entre
+    // bloques, y no en el hilo que los pidió. Es lo que quita el cerrojo.
+    serviceRequests();
+
+    if (numFrames <= 0)
+    {
+        abortBlock(left, right, numFrames);
+        return;
+    }
+
+    // Los búferes se dimensionaron en prepare(): un host que entregue un bloque
+    // mayor que el anunciado no puede escribir fuera.
+    if (numFrames > outCapacity)
+    {
+        stats.blockTooLarge++;
+        abortBlock(left, right, numFrames);
+        return;
+    }
+
+    double blockError = 0;
+    const int emuFrames = framesForBlock(numFrames, &blockError);
+    if (emuFrames == 0)
+    {
+        abortBlock(left, right, numFrames);
+        return;
+    }
+
+    const int eventsSent = synthesise(emuFrames);
+    resampleBlock(emuFrames, numFrames, blockError);
+    outputStage(left, right, numFrames);
 
     // Lo que quedó más allá del último frame generado: eventos que el host situó
     // al final del bloque y que la conversión de tasas deja fuera. Se entregan
     // aquí en vez de perderse.
-    for (; nextEvent < midiCount; nextEvent++)
-        mcu->sendMidiCmd(midiQueue[nextEvent].status, midiQueue[nextEvent].data1, midiQueue[nextEvent].data2);
+    for (int i = eventsSent; i < midiCount; i++)
+        mcu->sendMidiCmd(midiQueue[i].status, midiQueue[i].data1, midiQueue[i].data2);
 
     midiCount = 0;
 }

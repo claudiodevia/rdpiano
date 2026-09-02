@@ -50,14 +50,24 @@ class SoundChip
     static constexpr unsigned PARTS_PER_VOICE = 10;
     static constexpr unsigned PARTS_PER_VOICE_MEM = 16;
 
+    // Una dirección de la wave ROM ya descifrada. `exp` usa 14 bits y `delta` 9,
+    // así que el signo —que antes ocupaba un `bool` de un byte por tabla— cabe
+    // en el bit 15 de cada uno: 512 KB por ranura en vez de 768 KB, y una sola
+    // línea de caché por lectura en vez de cuatro tablas paralelas.
+    static constexpr uint16_t WAVE_SIGN = 0x8000;
+    static constexpr uint16_t WAVE_SAMPLE = 0x7FFF;
+
+    struct WaveEntry
+    {
+        uint16_t exp;
+        uint16_t delta;
+    };
+
     // Las tablas de onda ya descifradas, una ranura por juego de ROM. En el
-    // montón y no en el objeto: son 768 KB por ranura.
+    // montón y no en el objeto: son 512 KB por ranura.
     struct WaveTables
     {
-        uint16_t exp[0x20000];
-        bool exp_sign[0x20000];
-        uint16_t delta[0x20000];
-        bool delta_sign[0x20000];
+        WaveEntry entries[0x20000];
     };
 
     WaveTables *wave_slots = nullptr;

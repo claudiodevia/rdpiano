@@ -213,6 +213,14 @@ class RdPianoEngine
     void applyPatch(int patch);
     void serviceRequests();
 
+    // Las fases de `render()`, en el orden en que corren. El orden de
+    // operaciones dentro de cada una es audio: no se toca.
+    void abortBlock(float *left, float *right, int numFrames);
+    int framesForBlock(int numFrames, double *blockError);
+    int synthesise(int emuFrames);
+    void resampleBlock(int emuFrames, int numFrames, double blockError);
+    void outputStage(float *left, float *right, int numFrames);
+
     // Peticiones pendientes. -1 y kNoTuneRequest = no hay nada que atender.
     static const int kNoTuneRequest = 0x7fffffff;
     std::atomic<int> patchRequest{-1};

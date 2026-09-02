@@ -113,9 +113,9 @@ s32 SoundChip::update()
 
             const Ic19Out ic19 = tick_ic19(part, partFlags);
             const Ic9Out ic9 = tick_ic9(part, partFlags, tables);
-            const s32 exp_val =
-                tick_ic8(part, ic19, ic9, waves->exp[ic9.waverom_addr], waves->exp_sign[ic9.waverom_addr],
-                         waves->delta[ic9.waverom_addr], waves->delta_sign[ic9.waverom_addr], tables);
+            const WaveEntry &wave = waves->entries[ic9.waverom_addr];
+            const s32 exp_val = tick_ic8(part, ic19, ic9, wave.exp & WAVE_SAMPLE, (wave.exp & WAVE_SIGN) != 0,
+                                         wave.delta & WAVE_SAMPLE, (wave.delta & WAVE_SIGN) != 0, tables);
 
             // hack to prevent voices ringing when env value is 0, investigate
             if (part.env_value != 0)
@@ -176,14 +176,12 @@ void SoundChip::decode_samples(unsigned slot, const u8 *temp_ic5, const u8 *temp
              ((b7 >> 2) & 1) << 5 | ((b7 >> 1) & 1) << 4 | ((~b5 >> 1) & 1) << 3 | ((b5 >> 3) & 1) << 2 |
              ((b6 >> 5) & 1) << 1 | ((~b6 >> 7) & 1) << 0);
         bool exp_sign = (~b7 >> 3) & 1;
-        out.exp[i] = exp_sample;
-        out.exp_sign[i] = exp_sign;
+        out.entries[i].exp = exp_sample | (exp_sign ? WAVE_SIGN : 0);
 
         uint16_t delta_sample = (((~b7 >> 6) & 1) << 8 | ((b5 >> 4) & 1) << 7 | ((b7 >> 0) & 1) << 6 |
                                  ((~b6 >> 3) & 1) << 5 | ((b5 >> 2) & 1) << 4 | ((~b5 >> 6) & 1) << 3 |
                                  ((b6 >> 6) & 1) << 2 | ((b7 >> 5) & 1) << 1 | ((~b6 >> 7) & 1) << 0);
         bool delta_sign = (b6 >> 1) & 1;
-        out.delta[i] = delta_sample;
-        out.delta_sign[i] = delta_sign;
+        out.entries[i].delta = delta_sample | (delta_sign ? WAVE_SIGN : 0);
     }
 }
