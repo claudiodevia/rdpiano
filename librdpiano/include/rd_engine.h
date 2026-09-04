@@ -201,12 +201,20 @@ class RdPianoEngine
 
     /**
      * @brief Pide un cambio de afinación desde cualquier hilo.
+     *
+     * La atiende render() igual que la del parche, y por el mismo motivo: afinar
+     * apaga las voces del firmware, así que va con declick y devolviéndole
+     * después las teclas y el pedal que siguieran pulsados. RT-safe.
+     *
      * @param tune Desviación con signo en el rango de un int16.
      */
     void requestMasterTune(int16_t tune);
 
     /**
      * @brief Afina en el acto, corriendo el emulador (~0,16 ms).
+     *
+     * Sin declick: sólo arranque y pruebas, nunca con render() vivo en otro hilo.
+     *
      * @param tune Desviación con signo en el rango de un int16.
      */
     void setMasterTune(int16_t tune);
@@ -297,6 +305,8 @@ class RdPianoEngine
     const u8 *paramPage(int patch) const;
 
     void applyPatch(int patch);
+    void applyMasterTune(int16_t tune);
+    void finishChange();
     void serviceRequests();
 
     /// Espejo de lo que el firmware cree pulsado, y su reenvío tras un cambio de
@@ -321,14 +331,16 @@ class RdPianoEngine
     std::atomic<int> latestPatch{0};
     std::atomic<int> latestTune{0};
 
-    /// Declick del cambio de parche: la salida baja a cero antes de cambiar y
-    /// sube después. `declickPatch` es el parche que espera a que la rampa toque
-    /// fondo; el cambio se aplica entre bloques, nunca a mitad de uno, porque la
-    /// tasa del emulador cambia con él.
+    /// Declick del cambio de parche y del de afinación: la salida baja a cero
+    /// antes de cambiar y sube después. `declickPatch` y `declickTune` son el
+    /// parche y la afinación que esperan a que la rampa toque fondo; el cambio se
+    /// aplica entre bloques, nunca a mitad de uno, porque la tasa del emulador
+    /// cambia con el parche y afinar corre el emulador.
     float declickGain = 1.0f;
     float declickDownStep = 1.0f;
     float declickUpStep = 1.0f;
     int declickPatch = -1;
+    int declickTune = kNoTuneRequest;
 
     /// Mezcla de los dos efectos: 0 = seco, 1 = efecto. Se mueve en rampa, y
     /// `process()` corre siempre —también en bypass— para que la línea de retardo

@@ -12,6 +12,14 @@ Cambios de cada versión publicada de RdPiano. La más nueva, arriba.
   tocado.
 - La transición del cambio es más suave y algo más larga, así que no se oye ni
   el corte del sonido anterior ni la entrada del siguiente.
+- Cambiar la afinación ya no deja el instrumento mudo: entra con esa misma
+  transición suave y lo que estuvieras tocando —notas y pedal— sigue sonando, ya
+  afinado.
+
+### Uso en directo
+
+- El dial de afinación enseña los Hz mientras se gira y afina al soltarlo, igual
+  que el de sonidos.
 
 ## 1.0.0 — 1 de septiembre de 2026
 

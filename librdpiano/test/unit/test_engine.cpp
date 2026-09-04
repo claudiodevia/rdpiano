@@ -1084,6 +1084,68 @@ TEST_SUITE(engine_patch_held_notes)
 }
 
 /**
+ * @brief ------------------------------------------ notas y pedal al afinar
+ */
+TEST_SUITE(engine_tune_held_notes)
+{
+    // Afinar corre el switcharoo del firmware (program change 0 -> tuning ->
+    // program change 0, trampa 4 de CLAUDE.md) y esos program change apagan las
+    // voces y sueltan el pedal igual que los del cambio de parche: mover el dial
+    // de TUNE cortaba el sonido en seco. Fija que la afinación pase por el mismo
+    // declick y por el mismo espejo de lo pulsado.
+    const int BLOCK = 256;
+    auto e = make_engine(48000.0, BLOCK);
+    if (!e)
+    {
+        CHECK_MSG(false, "sin ROMs en %s", g_roms_dir.c_str());
+        return;
+    }
+
+    e->params.chorusEnabled = false;
+
+    e->pushMidi(0, 0xb0, 64, 127);
+    e->pushMidi(0, 0x90, 60, 110);
+    e->pushMidi(0, 0x90, 64, 110);
+    e->pushMidi(0, 0x90, 67, 110);
+
+    Stereo before;
+    render_into(e.get(), before, BLOCK, 94); // ~0,5 s
+    const double levelBefore = rms(before.l, before.l.size() / 2, before.l.size());
+    const double stepBefore = worst_step(before.l, before.l.size() / 2, before.l.size());
+
+    // Todo el recorrido del dial de una vez: el peor caso.
+    e->requestMasterTune(32767);
+
+    Stereo during;
+    render_into(e.get(), during, BLOCK, 24);
+    const double stepDuring = worst_step(during.l, 0, during.l.size());
+
+    Stereo after;
+    render_into(e.get(), after, BLOCK, 164);
+    const double levelAfter = rms(after.l, after.l.size() / 2, after.l.size());
+
+    checks.add("afinacion-aplicada", e->masterTune() == 32767, check_fmt("tune %d", (int)e->masterTune()));
+    checks.add("acorde-sobrevive", levelAfter > levelBefore * 0.1,
+               check_fmt("RMS %.5f tras afinar, %.5f antes", levelAfter, levelBefore));
+    checks.add("sin-salto", stepDuring < stepBefore * 2.0,
+               check_fmt("salto %.5f al afinar, %.5f antes", stepDuring, stepBefore));
+
+    // Y reentra al nivel al que había llegado, no al de su ataque.
+    std::vector<float> lastBefore(before.l.end() - (size_t)(0.05 * 48000.0), before.l.end());
+    std::vector<float> onset(during.l.begin(), during.l.end());
+    const double jumpDb = 20.0 * log10((peak(onset) + 1e-9) / (peak(lastBefore) + 1e-9));
+    checks.add("reentrada-sin-golpe", jumpDb < 6.0, check_fmt("pico de la reentrada %+.1f dB", jumpDb));
+
+    // El pedal sigue abajo: una nota corta tiene que dejar cola al soltarla.
+    e->pushMidi(0, 0x90, 72, 110);
+    e->pushMidi(BLOCK / 2, 0x80, 72, 0);
+    Stereo pedal;
+    render_into(e.get(), pedal, BLOCK, 188);
+    const double tail = rms(pedal.l, pedal.l.size() * 3 / 4, pedal.l.size());
+    checks.add("pedal-sobrevive", tail > 1e-3, check_fmt("cola %.6f tras soltar la tecla", tail));
+}
+
+/**
  * @brief ------------------------------------------------- rampa de volumen
  */
 TEST_SUITE(engine_volume_ramp)

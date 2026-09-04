@@ -35,15 +35,18 @@ la misma; lo que cambia es todo lo que la rodea.
 - **Cambiar de sonido sobre la marcha.** El cambio entra con una transición suave, y las notas que
   estén sonando y el pedal continúan con el sonido nuevo al volumen al que iban: no se corta la
   música ni se cuela un ataque que nadie ha tocado.
+- **Afinar sin cortar el sonido.** Mover la afinación dejaba mudo el instrumento hasta volver a
+  tocar. Ahora entra con la misma transición suave que el cambio de sonido, y lo que estés tocando
+  —notas y pedal— sigue sonando, ya afinado.
 - **Memoria bajo control.** Todo lo caro —las tablas de onda descifradas, unos 2,75 MB— se prepara
   una sola vez al arrancar, no en cada cambio de sonido. No hay fugas: el plugin ocupa lo mismo
   después de tres horas que al abrirlo.
 - **Rendimiento para el escenario.** Cambiar de sonido cuesta microsegundos en vez de rehacer el
   trabajo entero. El motor no reserva memoria ni se bloquea mientras genera audio, así que el
   programa anfitrión no pierde bloques: no hay cortes ni chasquidos al manipular el panel tocando.
-- **Detalles de directo.** El dial enseña el nombre mientras se gira y aplica el sonido al soltarlo,
-  sin pasar por los quince de en medio; el plugin declara su latencia al anfitrión; los ajustes
-  guardados recuperan también el sonido y la afinación.
+- **Detalles de directo.** El dial enseña el valor mientras se gira y lo aplica al soltarlo —tanto el
+  sonido, sin pasar por los quince de en medio, como la afinación—; el plugin declara su latencia al
+  anfitrión; los ajustes guardados recuperan también el sonido y la afinación.
 - **Empaquetado y probado.** Cinco formatos en un binario universal, compilación con una orden y
   pruebas automáticas que verifican en cada cambio que el sonido sigue siendo bit a bit el mismo.
 

@@ -38,7 +38,7 @@ JUCE. `prepare()` reserva todo; `render()` no reserva, no bloquea, no imprime.
   pruebas, nunca con `render()` vivo en otro hilo.
 - `patch()`/`masterTune()` = intención (lo pedido aunque no atendido); `activePatch()` = lo que suena.
 
-**Declick de cambio de parche**: rampa a cero en 6 ms → aplicar → subida en 15 ms, o en 40 ms si el
+**Declick de cambio de parche y de afinación**: rampa a cero en 6 ms → aplicar → subida en 15 ms, o en 80 ms si el
 cambio ha tenido que volver a disparar notas (la subida larga esconde el golpe de martillo de la
 reentrada). La ganancia va por **smoothstep** (`g²(3−2g)`, `declick_shape`): arranca plana —que es
 lo que tapa el transitorio— pero también llega plana, y en 0 y en 1 no cambia nada. Antes eran 90 ms
@@ -47,6 +47,14 @@ de su nivel hasta pasados 60 ms y no se recuperaba hasta los 100; ahora el hueco
 45 ms y no baja de −16 dB. El pico de la reentrada no se mueve (−0,4 dB).
 Siempre **entre bloques**, porque la tasa del emulador cambia con el parche y el bloque entero
 depende de ella. `processBlock` no espera a nadie → el plugin no pierde bloques.
+
+**La afinación va por el mismo camino que el parche.** El switcharoo de `Mcu::setMasterTune()`
+(trampa 4) manda dos program change, que apagan las voces y sueltan el pedal exactamente igual que
+el de `reloadPatch()`: sin declick ni espejo, mover el dial de TUNE cortaba el sonido en seco
+(medido: RMS 0). `serviceRequests()` guarda la afinación pendiente en `declickTune`, espera al cero
+de la rampa y, si además hay parche pendiente, **afina primero y cambia después** — al revés, los
+program change del afinado matarían las notas que acaba de devolver el parche. Restaurar y elegir
+la subida es común a los dos: `finishChange()`. Lo fija `engine_tune_held_notes`.
 
 **Notas y pedal sobreviven al cambio de parche.** `applyPatch()` tiene que mandar el program change
 de `reloadPatch()` —única forma de que el firmware relea la página recién mapeada; sin él el timbre
@@ -119,8 +127,9 @@ nota al exportar o al congelar la pista.
 **Plugin** = 3 archivos + 2 tablas: `PluginParams.h` (10 parámetros, fábrica desde `RdEngineParams`),
 `PluginProcessor` (APVTS, serializa presets), `PluginEditor` (`ButtonSpec`×17, `ModeSpec`×8). El
 procesador es además `juce::Timer` @10 Hz: recoge el parche que el motor cambie por su cuenta
-(program change MIDI) para espejo, preset y panel. El dial de parches cambia de sonido **al
-soltarlo** (`sliderDragEnded`); arrastrando solo enseña el nombre. `updateValues()` repinta el fondo
+(program change MIDI) para espejo, preset y panel. Los diales de parche y de afinación aplican **al
+soltarlos** (`sliderDragEnded`); arrastrando solo enseñan el nombre o los Hz, porque los dos apagan
+el firmware y un gesto entero serían decenas de reentradas encadenadas. `updateValues()` repinta el fondo
 solo si se movió el fader; cada control se repinta solo. Las tres hojas de arte se decodifican una
 sola vez en el constructor del editor y se reparten a los botones y al dial (nada de `ImageCache`
 dentro de un `paint()`), y el display se dibuja a una `juce::Image` que sólo se rehace al cambiar el
@@ -162,7 +171,8 @@ sobrescribe entera) y en un instrumento sobra, pero **quitarla rompe Logic** →
    condicional contra voces colgadas (`investigate`). Fijados por `test/vectors/ic_blocks.txt`.
 4. `setMasterTune()` corre el emulador (~200 muestras + `programChange(0)`, ~0,16 ms) — lo corre
    `render()` al atender la petición, no el hilo de UI. Lleva "switcharoo" 0x30 → tuning → 0x30
-   porque afinar parches ≠ 0 falla.
+   porque afinar parches ≠ 0 falla, y esos program change **apagan las voces y sueltan el pedal**:
+   por eso afinar lleva declick y devolución de lo pulsado, como el cambio de parche.
 5. `mcu_ops.h` y `mame_utils.h` derivan de MAME (BSD-3): no reescribir por estilo, mantener atribución.
 6. `re_stuff/verilog/` es, según su propio README, *"probably most of them wrong"*: investigación,
    no fuente de verdad.
@@ -265,7 +275,9 @@ ctest --test-dir build/core --output-on-failure
   caliente, extremos de parámetros) y lo único que verifica **cero reservas en `render()`**
   (sustituye `operator new` global + vigila `stats.resamplerOpens`, porque libresample usa `malloc`).
   Red de transitorios: `engine_effect_tail` (encender un efecto en silencio → silencio),
-  `engine_effect_bypass_ramp`, `engine_program_change`, `engine_patch_declick`, `engine_volume_ramp`,
+  `engine_effect_bypass_ramp`, `engine_program_change`, `engine_patch_declick`,
+  `engine_tune_held_notes` (afinar con acorde y pedal aguantados: sobreviven, sin salto y sin golpe
+  de tecla), `engine_volume_ramp`,
   `engine_latency`, `engine_lfo_rate` (periodo del LFO del chorus por autocorrelación de la
   diferencia wet-dry; fija que dependa de la tasa del parche), `engine_tremolo` (el mismo método
   sobre la razón wet/dry por canal: periodo, oposición de fase entre canales, profundidad, y que el
@@ -288,7 +300,7 @@ en verde = cambio en el orden de evaluación del bucle → revertir.
 Tocar `lsp/`, `rd_engine.cpp` o `rdpiano_juce/` **no** mueve el golden (el harness mide el emulador
 desnudo): ahí la red es `test_engine.cpp` y `test_lsp.cpp`.
 
-Sin cubrir: `setMasterTune()`, la UI (incluido el dial, que aplica el parche al soltar) y sobre todo
+Sin cubrir: la UI (incluidos los diales, que aplican al soltar) y sobre todo
 el **timbre** — los efectos se congelan por hash, que detecta pero no juzga. Verificación auditiva
 con `test/standalone.cpp` o el plugin en un DAW. Un cambio en `sound_chip.cpp` que pase el harness
 pero mueva el hash es de **alto riesgo tímbrico: decírselo al usuario**.

@@ -155,11 +155,21 @@ class RdPiano_juceAudioProcessorEditor : public juce::AudioProcessorEditor,
     MksButton buttons[kNumButtons];
     DisplayMode mode = kModePatch;
 
-    /// El dial de parches sólo cambia de sonido al SOLTARLO: mientras se arrastra
-    /// enseña el nombre y nada más. Un gesto de extremo a extremo eran quince
-    /// cambios de parche encadenados, con sus quince cortes de audio.
+    /// Los diales de parche y de afinación sólo cambian el sonido al SOLTARLOS:
+    /// mientras se arrastran enseñan el valor y nada más. Un gesto de extremo a
+    /// extremo eran quince cambios de parche encadenados con sus quince cortes de
+    /// audio, y afinar apaga las voces del firmware igual que cambiar de parche.
     bool dialDragging = false;
-    int dialPatchPreview = -1;
+    static const int kNoDialPreview = 0x7fffffff;
+    int dialPreview = kNoDialPreview;
+
+    /// El valor que el dial enseña sin haber aplicado todavía, o el que ya está
+    /// puesto. Sólo cuenta en el modo que lo dejó: el dial es uno y el valor
+    /// crudo de un modo no significa nada en otro.
+    int dialValueOr(DisplayMode forMode, int applied) const
+    {
+        return mode == forMode && dialPreview != kNoDialPreview ? dialPreview : applied;
+    }
 
     /// Última posición del fader ya pintada: el fondo sólo se repinta cuando se
     /// mueve, y sólo la franja del fader.

@@ -289,7 +289,7 @@ void RdPiano_juceAudioProcessorEditor::sliderValueChanged(juce::Slider *slider)
         // cambio de verdad va en sliderDragEnded.
         if (dialDragging)
         {
-            dialPatchPreview = patch;
+            dialPreview = patch;
             updateValues();
             return;
         }
@@ -300,7 +300,19 @@ void RdPiano_juceAudioProcessorEditor::sliderValueChanged(juce::Slider *slider)
 
     if (mode == kModeTune)
     {
-        audioProcessor.setMasterTune((int16_t)(value * 32767.0));
+        const int tune = (int)(value * 32767.0);
+
+        // Igual que el dial de parches: afinar apaga las voces del firmware y el
+        // motor tiene que devolverlas, así que un gesto entero serían decenas de
+        // reentradas seguidas. Arrastrando sólo se enseñan los Hz.
+        if (dialDragging)
+        {
+            dialPreview = tune;
+            updateValues();
+            return;
+        }
+
+        audioProcessor.setMasterTune((int16_t)tune);
         return;
     }
 
@@ -325,10 +337,15 @@ void RdPiano_juceAudioProcessorEditor::sliderDragEnded(juce::Slider *slider)
 
     dialDragging = false;
 
-    if (mode == kModePatch && dialPatchPreview >= 0)
-        audioProcessor.setCurrentProgram(dialPatchPreview);
+    if (dialPreview != kNoDialPreview)
+    {
+        if (mode == kModePatch)
+            audioProcessor.setCurrentProgram(dialPreview);
+        else if (mode == kModeTune)
+            audioProcessor.setMasterTune((int16_t)dialPreview);
+    }
 
-    dialPatchPreview = -1;
+    dialPreview = kNoDialPreview;
     updateValues();
 }
 
@@ -340,7 +357,7 @@ void RdPiano_juceAudioProcessorEditor::updateValues()
 {
     // Con el dial de parches en la mano manda su posición: el parche todavía no
     // ha cambiado, pero el panel ya enseña cuál se va a poner al soltar.
-    const int patch = dialPatchPreview >= 0 ? dialPatchPreview : audioProcessor.currentPatch;
+    const int patch = dialValueOr(kModePatch, audioProcessor.currentPatch);
     const bool alternativeMode = modeSpecs[mode].countsAsAlternative;
 
     for (int i = 0; i < kNumButtons; i++)
@@ -388,13 +405,14 @@ void RdPiano_juceAudioProcessorEditor::updateValues()
     {
         // 442 Hz de referencia y +/-3,85 Hz de recorrido: es lo que abarca el
         // parámetro de afinación del firmware.
-        const juce::String hz(442.0 + audioProcessor.masterTune / 32767.0 * 3.85, 1);
+        const int tune = dialValueOr(kModeTune, (int)audioProcessor.masterTune);
+        const juce::String hz(442.0 + tune / 32767.0 * 3.85, 1);
 
         memset(line, ' ', Lcd::kChars);
         lcdPut(line, 0, "TUNING");
         lcdPut(line, Lcd::kColumns, hz.toRawUTF8());
         lcdPut(line, Lcd::kColumns + hz.length(), "Hz");
-        dial = audioProcessor.masterTune / 32767.0;
+        dial = tune / 32767.0;
     }
     else
     {

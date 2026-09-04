@@ -50,17 +50,18 @@ static const float kPi = 3.14159265358979323846f;
 static const double kTwoPi = 2.0 * 3.14159265358979323846;
 
 /// Rampas de conmutación, en milisegundos. La de los efectos es la que evita el
-/// salto duro del bypass; las dos del parche son el declick: bajar rápido, subir
-/// despacio, que es como se oye menos.
+/// salto duro del bypass; las otras dos son el declick de los cambios que apagan
+/// el firmware —parche y afinación—: bajar rápido, subir despacio, que es como
+/// se oye menos.
 static const float kEffectMixRampMs = 10.0f;
-static const float kPatchFadeOutMs = 6.0f;
-static const float kPatchFadeInMs = 15.0f;
+static const float kChangeFadeOutMs = 6.0f;
+static const float kChangeFadeInMs = 15.0f;
 
 /// Subida cuando el cambio ha tenido que volver a disparar lo que se estaba
 /// tocando: más larga que la normal a propósito, porque es la que esconde el
 /// golpe de martillo de las notas que reentran (los primeros milisegundos del
 /// ataque).
-static const float kPatchFadeInHeldMs = 80.0f;
+static const float kChangeFadeInHeldMs = 80.0f;
 
 /// Cuánto baja el nivel del ataque por unidad de velocidad. Medido sobre los 16
 /// parches: entre v16 y v120 la curva es recta a 0,228 dB por unidad (por debajo
@@ -270,10 +271,11 @@ void RdPianoEngine::prepare(double newHostRate, int newMaxBlock)
     // Las rampas, en muestras. Las de los efectos van al ritmo del emulador
     // (dentro del bucle de síntesis) y el declick al del host (en la salida).
     effectMixStep = ramp_step(kEffectMixRampMs, sourceRate);
-    declickDownStep = ramp_step(kPatchFadeOutMs, hostRate);
-    declickUpStep = ramp_step(kPatchFadeInMs, hostRate);
+    declickDownStep = ramp_step(kChangeFadeOutMs, hostRate);
+    declickUpStep = ramp_step(kChangeFadeInMs, hostRate);
     declickGain = 1.0f;
     declickPatch = -1;
+    declickTune = kNoTuneRequest;
 
     // `boot()` reinicia el firmware entero, así que el espejo de lo pulsado
     // arranca vacío con él.
@@ -326,16 +328,20 @@ void RdPianoEngine::applyPatch(int patch)
     // La constante del seguidor de nivel va al ritmo del emulador, que acaba de
     // cambiar con el parche.
     levelSmooth = 1.0f - expf(-1.0f / (kLevelTauMs * 0.001f * (float)sourceRate));
+}
 
-    // El program change de `reloadPatch()` es la única forma de que el firmware
-    // relea la página recién mapeada, y de paso apaga las voces y suelta el
-    // pedal: sin devolverle lo que había pulsado, cambiar de sonido con notas o
-    // pedal aguantados los dejaba mudos hasta soltar y volver a tocar.
-    //
-    // Si ha reentrado algo, la salida sube despacio: es lo que convierte el
-    // golpe de tecla en una entrada suave.
+/**
+ * @brief Cierra un cambio que ha apagado el firmware: devuelve lo pulsado y elige la subida.
+ *
+ * Tanto el program change de `reloadPatch()` como el switcharoo de la afinación
+ * apagan las voces y sueltan el pedal dentro del firmware, así que los dos
+ * terminan aquí. Si ha reentrado algo, la salida sube despacio: es lo que
+ * convierte el golpe de tecla en una entrada suave.
+ */
+void RdPianoEngine::finishChange()
+{
     const int retriggered = restoreHeldNotes();
-    declickUpStep = ramp_step(retriggered > 0 ? kPatchFadeInHeldMs : kPatchFadeInMs, hostRate);
+    declickUpStep = ramp_step(retriggered > 0 ? kChangeFadeInHeldMs : kChangeFadeInMs, hostRate);
 }
 
 void RdPianoEngine::trackMidi(u8 status, u8 data1, u8 data2)
@@ -414,6 +420,7 @@ void RdPianoEngine::setPatch(int patch)
     patchRequest.store(-1, std::memory_order_relaxed);
     declickPatch = -1;
     applyPatch(patch);
+    finishChange();
 }
 
 void RdPianoEngine::requestPatch(int patch)
@@ -438,24 +445,52 @@ void RdPianoEngine::serviceRequests()
     if (requested >= 0 && requested < NUM_PATCHES)
         declickPatch = requested == currentPatch ? -1 : requested;
 
+    // Afinar apaga el firmware igual que cambiar de parche (el switcharoo de
+    // `Mcu::setMasterTune()`), así que va por el mismo declick: sin él, mover el
+    // dial de TUNE cortaba el sonido en seco.
+    const int tune = tuneRequest.exchange(kNoTuneRequest, std::memory_order_acquire);
+    if (tune != kNoTuneRequest)
+        declickTune = (int16_t)tune != currentMasterTune ? tune : kNoTuneRequest;
+
+    if (declickPatch < 0 && declickTune == kNoTuneRequest)
+        return;
+
     // El cambio se aplica con la salida ya en cero y siempre entre bloques: la
     // tasa del emulador cambia con el parche y el bloque entero depende de ella.
-    if (declickPatch >= 0 && declickGain <= 0.0f)
+    if (declickGain > 0.0f)
+        return;
+
+    // La afinación primero: sus program change apagarían las voces que acaba de
+    // devolver el cambio de parche, y así lo pulsado se restaura una sola vez.
+    if (declickTune != kNoTuneRequest)
+    {
+        applyMasterTune((int16_t)declickTune);
+        declickTune = kNoTuneRequest;
+    }
+
+    if (declickPatch >= 0)
     {
         applyPatch(declickPatch);
         declickPatch = -1;
     }
 
-    const int tune = tuneRequest.exchange(kNoTuneRequest, std::memory_order_acquire);
-    if (tune != kNoTuneRequest && (int16_t)tune != currentMasterTune)
-        setMasterTune((int16_t)tune);
+    finishChange();
 }
 
-void RdPianoEngine::setMasterTune(int16_t tune)
+void RdPianoEngine::applyMasterTune(int16_t tune)
 {
     currentMasterTune = tune;
     latestTune.store((int)tune, std::memory_order_relaxed);
     mcu->setMasterTune(tune);
+}
+
+void RdPianoEngine::setMasterTune(int16_t tune)
+{
+    // Cambio inmediato: manda sobre cualquier petición a medio atender.
+    tuneRequest.store(kNoTuneRequest, std::memory_order_relaxed);
+    declickTune = kNoTuneRequest;
+    applyMasterTune(tune);
+    finishChange();
 }
 
 void RdPianoEngine::allNotesOff()
@@ -742,11 +777,11 @@ void RdPianoEngine::outputStage(float *left, float *right, int numFrames)
     const float outputGainTarget = kOutputScaling * patchOutputGain[currentPatch];
     const float outputGainStep = (outputGainTarget - outputGainSmoothed) / (float)numFrames;
 
-    // El declick del cambio de parche: la salida baja a cero, se cambia entre
-    // bloques (arriba, en serviceRequests) y vuelve a subir. Va aquí, después
-    // del remuestreador, para que el cero sea cero de verdad y no quede cola
-    // del parche viejo sonando bajo las tablas de onda nuevas.
-    const float declickTarget = declickPatch >= 0 ? 0.0f : 1.0f;
+    // El declick del cambio de parche y del de afinación: la salida baja a cero,
+    // se cambia entre bloques (arriba, en serviceRequests) y vuelve a subir. Va
+    // aquí, después del remuestreador, para que el cero sea cero de verdad y no
+    // quede cola del parche viejo sonando bajo las tablas de onda nuevas.
+    const float declickTarget = (declickPatch >= 0 || declickTune != kNoTuneRequest) ? 0.0f : 1.0f;
 
     for (int i = 0; i < numFrames; i++)
     {
