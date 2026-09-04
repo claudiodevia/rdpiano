@@ -51,7 +51,7 @@ juce_add_plugin(rdpiano_juce
   # versiones del .ttl del LV2 y las macros JucePlugin_Version*. Explícita a
   # propósito: si se omite, JUCE la hereda del `project()` que toque en ese
   # momento (hoy el de la raíz), y cambiaría sin que nadie lo pidiera.
-  VERSION                   "1.0.0"
+  VERSION                   "1.0.1"
   DESCRIPTION               "RdPiano"
   COMPANY_NAME              "Giulio Zausa"
   BUNDLE_ID                 "com.GiulioZausa.rdpiano"

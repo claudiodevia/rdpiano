@@ -1,4 +1,13 @@
+/**
+ * @file standalone.cpp
+ * @brief Ejecutable de escucha: el emulador con audio por SDL y MIDI por portmidi.
+ *
+ * No entra en ctest; es la verificación auditiva de la que habla CLAUDE.md.
+ */
+
 #include <stdlib.h>
+
+#include <memory>
 
 #define SDL_MAIN_HANDLED
 #include "SDL.h"
@@ -13,7 +22,10 @@ static int audio_page_size;
 
 static SDL_AudioDeviceID sdl_audio;
 
-Mcu *mcu;
+// Global porque el callback de audio de SDL sólo recibe un puntero de usuario y
+// el resto del archivo es el original: lo que cambia es que ya no se puede
+// escapar sin liberarlo por uno de los `return 2` de abajo.
+std::unique_ptr<Mcu> mcu;
 
 void audio_callback(void * /*userdata*/, Uint8 *stream, int len)
 {
@@ -115,7 +127,7 @@ int MCU_OpenAudio(int deviceIndex, int pageSize, int pageNum)
 }
 
 // SDL_CloseAudio() es la API antigua y NO cierra un dispositivo abierto con
-// SDL_OpenAudioDevice: el callback seguía vivo durante el `delete mcu` del
+// SDL_OpenAudioDevice: el callback seguía vivo mientras se destruía el `mcu` del
 // final (use-after-free).
 void MCU_CloseAudio(void)
 {
@@ -210,11 +222,12 @@ void load_rom(u8 *data, size_t len, const char *filename)
 
 int main()
 {
-    u8 temp_ic5[0x20000];
-    u8 temp_ic6[0x20000];
-    u8 temp_ic7[0x20000];
-    u8 temp_progrom[0x2000];
-    u8 temp_paramsrom[0x20000];
+    // Medio mega de ROM: estático, no en la pila del hilo principal.
+    static u8 temp_ic5[0x20000];
+    static u8 temp_ic6[0x20000];
+    static u8 temp_ic7[0x20000];
+    static u8 temp_progrom[0x2000];
+    static u8 temp_paramsrom[0x20000];
 
     load_rom(temp_ic5, sizeof temp_ic5, "mks20_15179738.BIN");
     load_rom(temp_ic6, sizeof temp_ic6, "mks20_15179737.BIN");
@@ -223,7 +236,7 @@ int main()
     load_rom(temp_paramsrom, sizeof temp_paramsrom, "mks20_15179757.BIN");
 
     // It's important to send a program change after boot to init the parameters
-    mcu = new Mcu(temp_ic5, temp_ic6, temp_ic7, temp_progrom, temp_paramsrom);
+    mcu = std::make_unique<Mcu>(temp_ic5, temp_ic6, temp_ic7, temp_progrom, temp_paramsrom);
     mcu->sendMidiCmd(0xC0, 0, 0); // program change a parche 0: emite el mismo 0x30
 
     if (SDL_Init(SDL_INIT_AUDIO | SDL_INIT_VIDEO | SDL_INIT_TIMER) < 0)
@@ -272,7 +285,7 @@ int main()
     MIDI_Quit();
     SDL_Quit();
 
-    delete mcu;
+    mcu.reset();
 
     return 0;
 }

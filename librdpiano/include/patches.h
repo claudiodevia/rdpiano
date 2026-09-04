@@ -3,13 +3,17 @@
 
 #include <stddef.h>
 
-// Tabla de parches compartida entre el plugin y las pruebas: solo datos, sin
-// dependencias. Cada consumidor resuelve los punteros a las ROMs (BinaryData en
-// el plugin, ficheros en las pruebas), pero los nombres canónicos están aquí.
-//
-// `inline constexpr` y no `static const`: con `static`, una copia de cada tabla
-// por unidad de traducción.
+/**
+ * @file patches.h
+ * @brief Tabla de parches compartida entre el plugin y las pruebas: solo datos, sin dependencias.
+ *
+ * Cada consumidor resuelve los punteros a las ROM —BinaryData en el plugin,
+ * ficheros en las pruebas—, pero los nombres canónicos están aquí. Todo es
+ * `inline constexpr` y no `static const`: con `static` habría una copia de cada
+ * tabla por unidad de traducción.
+ */
 
+/** @brief Los tres juegos de ROM. */
 enum RomSetId
 {
     ROMSET_MKS20_A = 0,
@@ -19,8 +23,9 @@ enum RomSetId
     ROMSET_COUNT
 };
 
-inline constexpr int NUM_PATCHES = 16;
+inline constexpr int NUM_PATCHES = 16; ///< Parches que trae el firmware.
 
+/** @brief Nombre de cada parche, tal como lo enseña el display. */
 inline constexpr const char *patchNames[NUM_PATCHES] = {
     "MKS-20: Piano 1",   "MKS-20: Piano 2",    "MKS-20: Piano 3",   "MKS-20: Harpsichord",
     "MKS-20: Clavi",     "MKS-20: Vibraphone", "MKS-20: E-Piano 1", "MKS-20: E-Piano 2",
@@ -28,12 +33,13 @@ inline constexpr const char *patchNames[NUM_PATCHES] = {
     "MK-80: Classic",    "MK-80: Special",     "MK-80: Blend",      "MK-80: Contemporary",
     "MK-80: A. Piano 1", "MK-80: A. Piano 2",  "MK-80: Clavi",      "MK-80: Vibraphone"};
 
+/** @brief Juego de ROM que necesita cada parche. */
 inline constexpr int patchToRomSetId[NUM_PATCHES] = {ROMSET_MKS20_A, ROMSET_MKS20_A, ROMSET_MKS20_A, ROMSET_MKS20_B,
                                                      ROMSET_MKS20_B, ROMSET_MKS20_B, ROMSET_MKS20_B, ROMSET_MKS20_B,
                                                      ROMSET_MK80,    ROMSET_MK80,    ROMSET_MK80,    ROMSET_MK80,
                                                      ROMSET_MK80,    ROMSET_MK80,    ROMSET_MK80,    ROMSET_MK80};
 
-// Offset dentro de la params ROM donde empieza cada parche.
+/** @brief Offset dentro de la ROM de parámetros donde empieza cada parche. */
 inline constexpr size_t patchToOffset[NUM_PATCHES] = {
     // MKS-20
     0x000000, // Piano 1
@@ -56,26 +62,27 @@ inline constexpr size_t patchToOffset[NUM_PATCHES] = {
     0x0199f0, // Vibraphone
 };
 
+/** @brief Tasa a la que corre el emulador en cada parche, en Hz. */
 inline constexpr int patchSampleRates[NUM_PATCHES] = {
     // MKS-20
     20000, 20000, 20000, 32000, 32000, 20000, 20000, 32000,
     // MK80
     20000, 20000, 20000, 32000, 20000, 20000, 32000, 20000};
 
-// Compensación de ganancia por parche: normaliza los 16 al mismo pico (+6 dBFS)
-// con el peor caso razonable —acorde de 16 notas a velocity 127 y `volume` a
-// tope—, medido con la cadena del motor a 48 kHz. Sin ella hay casi 12 dB entre
-// el parche más flojo y el más caliente.
-//
-// Se aplica en la salida, después de los efectos: la aritmética entera del
-// emulador y de lsp/ queda intacta, así que ni el golden ni los hashes de
-// test_lsp.cpp se mueven.
-//
-// Detrás NO hay limitador y el chorus de fábrica añade hasta +4,8 dB: el peor
-// caso de toda la cadena llega a +10,8 dBFS. Para un objetivo que no recorte,
-// 0.5f (-6 dBFS). Se regenera con `rdpiano_e2e --headroom` (idempotente).
-inline constexpr float HEADROOM_TARGET_PEAK = 1.99526f; // +6 dBFS
+/// Pico al que se normalizan los 16 parches: +6 dBFS. Detrás NO hay limitador y
+/// el chorus de fábrica añade hasta +4,8 dB, así que el peor caso de toda la
+/// cadena llega a +10,8 dBFS. Para un objetivo que no recorte, 0.5f (-6 dBFS).
+inline constexpr float HEADROOM_TARGET_PEAK = 1.99526f;
 
+/**
+ * @brief Compensación de ganancia por parche.
+ *
+ * Normaliza los 16 al mismo pico con el peor caso razonable —acorde de 16 notas
+ * a velocity 127 y `volume` a tope—, medido con la cadena del motor a 48 kHz;
+ * sin ella hay casi 12 dB entre el parche más flojo y el más caliente. Se aplica
+ * en la salida, después de los efectos, así que ni el golden ni los hashes de
+ * test_lsp.cpp se mueven. Se regenera con `rdpiano_e2e --headroom` (idempotente).
+ */
 inline constexpr float patchOutputGain[NUM_PATCHES] = {
     // MKS-20                 sin compensar     ya compensado, c/chorus
     0.70817f, // Piano 1       2,82   +9,0 dBFS  1,98   +5,9 dBFS
@@ -98,18 +105,23 @@ inline constexpr float patchOutputGain[NUM_PATCHES] = {
     0.95056f, // Vibraphone    1,95   +5,8 dBFS  1,97   +5,9 dBFS
 };
 
-// Las cuatro ROMs de cada juego, en el orden de RomChip. El plugin las empotra
-// como BinaryData y las pruebas las leen de roms/: esta es la única lista.
+/** @brief Las cuatro ROM de un juego. */
 enum RomChip
 {
-    ROM_IC5 = 0,  // onda
-    ROM_IC6 = 1,  // onda
-    ROM_IC7 = 2,  // onda
-    ROM_IC18 = 3, // params
+    ROM_IC5 = 0,  ///< ROM de onda.
+    ROM_IC6 = 1,  ///< ROM de onda.
+    ROM_IC7 = 2,  ///< ROM de onda.
+    ROM_IC18 = 3, ///< ROM de parámetros.
 
     ROM_CHIP_COUNT
 };
 
+/**
+ * @brief Nombre de fichero de cada ROM.
+ *
+ * El plugin las empotra como BinaryData y las pruebas las leen de roms/: esta es
+ * la única lista.
+ */
 inline constexpr const char *romSetFiles[ROMSET_COUNT][ROM_CHIP_COUNT] = {
     // ROMSET_MKS20_A
     {"mks20_15179738.BIN", "mks20_15179737.BIN", "mks20_15179736.BIN", "mks20_15179757.BIN"},
@@ -119,15 +131,19 @@ inline constexpr const char *romSetFiles[ROMSET_COUNT][ROM_CHIP_COUNT] = {
     {"MK80_IC5.bin", "MK80_IC6.bin", "MK80_IC7.bin", "MK80_IC18.bin"},
 };
 
-// Ojo: el handshake del bus depende de direcciones fijas de este firmware.
-// Ver docs/FIRMWARE.md.
+/// Ojo: el handshake del bus depende de direcciones fijas de este firmware.
+/// Ver docs/FIRMWARE.md.
 inline constexpr const char *PROG_ROM_FILE = "RD200_B.bin";
 
-inline constexpr size_t WAVE_ROM_SIZE = 0x20000;
-inline constexpr size_t PROG_ROM_SIZE = 0x2000;
+inline constexpr size_t WAVE_ROM_SIZE = 0x20000; ///< Tamaño de una ROM de onda.
+inline constexpr size_t PROG_ROM_SIZE = 0x2000;  ///< Tamaño de la ROM de programa.
 
-// Coherencia de las tablas paralelas, en compilación. Que los ficheros existan
-// y midan lo que deben lo comprueba test/unit/test_patches.cpp.
+/**
+ * @brief Coherencia de las tablas paralelas, comprobada en compilación.
+ *
+ * Que los ficheros existan y midan lo que deben lo comprueba
+ * test/unit/test_patches.cpp.
+ */
 namespace patches_detail
 {
 
@@ -157,9 +173,9 @@ namespace patches_detail
         return true;
     }
 
+    /// Fuera de este margen es un error de la tabla, no una decisión.
     constexpr bool gains_in_range()
     {
-        // Fuera de este margen es un error de la tabla, no una decisión.
         for (int i = 0; i < NUM_PATCHES; i++)
             if (!(patchOutputGain[i] > 0.05f) || !(patchOutputGain[i] < 4.0f))
                 return false;

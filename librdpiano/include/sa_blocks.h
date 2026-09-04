@@ -4,23 +4,30 @@
 #include "mame_utils.h"
 #include "sa_tables.h"
 
-// Los tres bloques de SoundChip::update(). Lo que pasa entre ellos —Ic19Out,
-// Ic9Out— es el bus real entre los chips, por eso está en la firma.
-//
-// Cada `& 0x3fff`, cada `+ 1`, cada `|= 0x3c00` replica un sumador de verdad y
-// no se "simplifica": lo fijan los ~2.200 vectores de test/vectors/ic_blocks.txt
-// y los 16 hashes del golden. `inline` porque es un bucle caliente.
+/**
+ * @file sa_blocks.h
+ * @brief Los tres bloques de SoundChip::update(), a nivel de puertas.
+ *
+ * Lo que pasa entre ellos —Ic19Out, Ic9Out— es el bus real entre los chips, por
+ * eso está en la firma. Cada `& 0x3fff`, cada `+ 1`, cada `|= 0x3c00` replica un
+ * sumador de verdad y no se "simplifica": lo fijan los ~2.200 vectores de
+ * test/vectors/ic_blocks.txt y los 16 hashes del golden. `inline` porque es un
+ * bucle caliente.
+ */
 
-// El estado de una parte. Diez por voz, dieciséis voces.
+/**
+ * @brief El estado de una parte. Diez por voz, dieciséis voces.
+ *
+ * Todos los campos con inicializador: update() corre antes de los primeros
+ * ciclos de CPU, así que la primera muestra los lee antes de que el firmware
+ * escriba un solo registro. Con env_dest indeterminado la salida rápida de
+ * SoundChip::update() no salta y la parte se procesa con basura.
+ */
 struct SA_Part
 {
     uint32_t sub_phase = 0;
     uint32_t env_value = 0;
 
-    // Todos con inicializador: update() corre antes de los primeros ciclos de
-    // CPU, así que la primera muestra lee estos campos antes de que el firmware
-    // escriba un solo registro. Con env_dest indeterminado la salida rápida de
-    // SoundChip::update() no salta y la parte se procesa con basura.
     uint16_t pitch_lut_i = 0;
     uint8_t wave_addr_loop = 0;
     uint8_t wave_addr_high = 0;
@@ -31,7 +38,7 @@ struct SA_Part
     uint8_t env_offset = 0;
 };
 
-// LUT de la velocidad de la envolvente (IC19) y de la dirección (IC8).
+/** @brief LUT de la velocidad de la envolvente (IC19). */
 inline constexpr uint32_t env_table[] = {
     0x000000, 0x000023, 0x000026, 0x000029, 0x00002d, 0x000031, 0x000036, 0x00003b, 0x000040, 0x000046, 0x00004c,
     0x000052, 0x00005a, 0x000062, 0x00006c, 0x000076, 0x000080, 0x00008c, 0x000098, 0x0000a4, 0x0000b4, 0x0000c4,
@@ -58,26 +65,31 @@ inline constexpr uint32_t env_table[] = {
     0x167fff, 0x15bfff, 0x14bfff, 0x13bfff, 0x127fff, 0x113fff, 0x0fffff, 0x0e7fff, 0x0cffff, 0x0b7fff, 0x097fff,
     0x077fff, 0x04ffff, 0x027fff};
 
+/** @brief LUT de la dirección (IC8). */
 inline constexpr uint16_t addr_table[] = {0x1e0, 0x080, 0x060, 0x04d, 0x040, 0x036, 0x02d, 0x026,
                                           0x020, 0x01b, 0x016, 0x011, 0x00d, 0x00a, 0x006, 0x003};
 
-// IC19 -> IC8: el volumen logarítmico, y si la envolvente acabó su segmento.
+/** @brief Lo que IC19 pone en el bus de IC8. */
 struct Ic19Out
 {
-    uint32_t volume;
-    bool irq;
+    uint32_t volume; ///< Volumen logarítmico, 14 bits invertidos.
+    bool irq;        ///< La envolvente ha acabado su segmento.
 };
 
-// IC9 -> IC8: la dirección en la wave ROM y los dos selectores.
+/** @brief Lo que IC9 pone en el bus de IC8. */
 struct Ic9Out
 {
-    uint32_t waverom_addr;
-    bool sel_sample_type;
-    bool phase_hi;
+    uint32_t waverom_addr; ///< Dirección en la wave ROM, 17 bits.
+    bool sel_sample_type;  ///< Elige cuál de los dos valores de la ROM es exponente y cuál delta.
+    bool phase_hi;         ///< Fase fuera de rango: fuerza el volumen al mínimo.
 };
 
-// IC19: envolvente. Avanza `part.env_value` y dispara IRQ al terminar un
-// segmento. `flags` es la parte 0 de la voz: los flags son comunes a la voz.
+/**
+ * @brief IC19: envolvente. Avanza part.env_value y avisa al terminar un segmento.
+ * @param part La parte a avanzar.
+ * @param flags Parte 0 de la voz: los flags son comunes a la voz.
+ * @return Volumen para IC8 y si toca disparar la IRQ.
+ */
 inline Ic19Out tick_ic19(SA_Part &part, const SA_Part &flags)
 {
     Ic19Out out;
@@ -116,8 +128,13 @@ inline Ic19Out tick_ic19(SA_Part &part, const SA_Part &flags)
     return out;
 }
 
-// IC9: acumulador de fase. Avanza `part.sub_phase` y produce la dirección de
-// la wave ROM.
+/**
+ * @brief IC9: acumulador de fase. Avanza part.sub_phase y produce la dirección de la wave ROM.
+ * @param part La parte a avanzar.
+ * @param flags Parte 0 de la voz.
+ * @param tables LUT compartidas de IC10/IC11.
+ * @return Dirección de wave ROM y los dos selectores que lee IC8.
+ */
 inline Ic9Out tick_ic9(SA_Part &part, const SA_Part &flags, const SaTables &tables)
 {
     Ic9Out out;
@@ -148,9 +165,22 @@ inline Ic9Out tick_ic9(SA_Part &part, const SA_Part &flags, const SaTables &tabl
     return out;
 }
 
-// IC8: suma logarítmica de volumen y muestra. Los cuatro valores de la wave ROM
-// entran por parámetro para poder probar el bloque sin ROMs. Devuelve la muestra
-// tal cual la calcula el chip; que la voz suene o no lo decide el bucle.
+/**
+ * @brief IC8: suma logarítmica de volumen y muestra.
+ *
+ * Los cuatro valores de la wave ROM entran por parámetro para poder probar el
+ * bloque sin ROMs.
+ *
+ * @param part La parte que suena.
+ * @param ic19 Salida de tick_ic19().
+ * @param ic9 Salida de tick_ic9().
+ * @param waverom_exp Exponente leído en la wave ROM.
+ * @param sign_pa Signo del exponente.
+ * @param waverom_delta Delta leído en la wave ROM.
+ * @param sign_pb Signo del delta.
+ * @param tables LUT compartidas de IC10/IC11.
+ * @return La muestra tal cual la calcula el chip; que la voz suene o no lo decide el bucle.
+ */
 inline s32 tick_ic8(const SA_Part &part, const Ic19Out &ic19, const Ic9Out &ic9, uint16_t waverom_exp, bool sign_pa,
                     uint16_t waverom_delta, bool sign_pb, const SaTables &tables)
 {

@@ -38,14 +38,46 @@ JUCE. `prepare()` reserva todo; `render()` no reserva, no bloquea, no imprime.
   pruebas, nunca con `render()` vivo en otro hilo.
 - `patch()`/`masterTune()` = intención (lo pedido aunque no atendido); `activePatch()` = lo que suena.
 
-**Declick de cambio de parche**: rampa a cero en 3 ms → aplicar → subida en 15 ms. Siempre **entre
-bloques**, porque la tasa del emulador cambia con el parche y el bloque entero depende de ella.
-`processBlock` no espera a nadie → el plugin no pierde bloques.
+**Declick de cambio de parche y de afinación**: rampa a cero en 6 ms → aplicar → subida en 15 ms, o en 80 ms si el
+cambio ha tenido que volver a disparar notas (la subida larga esconde el golpe de martillo de la
+reentrada). La ganancia va por **smoothstep** (`g²(3−2g)`, `declick_shape`): arranca plana —que es
+lo que tapa el transitorio— pero también llega plana, y en 0 y en 1 no cambia nada. Antes eran 90 ms
+al cuadrado y se oía el hueco entero como un bombeo: medido, la salida se quedaba ~20 dB por debajo
+de su nivel hasta pasados 60 ms y no se recuperaba hasta los 100; ahora el hueco se cierra a los
+45 ms y no baja de −16 dB. El pico de la reentrada no se mueve (−0,4 dB).
+Siempre **entre bloques**, porque la tasa del emulador cambia con el parche y el bloque entero
+depende de ella. `processBlock` no espera a nadie → el plugin no pierde bloques.
+
+**La afinación va por el mismo camino que el parche.** El switcharoo de `Mcu::setMasterTune()`
+(trampa 4) manda dos program change, que apagan las voces y sueltan el pedal exactamente igual que
+el de `reloadPatch()`: sin declick ni espejo, mover el dial de TUNE cortaba el sonido en seco
+(medido: RMS 0). `serviceRequests()` guarda la afinación pendiente en `declickTune`, espera al cero
+de la rampa y, si además hay parche pendiente, **afina primero y cambia después** — al revés, los
+program change del afinado matarían las notas que acaba de devolver el parche. Restaurar y elegir
+la subida es común a los dos: `finishChange()`. Lo fija `engine_tune_held_notes`.
+
+**Notas y pedal sobreviven al cambio de parche.** `applyPatch()` tiene que mandar el program change
+de `reloadPatch()` —única forma de que el firmware relea la página recién mapeada; sin él el timbre
+sale mal, medido—, y ese program change apaga las voces y suelta el pedal *dentro* del firmware.
+El motor lleva un espejo de lo que le ha enviado (`heldVelocity[128]` + `sustainDown`, actualizado
+en `sendTracked()`, el único camino por el que sale MIDI) y tras cambiar le devuelve el pedal y las
+teclas todavía pulsadas. Lo que estuviera sostenido **sólo por el pedal** (tecla ya soltada) no se
+resucita a propósito: serían decenas de ataques a la vez. `allNotesOff()` limpia el espejo.
+
+**Y reentran al nivel al que habían llegado, no al de su ataque**, o se oiría el golpe de tecla que
+no se ha dado: +8 a +14 dB sobre lo que sonaba, medido. Dos seguidores de la salida cruda del
+emulador —`onsetSq`, el ataque de la última nota, y `levelSq`, el nivel de ahora, ambos RMS al
+cuadrado porque con detectores de pico el ataque de un acorde suma en fase y el sustain no— dan
+cuánto ha decaído; `kDbPerVelocityUnit` (0,228 dB por unidad, medido: la curva velocidad→nivel es
+recta entre v16 y v120) lo convierte en cuánta velocidad restar. Queda en ±6 dB. Lo fija
+`engine_patch_held_notes`.
 
 **LFO de los dos efectos = ritmo del emulador** → los 5 parches de 32 kHz modulan 1,6× más rápido
 con el mismo ajuste de panel. Deliberado: escalar por `20000/sourceRate` se implementó, se escuchó y
 se descartó (sonaba peor), pese a que un documento de rendimiento ya borrado lo proponía. Lo fija
-`engine_lfo_rate`: "arreglarlo" rompe el test.
+`engine_lfo_rate`: "arreglarlo" rompe el test. El **trémolo** no: va detrás del remuestreador, con
+fase propia acotada a 2π, y modula a `rate/2` Hz de reloj del host sea cual sea el parche
+(`engine_tremolo`).
 
 **Efectos siempre corriendo**, encendidos o no: `SpaceD::process()`/`Phaser::process()` son lo único
 que avanza sus líneas de retardo; saltárselos las congela y sueltan el audio viejo entero al
@@ -60,9 +92,10 @@ inline en `sa_blocks.h`; LUT IC10/IC11 compartidas en `sa_tables.h`).
 `loadRomSet()` (caro) + `selectPatch()` (barato: reubica página alta de params, parchea bytes
 0x00–0x02). `loadSounds()` = ambos.
 
-**Todo lo caro se descifra al construir el motor** (~9 ms, 2,75 MB): `SoundChip` guarda una ranura
-de tablas de onda por juego de ROM (3 × 768 KB, montón), `RdPianoEngine` las 16 páginas de params ya
-descifradas (32 KB c/u). Cambio de parche = `selectRomSet()` (un puntero) + `selectPatchPage()`
+**Todo lo caro se descifra al construir el motor** (~9 ms, 2 MB): `SoundChip` guarda una ranura
+de tablas de onda por juego de ROM (3 × 512 KB, montón; cada dirección es un `WaveEntry` de
+`exp`+`delta` con el signo en el bit 15, no cuatro tablas paralelas), `RdPianoEngine` las 16 páginas
+de params ya descifradas (32 KB c/u). Cambio de parche = `selectRomSet()` (un puntero) + `selectPatchPage()`
 (memcpy 32 KB) ≈ µs → viable desde el hilo de audio. `decodeRomSet`/`selectRomSet` suben por
 `RdBoard` y `Mcu`; `prepareRomSetFor()` sobrevive como no-op. Página cacheada ≡ descifrado:
 `engine_patch_prepare`.
@@ -86,12 +119,25 @@ dejaba el motor mudo (cambiaba el número de parche, no la página mapeada).
 host; 67 muestras @48 kHz); `prepareToPlay` → `setLatencySamples()`. Peor caso (parche de 20 kHz) a
 propósito: no se renegocia al cambiar de sonido.
 
+**Cola declarada**: `tailLengthSeconds()` = 3 s (`RdPianoEngine::kTailSeconds`), el doble de la cola
+real más larga de los 16 parches (1,45 s a −60 dBFS, parche 5), que mide `engine_tail_length`. Con
+los 0 s de antes el anfitrión dejaba de pedir bloques al soltar la tecla y cortaba el final de la
+nota al exportar o al congelar la pista.
+
 **Plugin** = 3 archivos + 2 tablas: `PluginParams.h` (10 parámetros, fábrica desde `RdEngineParams`),
 `PluginProcessor` (APVTS, serializa presets), `PluginEditor` (`ButtonSpec`×17, `ModeSpec`×8). El
 procesador es además `juce::Timer` @10 Hz: recoge el parche que el motor cambie por su cuenta
-(program change MIDI) para espejo, preset y panel. El dial de parches cambia de sonido **al
-soltarlo** (`sliderDragEnded`); arrastrando solo enseña el nombre. `updateValues()` repinta el fondo
-solo si se movió el fader; cada control se repinta solo.
+(program change MIDI) para espejo, preset y panel. Los diales de parche y de afinación aplican **al
+soltarlos** (`sliderDragEnded`); arrastrando solo enseñan el nombre o los Hz, porque los dos apagan
+el firmware y un gesto entero serían decenas de reentradas encadenadas. `updateValues()` repinta el fondo
+solo si se movió el fader; cada control se repinta solo. Las tres hojas de arte se decodifican una
+sola vez en el constructor del editor y se reparten a los botones y al dial (nada de `ImageCache`
+dentro de un `paint()`), y el display se dibuja a una `juce::Image` que sólo se rehace al cambiar el
+texto, la escala o el tamaño: son 1.190 rectángulos de 5×7 píxeles por repintado.
+
+**Buses**: entrada estéreo + salida estéreo. La entrada **no se lee nunca** (`processBlock` la
+sobrescribe entera) y en un instrumento sobra, pero **quitarla rompe Logic** → trampa 12. Lo fija
+`plugin_bus_layout`, que además comprueba que lo que el host traiga en el búfer no se oye.
 
 ## Mapa de memoria (`RdBoard::read`/`write`, [rd_board.h](librdpiano/include/rd_board.h))
 
@@ -125,7 +171,8 @@ solo si se movió el fader; cada control se repinta solo.
    condicional contra voces colgadas (`investigate`). Fijados por `test/vectors/ic_blocks.txt`.
 4. `setMasterTune()` corre el emulador (~200 muestras + `programChange(0)`, ~0,16 ms) — lo corre
    `render()` al atender la petición, no el hilo de UI. Lleva "switcharoo" 0x30 → tuning → 0x30
-   porque afinar parches ≠ 0 falla.
+   porque afinar parches ≠ 0 falla, y esos program change **apagan las voces y sueltan el pedal**:
+   por eso afinar lleva declick y devolución de lo pulsado, como el cambio de parche.
 5. `mcu_ops.h` y `mame_utils.h` derivan de MAME (BSD-3): no reescribir por estilo, mantener atribución.
 6. `re_stuff/verilog/` es, según su propio README, *"probably most of them wrong"*: investigación,
    no fuente de verdad.
@@ -141,6 +188,20 @@ solo si se movió el fader; cada control se repinta solo.
     árbol APVTS, con los nombres de atributo de siempre.
 11. El `.lv2` se llama `rdpiano_juce.lv2` (antes `RdPiano.lv2`: `juce_add_plugin` usa
     `PRODUCT_NAME`); el URI no cambió. Los otros cuatro formatos conservan nombre, bundle id y códigos.
+12. **El bus de entrada del plugin no se toca.** Es un instrumento y nunca lee la entrada, así que
+    lo canónico sería no declararla —y `auval` valida igual sin ella—, pero **Logic no carga la AU
+    sin bus de entrada**: la inserta, no enseña la interfaz y no suena. Probado y revertido el
+    2026-09-02 (hallazgo F13 de [docs/REVISION-CODIGO.md](docs/REVISION-CODIGO.md), que ya avisaba de
+    probarlo en un DAW). Lo fija `plugin_bus_layout`.
+13. **Abrir el Standalone desde `build/` rompe la AU en Logic.** Los cinco formatos comparten
+    `aumu RDPN GlZs`, y arrancar el `.app` registra su AUv3 empotrado: a partir de ahí el sistema
+    resuelve esos códigos al **AUv3 del directorio de compilación**, que eclipsa el `.component`
+    instalado. Logic entonces dice *"No se ha podido cargar el módulo Audio Unit RdPiano"* y lo marca
+    con el triángulo amarillo. `auval -v aumu RDPN GlZs` lo delata en una línea: *"This AudioUnit is
+    a version 3 implementation"* cuando debería decir *version 2*. Se deshace con
+    `pluginkit -r <ruta>/rdpiano_juce.app/Contents/PlugIns/rdpiano_juce.appex` y un
+    "Restablecer y volver a explorar" en el gestor de módulos. Instalado en `/Applications` no
+    estorba: lo que no se puede cargar es un `.appex` que vive en `build/`.
 
 ## Build (solo CMake; no hay Projucer ni `.jucer`)
 
@@ -205,7 +266,7 @@ ctest --test-dir build/core --output-on-failure
   nota, acorde, extinción tras note-off (detector de voces colgadas), polifonía 16, rango de pico y
   **hash bit-exacto por parche** contra `test/golden.txt`. `--patch N` para iterar (~0,2 s). Cambios
   en `sound_chip.cpp`, `unscramble_*` o el MCU mueven el hash.
-- **Unitario** (`test/unit/`, 48 suites, 474 checks, 3,2 s): `test_board`, `test_patches`,
+- **Unitario** (`test/unit/`, 50 suites, 482 checks, 4,5 s): `test_board`, `test_patches`,
   `test_sa_tables`, `test_rom_loader`, `test_command_port`, `test_sound_chip_blocks` (2.256
   vectores), `test_lsp` (respuesta a impulso congelada), `test_resampler`, `test_engine`. Se añade
   con `TEST_SUITE(nombre)` + una línea en el CMakeLists; andamiaje = `test/check.h`. Regla: la
@@ -214,12 +275,18 @@ ctest --test-dir build/core --output-on-failure
   caliente, extremos de parámetros) y lo único que verifica **cero reservas en `render()`**
   (sustituye `operator new` global + vigila `stats.resamplerOpens`, porque libresample usa `malloc`).
   Red de transitorios: `engine_effect_tail` (encender un efecto en silencio → silencio),
-  `engine_effect_bypass_ramp`, `engine_program_change`, `engine_patch_declick`, `engine_volume_ramp`,
+  `engine_effect_bypass_ramp`, `engine_program_change`, `engine_patch_declick`,
+  `engine_tune_held_notes` (afinar con acorde y pedal aguantados: sobreviven, sin salto y sin golpe
+  de tecla), `engine_volume_ramp`,
   `engine_latency`, `engine_lfo_rate` (periodo del LFO del chorus por autocorrelación de la
-  diferencia wet-dry; fija que dependa de la tasa del parche).
-- **Plugin** (`rdpiano_juce/test/`, `rdpiano_plugin_tests`, 6 suites, 98 checks): presets ida y
-  vuelta, valores de fábrica, programas, preset corrupto, latencia declarada. Está en el ctest de la
-  raíz:
+  diferencia wet-dry; fija que dependa de la tasa del parche), `engine_tremolo` (el mismo método
+  sobre la razón wet/dry por canal: periodo, oposición de fase entre canales, profundidad, y que el
+  trémolo —al revés que el chorus— vaya al ritmo del **host**) y `engine_tail_length` (la cola real
+  de los 16 parches contra la declarada).
+- **Plugin** (`rdpiano_juce/test/`, `rdpiano_plugin_tests`, 8 suites, 108 checks): presets ida y
+  vuelta, valores de fábrica, programas, preset corrupto, latencia y cola declaradas, y buses
+  (`plugin_bus_layout`: entrada y salida estéreo, y el búfer del host no se oye). Está en el
+  ctest de la raíz:
   ```bash
   cmake -B build/plugin -G Xcode -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64"
   cmake --build build/plugin --config Release --target rdpiano_tests rdpiano_e2e rdpiano_plugin_tests
@@ -233,7 +300,7 @@ en verde = cambio en el orden de evaluación del bucle → revertir.
 Tocar `lsp/`, `rd_engine.cpp` o `rdpiano_juce/` **no** mueve el golden (el harness mide el emulador
 desnudo): ahí la red es `test_engine.cpp` y `test_lsp.cpp`.
 
-Sin cubrir: `setMasterTune()`, la UI (incluido el dial, que aplica el parche al soltar) y sobre todo
+Sin cubrir: la UI (incluidos los diales, que aplican al soltar) y sobre todo
 el **timbre** — los efectos se congelan por hash, que detecta pero no juzga. Verificación auditiva
 con `test/standalone.cpp` o el plugin en un DAW. Un cambio en `sound_chip.cpp` que pase el harness
 pero mueva el hash es de **alto riesgo tímbrico: decírselo al usuario**.
@@ -270,10 +337,55 @@ pero mueva el hash es de **alto riesgo tímbrico: decírselo al usuario**.
   `-DRDPIANO_TRACE`.
 - Tipos MAME (`u8/s16/u32`) en el núcleo, tipos JUCE en el plugin.
 - `HACK:` / `TODO:` marcan comportamiento conocido-incorrecto: son contexto, no ruido.
-- **Documentación de clases: breve y concisa.** Una o dos líneas de qué es y por qué existe; el
+- **Documentación: Doxygen, breve y concisa.** Una o dos líneas de qué es y por qué existe; el
   detalle que no se deduce del código (contratos de RT, trampas) va aquí en CLAUDE.md, no en
-  comentarios largos sobre la declaración.
+  comentarios largos sobre la declaración. El estándar, abajo.
 - `patches.h` (offsets, sample rates, nombres, ROM set, headroom) lo comparten plugin y harness.
+
+## Estándar de documentación
+
+Doxygen en español, sobre la **declaración** y nunca dentro del cuerpo. Bloque `/** */` con `@brief`
+en primera línea; `@param`/`@return` solo cuando el nombre no lo dice ya; `///<` para campos y
+constantes. Los `#` de Doxygen no se usan: se referencia con el nombre a secas o con backticks.
+
+```cpp
+/**
+ * @file rd_engine.h
+ * @brief Una línea de qué contiene el archivo.
+ */
+
+/**
+ * @brief Qué es la clase, en una línea.
+ *
+ * Por qué existe o qué contrato tiene, si no se deduce. Dos o tres líneas como
+ * mucho; lo demás va a CLAUDE.md o a docs/.
+ */
+class Ejemplo
+{
+  public:
+    static constexpr int kTope = 16; ///< Qué acota.
+
+    /**
+     * @brief Qué hace, en imperativo.
+     * @param patch Qué significa, no de qué tipo es.
+     * @return Qué devuelve, y qué quiere decir el caso raro.
+     */
+    bool selectPatch(int patch);
+};
+```
+
+- **Qué se documenta**: todo archivo (`@file` + `@brief`), toda clase, struct y enum, y los métodos
+  públicos. Los `override` de JUCE, los getters obvios y los destructores no llevan nada; los
+  constructores solo si el orden de llamada importa.
+- **El `.cpp` no repite el bloque de la cabecera.** Ahí solo van los `HACK:`/`TODO:` y la razón de
+  una constante medida. Lo que solo existe en el `.cpp` (helpers en anónimo) se documenta ahí.
+- **Nada de comentarios interlineados**: el código se explica solo, y si no, se renombra o se parte
+  en una función con nombre. Las únicas excepciones son lo que el código no puede decir: `HACK:` /
+  `TODO:`, las trampas de arriba, los números mágicos del hardware (direcciones del mapa, bytes del
+  protocolo, opcodes) y los valores medidos a oído o con el harness.
+- **En las pruebas**, `@file` por archivo y un `@brief` sobre cada `TEST_SUITE` diciendo qué fija.
+  Dentro del cuerpo sí se comenta lo que un `CHECK` no puede decir por sí solo: qué invariante mide.
+- Excluidos, como en el formateo: `mcu_ops.h`, `mame_utils.h`, `lsp/`, `resample/`, `re_stuff/`.
 
 ## Git: no commitear
 

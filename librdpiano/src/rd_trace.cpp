@@ -5,6 +5,11 @@
 #include <stdio.h>
 #endif
 
+/**
+ * @file rd_trace.cpp
+ * @brief El destino de la traza: instalable, y stderr por defecto.
+ */
+
 namespace
 {
     RdTraceSink g_sink = nullptr;

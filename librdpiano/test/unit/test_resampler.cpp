@@ -1,9 +1,13 @@
-// libresample: lo que el motor necesita saber de él —longitud de salida por
-// ratio, ausencia de NaN en los bordes, y que abrir y cerrar mil veces no
-// acumule handles.
-//
-// El código de resample/ es de terceros y no se toca: esto congela cómo lo usa
-// el motor, no cómo está escrito.
+/**
+ * @file test_resampler.cpp
+ * @brief libresample: lo que el motor necesita saber de él.
+ *
+ * Longitud de salida por ratio, ausencia de NaN en los bordes, y que abrir y cerrar mil veces no
+ * acumule handles.
+ *
+ * El código de resample/ es de terceros y no se toca: esto congela cómo lo usa el motor, no cómo
+ * está escrito.
+ */
 
 #include <math.h>
 
@@ -29,7 +33,9 @@
 #include "resample/libresample.h"
 #include "unit_test.h"
 
-// Los ratios que puede pedir el plugin: tasa del host / tasa del parche.
+/**
+ * @brief Los ratios que puede pedir el plugin: tasa del host / tasa del parche.
+ */
 struct RatioCase
 {
     int hostRate;
@@ -41,8 +47,10 @@ static const RatioCase kRatios[] = {
     {88200, 20000}, {96000, 32000}, {22050, 20000}, {8000, 32000},
 };
 
-// Un handle abierto como lo abre el motor: un rango de factores que cubre
-// todos los parches a esa tasa de host, no un factor fijo.
+/**
+ * @brief Un handle abierto como lo abre el motor: un rango de factores que cubre todos los parches a esa tasa
+ *        de host, no un factor fijo.
+ */
 static void *open_for_host(int hostRate)
 {
     double minFactor = (double)hostRate / 32000.0;

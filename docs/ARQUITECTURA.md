@@ -289,9 +289,10 @@ interpolación lineal en software.
 y `samples_exp_table` (32 K) se reconstruyen evaluando *expresiones lógicas bit a bit* que replican
 las ROMs internas IC11/IC10 y las tablas cableadas dentro de los gate arrays. El comentario del
 autor es explícito: *"This is bit accurate, but I want to believe there is a better way"*. Coste:
-0x18000 evaluaciones de expresiones lógicas en cada construcción, y ~1,06 MB de tablas residentes
-por instancia de `SoundChip` (256 + 128 + 256 + 128 KB de muestras/signos + 256 KB de
-`phase_exp_table` + 64 KB de `samples_exp_table`).
+0x18000 evaluaciones de expresiones lógicas en cada construcción, y 320 KB de tablas residentes
+(256 KB de `phase_exp_table` + 64 KB de `samples_exp_table`), hoy compartidas por todas las
+instancias en `sa_tables.h`. Las muestras sí son de cada `SoundChip`: 512 KB por ranura de juego de
+ROM, un `WaveEntry` de `exp` y `delta` por dirección con el signo de cada uno en su bit 15.
 
 **Decodificación de escrituras** ([sound_chip.cpp:171](/librdpiano/src/sound_chip.cpp#L171)):
 
@@ -795,8 +796,9 @@ diseño que condicionan cualquier trabajo futuro:
    involuntario en el camino de señal.
 
 6. **Huella de memoria por instancia.** `Mcu` tiene `params_rom[0x20000]` + `params_rom_tmp[0x20000]` +
-   `ram[0x10000]` (de la que se usan 4 KB) = 328 KB; `SoundChip` añade ~1,06 MB de tablas y muestras,
-   y `SpaceD::eram` otros 256 KB. Total ≈ 1,7 MB de estado residente por instancia. Cada
+   `ram[0x10000]` (de la que se usan 4 KB) = 328 KB; `SoundChip` añade 1,5 MB de muestras (tres
+   ranuras de 512 KB, una por juego de ROM) y comparte con las demás instancias los 320 KB de LUT,
+   y `SpaceD::eram` otros 256 KB. Total ≈ 2,1 MB de estado residente por instancia. Cada
    instancia del plugin paga ese coste íntegro; instanciarlo 8 veces en un proyecto no es gratis.
 
 ---

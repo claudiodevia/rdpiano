@@ -1,5 +1,10 @@
 #include "../include/rom_loader.h"
 
+/**
+ * @file rom_loader.cpp
+ * @brief Descifrado de las ROM con las permutaciones de la cabecera.
+ */
+
 void decode_program_rom(u8 *dst, const u8 *src)
 {
     for (size_t srcpos = 0x00; srcpos < PROG_ROM_BYTES; srcpos++)

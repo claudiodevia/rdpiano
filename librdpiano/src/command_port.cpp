@@ -2,6 +2,11 @@
 
 #include <math.h>
 
+/**
+ * @file command_port.cpp
+ * @brief Codificación del master tune; el resto del protocolo es inline en la cabecera.
+ */
+
 MasterTuneBytes encode_master_tune(int16_t tune)
 {
     // `magnitude` en vez de `abs()` para no depender de qué sobrecarga entra por

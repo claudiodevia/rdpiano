@@ -2,6 +2,25 @@
 
 Cambios de cada versión publicada de RdPiano. La más nueva, arriba.
 
+## 1.0.1 — 4 de septiembre de 2026
+
+### Sonido
+
+- Cambiar de sonido mientras se toca ya no corta la música: las notas que
+  estuvieran sonando y el pedal siguen adelante con el sonido nuevo, y
+  reaparecen al volumen al que iban, sin el golpe de un ataque que nadie ha
+  tocado.
+- La transición del cambio es más suave y algo más larga, así que no se oye ni
+  el corte del sonido anterior ni la entrada del siguiente.
+- Cambiar la afinación ya no deja el instrumento mudo: entra con esa misma
+  transición suave y lo que estuvieras tocando —notas y pedal— sigue sonando, ya
+  afinado.
+
+### Uso en directo
+
+- El dial de afinación enseña los Hz mientras se gira y afina al soltarlo, igual
+  que el de sonidos.
+
 ## 1.0.0 — 1 de septiembre de 2026
 
 Primera versión con número propio. El plugin ya se puede usar en un concierto.

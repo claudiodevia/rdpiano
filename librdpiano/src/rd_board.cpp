@@ -1,5 +1,12 @@
 #include "../include/rd_board.h"
 
+#include <string.h>
+
+/**
+ * @file rd_board.cpp
+ * @brief Construcción de la placa y carga de ROM; el mapa de memoria es inline en la cabecera.
+ */
+
 RdBoard::RdBoard(const u8 *temp_ic5, const u8 *temp_ic6, const u8 *temp_ic7, const u8 *temp_progrom,
                  const u8 *temp_paramsrom)
     : sound_chip(temp_ic5, temp_ic6, temp_ic7)
@@ -31,8 +38,7 @@ void RdBoard::selectPatch(size_t from_addr) { decode_params_page(params_rom, par
 
 void RdBoard::selectPatchPage(const u8 *page, size_t from_addr)
 {
-    for (size_t i = 0; i < PARAMS_PAGE_BYTES; i++)
-        params_rom[i + 0x8000] = page[i];
+    memcpy(params_rom + 0x8000, page, PARAMS_PAGE_BYTES);
 
     const size_t target = params_patch_target(from_addr);
     params_rom[0x00] = 0x01;
@@ -42,8 +48,7 @@ void RdBoard::selectPatchPage(const u8 *page, size_t from_addr)
 
 void RdBoard::reset()
 {
-    for (size_t i = 0; i < sizeof(ram); i++)
-        ram[i] = 0;
+    memset(ram, 0, sizeof(ram));
 
     latch_val = 0x00;
     command_port.queue().clear();

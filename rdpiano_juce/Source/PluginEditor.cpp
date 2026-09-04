@@ -5,17 +5,21 @@
 #include <cstdio>
 #include <cstring>
 
-static int bgWidth = 6140;
-static int bgHeight = 1503;
-static float scaleFactor = 5;
-static int uiWidth = bgWidth / scaleFactor;
-static int uiHeight = bgHeight / scaleFactor;
+/**
+ * @file PluginEditor.cpp
+ * @brief Las dos tablas del panel —botones y modos del display— y los bucles que las recorren.
+ */
 
-//==============================================================================
-// El panel entero, en coordenadas del fondo. Es la única copia: el constructor,
-// `resized()`, `buttonClicked()` y `updateValues()` recorren esta tabla.
+static constexpr int bgWidth = 6140;
+static constexpr int bgHeight = 1503;
+static constexpr float scaleFactor = 5;
+static constexpr int uiWidth = bgWidth / scaleFactor;
+static constexpr int uiHeight = bgHeight / scaleFactor;
+
 typedef RdPiano_juceAudioProcessorEditor Editor;
 
+/// El panel entero, en coordenadas del fondo. Es la única copia: el constructor,
+/// resized(), buttonClicked() y updateValues() recorren esta tabla.
 const Editor::ButtonSpec Editor::buttonSpecs[Editor::kNumButtons] = {
     // MKS-20 / MK-80: los dos bancos de ocho parches
     {{2602, 806, 248, 248}, {2598, 800, 257, 258}, ButtonSpec::kSelectBank, 0, kVolume, kModePatch, kModePatch},
@@ -67,8 +71,8 @@ const Editor::ButtonSpec Editor::buttonSpecs[Editor::kNumButtons] = {
      kModePhaserDepth},
 };
 
-// Las etiquetas ocupan 15 columnas exactas: la fila de arriba es etiqueta más
-// el número del paso alineado a la derecha en dos columnas.
+/// Las etiquetas ocupan 15 columnas exactas: la fila de arriba es etiqueta más
+/// el número del paso alineado a la derecha en dos columnas.
 const Editor::ModeSpec Editor::modeSpecs[Editor::kNumDisplayModes] = {
     {nullptr, kVolume, false}, // kModePatch
     {nullptr, kVolume, true},  // kModeTune
@@ -80,8 +84,8 @@ const Editor::ModeSpec Editor::modeSpecs[Editor::kNumDisplayModes] = {
     {"PHASER DEPTH   ", kEfxPhaserDepth, false},
 };
 
-// Los 16 parches como los enseña el display: dos filas de 17. No es
-// `patchNames` de patches.h, que usa el formato corto "MKS-20: Piano 1".
+/// Los 16 parches como los enseña el display: dos filas de 17. No es
+/// `patchNames` de patches.h, que usa el formato corto "MKS-20: Piano 1".
 static const char *const displayPatchNames[NUM_PATCHES] = {
     "MKS-20           Piano 1          ", "MKS-20           Piano 2          ", "MKS-20           Piano 3          ",
     "MKS-20           Harpsichord      ", "MKS-20           Clavi            ", "MKS-20           Vibraphone       ",
@@ -90,7 +94,12 @@ static const char *const displayPatchNames[NUM_PATCHES] = {
     "MK-80            A. Piano 1       ", "MK-80            A. Piano 2       ", "MK-80            Clavi            ",
     "MK-80            Vibraphone       "};
 
-// Copia `text` en `line` a partir de `at`, sin salirse de las 34 columnas.
+/**
+ * @brief Copia un texto en una línea del display, sin salirse de las 34 columnas.
+ * @param line Las dos filas del display.
+ * @param at Columna en la que empezar.
+ * @param text Texto a copiar, terminado en cero.
+ */
 static void lcdPut(uint8_t (&line)[Lcd::kChars], int at, const char *text)
 {
     for (int i = 0; text[i] != '\0' && at + i < Lcd::kChars; i++)
@@ -103,8 +112,13 @@ RdPiano_juceAudioProcessorEditor::RdPiano_juceAudioProcessorEditor(RdPiano_juceA
 {
     addAndMakeVisible(lcd);
 
+    backgroundArt = juce::ImageCache::getFromMemory(BinaryData::background_png, BinaryData::background_pngSize);
+    interactableArt = juce::ImageCache::getFromMemory(BinaryData::interactable_png, BinaryData::interactable_pngSize);
+    knobLF.dial = juce::ImageCache::getFromMemory(BinaryData::alphadial_png, BinaryData::alphadial_pngSize);
+
     for (int i = 0; i < kNumButtons; i++)
     {
+        buttons[i].art = interactableArt;
         addAndMakeVisible(buttons[i]);
         buttons[i].addListener(this);
     }
@@ -159,13 +173,11 @@ void RdPiano_juceAudioProcessorEditor::paint(juce::Graphics &g)
 {
     float sfC = (float)bgWidth / getBounds().getWidth();
 
-    g.drawImage(juce::ImageCache::getFromMemory(BinaryData::background_png, BinaryData::background_pngSize),
-                getLocalBounds().toFloat());
+    g.drawImage(backgroundArt, getLocalBounds().toFloat());
 
     // Volume
     float volumeY = 660 / sfC + (1 - audioProcessor.paramValue(kVolume)) * (656 - 131) / sfC;
-    g.drawImage(juce::ImageCache::getFromMemory(BinaryData::interactable_png, BinaryData::interactable_pngSize),
-                1188 / sfC, volumeY, 100 / sfC, 131 / sfC, 1188, 1179, 100, 131);
+    g.drawImage(interactableArt, 1188 / sfC, volumeY, 100 / sfC, 131 / sfC, 1188, 1179, 100, 131);
 }
 
 void RdPiano_juceAudioProcessorEditor::buttonClicked(juce::Button *button)
@@ -212,9 +224,15 @@ void RdPiano_juceAudioProcessorEditor::buttonClicked(juce::Button *button)
     }
 }
 
-// El paso 0..14 que enseña el display para el parámetro de este modo. Se
-// calcula sobre el valor normalizado, así que sirve igual para los rangos
-// enteros 0..14 del chorus y del trémolo y para los 0..1 continuos del phaser.
+/**
+ * @brief El paso que enseña el display para el parámetro de un modo.
+ *
+ * Se calcula sobre el valor normalizado, así que sirve igual para los rangos
+ * enteros 0..14 del chorus y del trémolo y para los 0..1 continuos del phaser.
+ *
+ * @param m Modo del display.
+ * @return El paso, 0..kParamSteps-1.
+ */
 int RdPiano_juceAudioProcessorEditor::paramStep(DisplayMode m) const
 {
     const RdParamId id = modeSpecs[m].param;
@@ -222,8 +240,12 @@ int RdPiano_juceAudioProcessorEditor::paramStep(DisplayMode m) const
     return juce::jlimit(0, kParamSteps - 1, juce::roundToInt(normalised * (kParamSteps - 1)));
 }
 
-// "ETIQUETA        7" / " ______█________ ": la línea de parámetro que antes
-// se escribía seis veces, una por modo.
+/**
+ * @brief Escribe la línea de parámetro: "ETIQUETA        7" / " ______█________ ".
+ * @param line Las dos filas del display.
+ * @param spec Modo a dibujar.
+ * @param step Paso en el que está el parámetro.
+ */
 void RdPiano_juceAudioProcessorEditor::renderParamLine(uint8_t (&line)[Lcd::kChars], const ModeSpec &spec,
                                                        int step) const
 {
@@ -267,7 +289,7 @@ void RdPiano_juceAudioProcessorEditor::sliderValueChanged(juce::Slider *slider)
         // cambio de verdad va en sliderDragEnded.
         if (dialDragging)
         {
-            dialPatchPreview = patch;
+            dialPreview = patch;
             updateValues();
             return;
         }
@@ -278,7 +300,19 @@ void RdPiano_juceAudioProcessorEditor::sliderValueChanged(juce::Slider *slider)
 
     if (mode == kModeTune)
     {
-        audioProcessor.setMasterTune((int16_t)(value * 32767.0));
+        const int tune = (int)(value * 32767.0);
+
+        // Igual que el dial de parches: afinar apaga las voces del firmware y el
+        // motor tiene que devolverlas, así que un gesto entero serían decenas de
+        // reentradas seguidas. Arrastrando sólo se enseñan los Hz.
+        if (dialDragging)
+        {
+            dialPreview = tune;
+            updateValues();
+            return;
+        }
+
+        audioProcessor.setMasterTune((int16_t)tune);
         return;
     }
 
@@ -303,10 +337,15 @@ void RdPiano_juceAudioProcessorEditor::sliderDragEnded(juce::Slider *slider)
 
     dialDragging = false;
 
-    if (mode == kModePatch && dialPatchPreview >= 0)
-        audioProcessor.setCurrentProgram(dialPatchPreview);
+    if (dialPreview != kNoDialPreview)
+    {
+        if (mode == kModePatch)
+            audioProcessor.setCurrentProgram(dialPreview);
+        else if (mode == kModeTune)
+            audioProcessor.setMasterTune((int16_t)dialPreview);
+    }
 
-    dialPatchPreview = -1;
+    dialPreview = kNoDialPreview;
     updateValues();
 }
 
@@ -318,7 +357,7 @@ void RdPiano_juceAudioProcessorEditor::updateValues()
 {
     // Con el dial de parches en la mano manda su posición: el parche todavía no
     // ha cambiado, pero el panel ya enseña cuál se va a poner al soltar.
-    const int patch = dialPatchPreview >= 0 ? dialPatchPreview : audioProcessor.currentPatch;
+    const int patch = dialValueOr(kModePatch, audioProcessor.currentPatch);
     const bool alternativeMode = modeSpecs[mode].countsAsAlternative;
 
     for (int i = 0; i < kNumButtons; i++)
@@ -366,13 +405,14 @@ void RdPiano_juceAudioProcessorEditor::updateValues()
     {
         // 442 Hz de referencia y +/-3,85 Hz de recorrido: es lo que abarca el
         // parámetro de afinación del firmware.
-        const juce::String hz(442.0 + audioProcessor.masterTune / 32767.0 * 3.85, 1);
+        const int tune = dialValueOr(kModeTune, (int)audioProcessor.masterTune);
+        const juce::String hz(442.0 + tune / 32767.0 * 3.85, 1);
 
         memset(line, ' ', Lcd::kChars);
         lcdPut(line, 0, "TUNING");
         lcdPut(line, Lcd::kColumns, hz.toRawUTF8());
         lcdPut(line, Lcd::kColumns + hz.length(), "Hz");
-        dial = audioProcessor.masterTune / 32767.0;
+        dial = tune / 32767.0;
     }
     else
     {

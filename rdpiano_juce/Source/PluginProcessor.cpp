@@ -2,9 +2,14 @@
 #include "PluginEditor.h"
 #include "patches.h"
 
-// Las ROMs empotradas, en el orden de RomSetId. Los nombres canónicos están en
-// patches.h y test_patches.cpp comprueba que rdpiano_juce/CMakeLists.txt empotra
-// exactamente esos ficheros.
+/**
+ * @file PluginProcessor.cpp
+ * @brief El puente con JUCE: parámetros, presets, MIDI y el bloque de audio.
+ */
+
+/// Las ROM empotradas, en el orden de RomSetId. Los nombres canónicos están en
+/// patches.h y test_patches.cpp comprueba que rdpiano_juce/CMakeLists.txt
+/// empotra exactamente esos ficheros.
 static const RdRomSet romSets[ROMSET_COUNT] = {
     // ROMSET_MKS20_A
     {(const uint8_t *)BinaryData::mks20_15179738_BIN, (const uint8_t *)BinaryData::mks20_15179737_BIN,
@@ -19,6 +24,9 @@ static const RdRomSet romSets[ROMSET_COUNT] = {
 
 //==============================================================================
 RdPiano_juceAudioProcessor::RdPiano_juceAudioProcessor()
+    // El bus de entrada estéreo sobra en un instrumento —nunca se lee— y quitarlo
+    // es lo normal, pero **Logic no carga la AU sin él**: la ventana sale vacía y
+    // sin sonido (probado el 2026-09-02; ver trampa 12 de CLAUDE.md). Se queda.
     : AudioProcessor(BusesProperties()
                          .withInput("Input", juce::AudioChannelSet::stereo(), true)
                          .withOutput("Output", juce::AudioChannelSet::stereo(), true)),
@@ -49,8 +57,12 @@ RdPiano_juceAudioProcessor::~RdPiano_juceAudioProcessor()
 //==============================================================================
 void RdPiano_juceAudioProcessor::parameterChanged(const juce::String &, float) { sendChangeMessage(); }
 
-// Un program change MIDI cambia el parche dentro del motor, sin pasar por
-// `setCurrentProgram`. Aquí se recoge para que el panel y el preset lo sepan.
+/**
+ * @brief Recoge el parche que el motor haya cambiado por su cuenta.
+ *
+ * Un program change MIDI lo cambia dentro del motor, sin pasar por
+ * setCurrentProgram(): aquí se recoge para que el panel y el preset lo sepan.
+ */
 void RdPiano_juceAudioProcessor::timerCallback()
 {
     const int enginePatch = engine->patch();
@@ -63,8 +75,8 @@ void RdPiano_juceAudioProcessor::timerCallback()
 }
 
 //==============================================================================
-// Acceso por índice de tabla: es lo que deja al editor recorrer descriptores en
-// vez de repetir un bloque por control.
+// El acceso por índice de tabla es lo que deja al editor recorrer descriptores
+// en vez de repetir un bloque por control.
 juce::RangedAudioParameter &RdPiano_juceAudioProcessor::param(RdParamId id) const
 {
     juce::RangedAudioParameter *p = apvts.getParameter(rdParamSpecs[id].id);
@@ -89,7 +101,18 @@ bool RdPiano_juceAudioProcessor::producesMidi() const { return false; }
 
 bool RdPiano_juceAudioProcessor::isMidiEffect() const { return false; }
 
-double RdPiano_juceAudioProcessor::getTailLengthSeconds() const { return 0.0; }
+/**
+ * @brief Lo que el motor sigue sonando tras el último note-off.
+ *
+ * Con 0 —lo que había— el anfitrión deja de pedir bloques al soltar la tecla y
+ * corta el final de la nota al exportar o al congelar la pista.
+ *
+ * @return La cola declarada, en segundos.
+ */
+double RdPiano_juceAudioProcessor::getTailLengthSeconds() const
+{
+    return engine ? engine->tailLengthSeconds() : RdPianoEngine::kTailSeconds;
+}
 
 int RdPiano_juceAudioProcessor::getNumPrograms() { return NUM_PATCHES; }
 
@@ -121,7 +144,7 @@ const juce::String RdPiano_juceAudioProcessor::getProgramName(int index)
     return juce::String(patchNames[index]);
 }
 
-void RdPiano_juceAudioProcessor::changeProgramName(int index, const juce::String &newName) {}
+void RdPiano_juceAudioProcessor::changeProgramName(int, const juce::String &) {}
 
 void RdPiano_juceAudioProcessor::setMasterTune(int16_t tune)
 {
@@ -140,9 +163,12 @@ void RdPiano_juceAudioProcessor::setMasterTune(int16_t tune)
     sendChangeMessage();
 }
 
-// Vuelca los parámetros de JUCE al POD que lee render(), una vez por bloque. Se
-// lee de los `std::atomic<float>` cacheados en el constructor y no del APVTS:
-// buscar por id es una búsqueda de cadena en el hilo de audio.
+/**
+ * @brief Vuelca los parámetros de JUCE al POD que lee render(), una vez por bloque.
+ *
+ * Se lee de los `std::atomic<float>` cacheados en el constructor y no del APVTS:
+ * buscar por id es una búsqueda de cadena en el hilo de audio.
+ */
 void RdPiano_juceAudioProcessor::syncParamsToEngine()
 {
     RdEngineParams &p = engine->params;
@@ -227,11 +253,17 @@ juce::AudioProcessorEditor *RdPiano_juceAudioProcessor::createEditor()
 }
 
 //==============================================================================
-// El preset es el árbol del APVTS más las dos cosas que no son parámetros: el
-// parche (que es el programa) y la afinación maestra. La etiqueta raíz
-// <RdPiano> y los nombres de esos dos atributos no cambian: una sesión de una
-// versión anterior se sigue abriendo y recupera parche y afinación (sus diez
-// parámetros, que iban como atributos de la raíz, vuelven a fábrica).
+/**
+ * @brief Serializa el preset: el árbol del APVTS más parche y afinación.
+ *
+ * Esas dos no son parámetros —el parche es el programa del anfitrión— y viajan
+ * como propiedades del árbol. La etiqueta raíz <RdPiano> y los nombres de esos
+ * dos atributos no cambian: una sesión de una versión anterior se sigue abriendo
+ * y recupera parche y afinación (sus diez parámetros, que iban como atributos de
+ * la raíz, vuelven a fábrica).
+ *
+ * @param destData Sale con el XML del preset.
+ */
 void RdPiano_juceAudioProcessor::getStateInformation(juce::MemoryBlock &destData)
 {
     juce::ValueTree state = apvts.copyState();

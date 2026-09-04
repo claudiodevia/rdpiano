@@ -1,9 +1,11 @@
-// Presets y programas: la ida y vuelta del estado del plugin.
-//
-// Habla con el `AudioProcessor` sólo por su API pública —`getParameters()` por
-// id, `getStateInformation`/`setStateInformation`, `setCurrentProgram`— y nunca
-// por los punteros concretos: así sigue valiendo, sin editarla, si cambia cómo
-// se guarda el estado por dentro.
+/**
+ * @file test_plugin_state.cpp
+ * @brief Presets y programas: la ida y vuelta del estado del plugin.
+ *
+ * Habla con el `AudioProcessor` sólo por su API pública —`getParameters()` por id,
+ * `getStateInformation`/`setStateInformation`, `setCurrentProgram`— y nunca por los punteros
+ * concretos: así sigue valiendo, sin editarla, si cambia cómo se guarda el estado por dentro.
+ */
 
 #include <JuceHeader.h>
 
@@ -69,10 +71,11 @@ namespace
 
 } // namespace
 
-// Los diez parámetros existen, con ese id exacto, y su valor por defecto es el
-// mismo que el POD del motor da por defecto. Si las dos listas se separan, el
-// plugin arranca sonando distinto de como suena el motor en las pruebas del
-// núcleo.
+/**
+ * @brief Los diez parámetros existen, con ese id exacto, y su valor por defecto es el mismo que el POD del
+ *        motor da por defecto. Si las dos listas se separan, el plugin arranca sonando distinto de como suena
+ *        el motor en las pruebas del núcleo.
+ */
 TEST_SUITE(plugin_params_declared)
 {
     RdPiano_juceAudioProcessor p;
@@ -114,7 +117,9 @@ TEST_SUITE(plugin_params_declared)
     }
 }
 
-// Ida y vuelta completa: mover todo, guardar, restaurar en otra instancia.
+/**
+ * @brief Ida y vuelta completa: mover todo, guardar, restaurar en otra instancia.
+ */
 TEST_SUITE(plugin_state_roundtrip)
 {
     RdPiano_juceAudioProcessor source;
@@ -158,9 +163,10 @@ TEST_SUITE(plugin_state_roundtrip)
     CHECK_EQ(restored.engine->masterTune(), 4321);
 }
 
-// Una sesión guardada por una versión anterior no trae todos los atributos: lo
-// que falte tiene que volver al valor de fábrica, el mismo con el que arranca
-// el plugin.
+/**
+ * @brief Una sesión guardada por una versión anterior no trae todos los atributos: lo que falte tiene que
+ *        volver al valor de fábrica, el mismo con el que arranca el plugin.
+ */
 TEST_SUITE(plugin_state_missing_attributes)
 {
     RdPiano_juceAudioProcessor fresh;
@@ -189,7 +195,9 @@ TEST_SUITE(plugin_state_missing_attributes)
     CHECK_EQ(after.patch, 3);
 }
 
-// Un preset corrupto no debe dejar el plugin en un estado imposible.
+/**
+ * @brief Un preset corrupto no debe dejar el plugin en un estado imposible.
+ */
 TEST_SUITE(plugin_state_garbage)
 {
     RdPiano_juceAudioProcessor p;
@@ -213,7 +221,9 @@ TEST_SUITE(plugin_state_garbage)
     CHECK_EQ(p.engine->patch(), p.getCurrentProgram());
 }
 
-// Los programas son los parches de `patches.h`, con sus nombres.
+/**
+ * @brief Los programas son los parches de `patches.h`, con sus nombres.
+ */
 TEST_SUITE(plugin_programs)
 {
     RdPiano_juceAudioProcessor p;
@@ -239,8 +249,10 @@ TEST_SUITE(plugin_programs)
     CHECK_EQ(p.getCurrentProgram(), 5);
 }
 
-// El retardo de grupo del remuestreador, declarado al anfitrión: sin esto todo
-// lo que toque el plugin queda 1,4 ms tarde respecto de lo que el DAW cree.
+/**
+ * @brief El retardo de grupo del remuestreador, declarado al anfitrión: sin esto todo lo que toque el plugin
+ *        queda 1,4 ms tarde respecto de lo que el DAW cree.
+ */
 TEST_SUITE(plugin_latency)
 {
     RdPiano_juceAudioProcessor p;
@@ -255,6 +267,74 @@ TEST_SUITE(plugin_latency)
     const int declared = p.getLatencySamples();
     p.setCurrentProgram(11);
     CHECK_EQ(p.getLatencySamples(), declared);
+
+    p.releaseResources();
+}
+
+/**
+ * @brief La cola declarada: el anfitrión decide con ella cuánto sigue pidiendo bloques después del último
+ *        evento. Cuánto dura de verdad lo mide engine_tail_length en la suite del núcleo; aquí sólo se
+ *        comprueba que el plugin declara la del motor y no un cero.
+ */
+TEST_SUITE(plugin_tail_length)
+{
+    RdPiano_juceAudioProcessor p;
+
+    CHECK(p.getTailLengthSeconds() > 0.0);
+    CHECK_EQ(p.getTailLengthSeconds(), p.engine->tailLengthSeconds());
+
+    // Y sigue siendo la misma con el plugin preparado y con otro sonido puesto:
+    // renegociarla en mitad de una sesión es justo lo que no se puede hacer.
+    p.prepareToPlay(48000.0, 512);
+    p.setCurrentProgram(5);
+    CHECK_EQ(p.getTailLengthSeconds(), RdPianoEngine::kTailSeconds);
+
+    p.releaseResources();
+}
+
+/**
+ * @brief Los buses. Lo canónico en un instrumento sería no declarar entrada, y se probó: Logic deja de cargar
+ *        la AU —ventana vacía y sin sonido— aunque `auval` la valide. Así que el bus de entrada estéreo se
+ *        queda, y esta suite lo fija para que nadie lo vuelva a quitar sin leer la trampa 12 de CLAUDE.md.
+ */
+TEST_SUITE(plugin_bus_layout)
+{
+    RdPiano_juceAudioProcessor p;
+
+    CHECK_EQ(p.getBusCount(true), 1);
+    CHECK_EQ(p.getBusCount(false), 1);
+    CHECK_EQ(p.getMainBusNumInputChannels(), 2);
+    CHECK_EQ(p.getMainBusNumOutputChannels(), 2);
+
+    // La salida estéreo se acepta; cualquier otra cosa, no.
+    juce::AudioProcessor::BusesLayout stereo;
+    stereo.inputBuses.add(juce::AudioChannelSet::stereo());
+    stereo.outputBuses.add(juce::AudioChannelSet::stereo());
+    CHECK(p.checkBusesLayoutSupported(stereo));
+
+    juce::AudioProcessor::BusesLayout mono;
+    mono.inputBuses.add(juce::AudioChannelSet::stereo());
+    mono.outputBuses.add(juce::AudioChannelSet::mono());
+    CHECK(!p.checkBusesLayoutSupported(mono));
+
+    // Y aunque haya entrada, no se lee: lo que el anfitrión traiga en el búfer
+    // no se oye, porque el plugin lo sobrescribe entero.
+    p.prepareToPlay(48000.0, 256);
+
+    juce::AudioBuffer<float> buffer(2, 256);
+    for (int ch = 0; ch < 2; ch++)
+        for (int i = 0; i < 256; i++)
+            buffer.getWritePointer(ch)[i] = 0.5f;
+
+    juce::MidiBuffer midi;
+    p.processBlock(buffer, midi);
+
+    float peak = 0.0f;
+    for (int ch = 0; ch < 2; ch++)
+        for (int i = 0; i < 256; i++)
+            peak = juce::jmax(peak, std::abs(buffer.getReadPointer(ch)[i]));
+
+    checks.add("sin notas, salida en silencio", peak < 1e-4f, check_fmt("pico %g", (double)peak));
 
     p.releaseResources();
 }

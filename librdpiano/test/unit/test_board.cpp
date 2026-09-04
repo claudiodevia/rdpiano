@@ -1,7 +1,11 @@
-// Mapa de memoria y latch de banco: se escribe y se lee de verdad —RAM, chip de
-// sonido, latch, página de params, ROM de programa y los dos puertos del bus de
-// comandos— sin CPU, sin firmware y sin audio. Basta una `RdBoard` con una CPU
-// de mentira.
+/**
+ * @file test_board.cpp
+ * @brief Mapa de memoria y latch de banco, sin CPU ni firmware.
+ *
+ * Se escribe y se lee de verdad —RAM, chip de sonido, latch, página de params, ROM de programa y
+ * los dos puertos del bus de comandos— sin CPU, sin firmware y sin audio. Basta una `RdBoard` con
+ * una CPU de mentira.
+ */
 
 #include <stdio.h>
 
@@ -13,9 +17,11 @@
 #include "rom_loader.h"
 #include "unit_test.h"
 
-// La ROM de programa se acota sobre un array de 0x2000. Esta suite fija la
-// equivalencia con la máscara `& 0xdfff` de antes en el único rango que el bus
-// puede producir: addr >= 0xc000, luego offset 0..0x3fff.
+/**
+ * @brief La ROM de programa se acota sobre un array de 0x2000. Esta suite fija la equivalencia con la máscara
+ *        `& 0xdfff` de antes en el único rango que el bus puede producir: addr >= 0xc000, luego offset
+ *        0..0x3fff.
+ */
 TEST_SUITE(board_program_rom_mask)
 {
     int mismatches = 0;
@@ -39,9 +45,11 @@ TEST_SUITE(board_program_rom_mask)
     CHECK((0x4000 & 0xdfff) != (0x4000 & 0x1fff));
 }
 
-// La página de params se direcciona con `(addr - 0x4000) | ((latch & 0b11) << 15)`
-// sobre un array de 0x20000. El OR solo es una suma si el offset no invade los
-// bits del banco: esto lo comprueba para todo el rango y los cuatro bancos.
+/**
+ * @brief La página de params se direcciona con `(addr - 0x4000) | ((latch & 0b11) << 15)` sobre un array de
+ *        0x20000. El OR solo es una suma si el offset no invade los bits del banco: esto lo comprueba para
+ *        todo el rango y los cuatro bancos.
+ */
 TEST_SUITE(board_params_bank)
 {
     size_t maxOffset = 0;
@@ -75,8 +83,11 @@ TEST_SUITE(board_params_bank)
 namespace
 {
 
-    // Registra lo que la placa le pide a la CPU y devuelve lo que la CPU real
-    // devolvería para los registros que no reconoce.
+    /**
+     * @brief Una CPU de mentira: registra lo que la placa le pide.
+     *
+     * Devuelve lo que la CPU real devolvería para los registros que no reconoce.
+     */
     struct FakeCpu : public RdBoardCpu
     {
         u32 pc = 0;
@@ -126,9 +137,12 @@ namespace
         return buf;
     }
 
-    // Todo lo que hace falta para levantar una placa: las cuatro ROMs del juego
-    // MK-80 más el firmware. Vive en un `static` porque construir una `RdBoard`
-    // descifra 384 KB de wave ROM y las suites de abajo son varias.
+    /**
+     * @brief Todo lo que hace falta para levantar una placa: las cuatro ROM del MK-80 y el firmware.
+     *
+     * Vive en un `static` porque construir una RdBoard descifra 384 KB de wave
+     * ROM y las suites de abajo son varias.
+     */
     struct Fixture
     {
         std::vector<u8> ic5, ic6, ic7, ic18, prog;
@@ -153,7 +167,9 @@ namespace
 
 } // namespace
 
-// Las tres regiones que son memoria de verdad: RAM, latch y sus fronteras.
+/**
+ * @brief Las tres regiones que son memoria de verdad: RAM, latch y sus fronteras.
+ */
 TEST_SUITE(board_memory_map)
 {
     const Fixture &f = fixture();
@@ -199,8 +215,9 @@ TEST_SUITE(board_memory_map)
     CHECK_EQ(board.read(0x3fff), 0xFF);
 }
 
-// La ROM de programa: los 8 KB descifrados, espejados cuatro veces en
-// 0xC000-0xFFFF.
+/**
+ * @brief La ROM de programa: los 8 KB descifrados, espejados cuatro veces en 0xC000-0xFFFF.
+ */
 TEST_SUITE(board_program_rom)
 {
     const Fixture &f = fixture();
@@ -235,7 +252,9 @@ TEST_SUITE(board_program_rom)
     CHECK(resetVector >= 0xc000);
 }
 
-// La página de params, bancada por los dos bits bajos del latch.
+/**
+ * @brief La página de params, bancada por los dos bits bajos del latch.
+ */
 TEST_SUITE(board_params_page)
 {
     const Fixture &f = fixture();
@@ -277,9 +296,11 @@ TEST_SUITE(board_params_page)
     CHECK_EQ(board.read(0x4000), expected[1 << 15]);
 }
 
-// Los dos puertos del bus de comandos: el handshake depende de direcciones
-// fijas del firmware RD200 (trampa 1 de CLAUDE.md), y aquí se puede poner el
-// contador de programa donde haga falta sin ejecutar una sola instrucción.
+/**
+ * @brief Los dos puertos del bus de comandos: el handshake depende de direcciones fijas del firmware RD200
+ *        (trampa 1 de CLAUDE.md), y aquí se puede poner el contador de programa donde haga falta sin ejecutar
+ *        una sola instrucción.
+ */
 TEST_SUITE(board_comm_ports)
 {
     const Fixture &f = fixture();
@@ -352,10 +373,11 @@ TEST_SUITE(board_comm_ports)
     CHECK_EQ(board.read(0x0020), 0x5a);
 }
 
-// El chip de sonido ocupa 0x1000-0x1FFF. Su `read()` ignora el offset y
-// devuelve siempre el identificador de la última IRQ: rareza conocida y sin
-// resolver, escrita aquí para que el día que se arregle salte aquí y no en el
-// golden.
+/**
+ * @brief El chip de sonido ocupa 0x1000-0x1FFF. Su `read()` ignora el offset y devuelve siempre el
+ *        identificador de la última IRQ: rareza conocida y sin resolver, escrita aquí para que el día que se
+ *        arregle salte aquí y no en el golden.
+ */
 TEST_SUITE(board_sound_chip_window)
 {
     const Fixture &f = fixture();
@@ -380,10 +402,11 @@ TEST_SUITE(board_sound_chip_window)
     CHECK_EQ(board.bankLatch(), 0x00);
 }
 
-// AUDITORIA §14. Cada part ocupa 16 bytes del mapa, pero sólo tiene 8
-// registros: `offset % 8` plegaba +8..+F sobre +0..+7 en silencio. La red es la
-// respuesta del propio chip —armar una voz y hashear 256 muestras—, porque los
-// registros no se pueden releer.
+/**
+ * @brief AUDITORIA §14. Cada part ocupa 16 bytes del mapa, pero sólo tiene 8 registros: `offset % 8` plegaba
+ *        +8..+F sobre +0..+7 en silencio. La red es la respuesta del propio chip —armar una voz y hashear 256
+ *        muestras—, porque los registros no se pueden releer.
+ */
 TEST_SUITE(board_sound_chip_part_fields)
 {
     const Fixture &f = fixture();
@@ -440,10 +463,11 @@ TEST_SUITE(board_sound_chip_part_fields)
     CHECK_HASH("offset 0x10000 descartado", hash256(), armed);
 }
 
-// AUDITORIA §15. `reset()` reiniciaba los registros de la CPU y nada más: RAM,
-// latch, chip de sonido y cola de comandos sobrevivían. La cola era la peor —el
-// handshake la consume en direcciones fijas del firmware, trampa 1—, y las ROM
-// y la página de params sí tienen que sobrevivir (trampa 8).
+/**
+ * @brief AUDITORIA §15. `reset()` reiniciaba los registros de la CPU y nada más: RAM, latch, chip de sonido y
+ *        cola de comandos sobrevivían. La cola era la peor —el handshake la consume en direcciones fijas del
+ *        firmware, trampa 1—, y las ROM y la página de params sí tienen que sobrevivir (trampa 8).
+ */
 TEST_SUITE(board_reset)
 {
     const Fixture &f = fixture();

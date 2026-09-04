@@ -4,6 +4,11 @@
 
 #include <algorithm>
 
+/**
+ * @file mcu.cpp
+ * @brief El core HD63701 (macros y tablas derivadas de MAME) y el protocolo del firmware.
+ */
+
 #define pPPC m_ppc
 #define pPC m_pc
 #define pS m_s
@@ -337,12 +342,6 @@ Mcu::Mcu(const u8 *temp_ic5, const u8 *temp_ic6, const u8 *temp_ic7, const u8 *t
 
 void Mcu::reset()
 {
-    // Todo el estado, no sólo los registros de la CPU: RAM, latch, chip de
-    // sonido y cola de comandos van con ellos. La cola era la peor de las que
-    // sobrevivían —el handshake la consume en direcciones fijas del firmware
-    // (trampa 1), así que un byte huérfano de antes del reset se entregaba en
-    // mitad de la nueva secuencia de arranque—. Las ROM y la página de
-    // parámetros ya mapeada no se tocan (trampa 8).
     board.reset();
 
     m_tcsr = 0;
@@ -365,16 +364,12 @@ void Mcu::reset()
     SEI; /* IRQ disabled */
     PCD = RM16(0xfffe);
 
-    m_wai_state = 0;
-    m_nmi_state = 0;
-    m_nmi_pending = 0;
-
     // We need to run the CPU for a bit before being able to send commands to it
     for (size_t i = 0; i < 1024 * 8; i++)
         execute_one();
 }
 
-Mcu::~Mcu() {}
+Mcu::~Mcu() = default;
 
 void Mcu::take_trap() { enter_interrupt("TRAP", 0xffee); }
 
@@ -423,7 +418,7 @@ void Mcu::WM16(u32 Addr, PAIR *p)
 }
 
 /* IRQ enter */
-void Mcu::enter_interrupt(const char *message, u16 irq_vector)
+void Mcu::enter_interrupt(const char *, u16 irq_vector)
 {
     if (m_wai_state & M6800_WAI)
     {
@@ -510,9 +505,6 @@ void Mcu::tcsr_w(u8 data)
     check_irq_lines();
 }
 
-// Los registros internos del chip dentro de 0x0000-0x001F: la placa se queda
-// con los dos puertos del bus de comandos y pasa el resto aquí. Lo que la CPU
-// no reconoce vale 0xFF.
 u8 Mcu::readCpuRegister(u16 addr)
 {
     // tcsr
@@ -558,32 +550,32 @@ s32 Mcu::generate_next_sample(bool sampleRate32)
     return sample;
 }
 
-void Mcu::sendMidiCmd(u8 data1, u8 data2, u8 data3)
+void Mcu::sendMidiCmd(u8 cmd, u8 data1, u8 data2)
 {
-    uint8_t command = data1 >> 4;
+    uint8_t command = cmd >> 4;
 
     // program change
     if (command == 0xC)
     {
-        board.commandPort().programChange(data2 & 0xF);
+        board.commandPort().programChange(data1 & 0xF);
     }
 
     // note off
-    else if (command == 0x8 || (command == 0x9 && data3 == 0))
+    else if (command == 0x8 || (command == 0x9 && data2 == 0))
     {
-        board.commandPort().noteOff(data2);
+        board.commandPort().noteOff(data1);
     }
 
     // note on
     else if (command == 0x9)
     {
-        board.commandPort().noteOn(data2, data3);
+        board.commandPort().noteOn(data1, data2);
     }
 
     // sustain
-    else if (command == 0xB && data2 == 64)
+    else if (command == 0xB && data1 == 64)
     {
-        board.commandPort().sustain(data3 >= 64);
+        board.commandPort().sustain(data2 >= 64);
     }
 }
 

@@ -1,6 +1,10 @@
-// Descifrado de ROM: permutaciones y páginas de params. Funciones puras sobre
-// u8[], sin CPU y sin audio; una permutación mal reordenada no da un error, da
-// otro timbre.
+/**
+ * @file test_rom_loader.cpp
+ * @brief Descifrado de ROM: permutaciones y páginas de params.
+ *
+ * Funciones puras sobre u8[], sin CPU y sin audio; una
+ * permutación mal reordenada no da un error, da otro timbre.
+ */
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -25,9 +29,10 @@ static u64 fnv1a(const void *data, size_t n)
     return h;
 }
 
-// Lee una ROM entera. Devuelve vacío si no está: las suites de más abajo lo
-// tratan como "no se puede comprobar", no como fallo — de que exista ya se
-// queja patches_rom_files.
+/**
+ * @brief Lee una ROM entera. Devuelve vacío si no está: las suites de más abajo lo tratan como "no se puede
+ *        comprobar", no como fallo — de que exista ya se queja patches_rom_files.
+ */
 static std::vector<u8> read_rom(const std::string &name, size_t want)
 {
     std::vector<u8> buf;
@@ -126,7 +131,9 @@ static constexpr u64 PARAMS_ROM_HASHES[NUM_PATCHES] = {
     0x497ae2d4ffcc667aull, // 15 MK-80: Vibraphone
 };
 
-// Y el de la ROM de programa, que no depende del parche.
+/**
+ * @brief Y el de la ROM de programa, que no depende del parche.
+ */
 static constexpr u64 PROGRAM_ROM_HASH = 0x32e8a60dd3121a8eull;
 
 TEST_SUITE(rom_loader_params_pages)
@@ -170,10 +177,10 @@ TEST_SUITE(rom_loader_program_rom)
     CHECK_HASH("program_rom", fnv1a(out.data(), out.size()), PROGRAM_ROM_HASH);
 }
 
-// ---------------------------------------------------------------------------
-// Partir el trabajo caro (ROM SET) del barato (PARCHE) no puede cambiar un byte
-// del resultado, ni siquiera arrastrando estado de un parche al siguiente.
-
+/**
+ * @brief Partir el trabajo caro (ROM SET) del barato (PARCHE) no puede cambiar un byte del resultado, ni
+ *        siquiera arrastrando estado de un parche al siguiente.
+ */
 TEST_SUITE(rom_loader_select_patch_is_stateless)
 {
     const char *name = romSetFiles[ROMSET_MKS20_A][ROM_IC18];

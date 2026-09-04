@@ -1,20 +1,27 @@
-// Congela las dos transcripciones del DSP original —SpaceD (chorus) y Phaser—
-// con un hash de la respuesta a un impulso y a un barrido, por efecto y por
-// juego de parámetros. Los cuerpos `accA_NNN` son transcripción ciclo a ciclo y
-// no se reescriben; si un hash se mueve, no se regenera: se revierte.
+/**
+ * @file test_lsp.cpp
+ * @brief Congela las dos transcripciones del DSP original —SpaceD (chorus) y Phaser— con un hash de la
+ *        respuesta a un impulso y a un barrido, por efecto y por juego de parámetros.
+ *
+ * Los cuerpos `accA_NNN` son transcripción ciclo a ciclo y no se reescriben; si un hash se mueve,
+ * no se regenera: se revierte.
+ */
 
 #include <string.h>
 
+#include <memory>
 #include <vector>
 
 #include "lsp/phaser.h"
 #include "lsp/spaced.h"
 #include "unit_test.h"
 
-// SpaceD lleva 256 KB de ERAM: en la pila no cabe.
+/**
+ * @brief SpaceD lleva 256 KB de ERAM: en la pila no cabe.
+ */
 static std::vector<float> impulse_response_spaced(int32_t rate, int32_t depth, int n, bool sweep)
 {
-    SpaceD *fx = new SpaceD();
+    auto fx = std::make_unique<SpaceD>();
     fx->reset();
     fx->rate = rate;
     fx->depth = depth;
@@ -39,13 +46,12 @@ static std::vector<float> impulse_response_spaced(int32_t rate, int32_t depth, i
         out.push_back((float)fx->audioOutR);
     }
 
-    delete fx;
     return out;
 }
 
 static std::vector<float> impulse_response_phaser(int32_t rate, int32_t depth, int n, bool sweep)
 {
-    Phaser *fx = new Phaser();
+    auto fx = std::make_unique<Phaser>();
     fx->reset();
     fx->rate = rate;
     fx->depth = depth;
@@ -68,7 +74,6 @@ static std::vector<float> impulse_response_phaser(int32_t rate, int32_t depth, i
         out.push_back((float)fx->audioOutR);
     }
 
-    delete fx;
     return out;
 }
 
@@ -80,8 +85,9 @@ static unsigned long long hash_of(const std::vector<float> &v)
     return h.h;
 }
 
-// ---------------------------------------------------------------- tablas
-
+/**
+ * @brief ---------------------------------------------------------------- tablas
+ */
 TEST_SUITE(lsp_tables)
 {
     // Las tablas de rate de spaced.cpp y phaser.cpp son la misma: que lo
@@ -120,8 +126,9 @@ TEST_SUITE(lsp_tables)
     CHECK_EQ(spaceDDepth(14.0f / 15.0f), spaceDDepthTable[119]);
 }
 
-// ---------------------------------------------------------------- SpaceD
-
+/**
+ * @brief ---------------------------------------------------------------- SpaceD
+ */
 TEST_SUITE(lsp_spaced)
 {
     // Hashes capturados del código original. No se regeneran para poner algo en
@@ -157,8 +164,9 @@ TEST_SUITE(lsp_spaced)
     CHECK(inRange);
 }
 
-// ---------------------------------------------------------------- Phaser
-
+/**
+ * @brief ---------------------------------------------------------------- Phaser
+ */
 TEST_SUITE(lsp_phaser)
 {
     const int N = 2048;

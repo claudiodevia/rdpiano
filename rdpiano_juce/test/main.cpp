@@ -1,10 +1,13 @@
-// rdpiano_plugin_tests: lo único que hay que probar con JUCE delante —el
-// plugin propiamente dicho: parámetros, presets y programas—. El motor se
-// prueba sin JUCE en `librdpiano/test/unit/test_engine.cpp`.
-//
-// `juce_add_console_app` enlaza el mismo código que los cinco formatos, así que
-// esto instancia el `AudioProcessor` de verdad. El andamiaje —`check.h`,
-// `unit_test.h`— es el del núcleo.
+/**
+ * @file main.cpp
+ * @brief rdpiano_plugin_tests: lo único que hay que probar con JUCE delante.
+ *
+ * El plugin propiamente dicho: parámetros, presets y programas. El motor se prueba sin JUCE en
+ * `librdpiano/test/unit/test_engine.cpp`.
+ *
+ * `juce_add_console_app` enlaza el mismo código que los cinco formatos, así que esto instancia el
+ * `AudioProcessor` de verdad. El andamiaje —`check.h`, `unit_test.h`— es el del núcleo.
+ */
 
 #include <stdio.h>
 #include <string.h>

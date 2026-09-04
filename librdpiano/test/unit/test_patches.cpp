@@ -1,7 +1,11 @@
-// La tabla de parches: lo que no cabe en un static_assert. La coherencia de las
-// tablas paralelas ya la cubre patches.h; aquí se comprueba lo que depende del
-// disco —que las ROMs existan, midan lo que deben y sean las mismas que empotra
-// el plugin.
+/**
+ * @file test_patches.cpp
+ * @brief La tabla de parches: lo que no cabe en un static_assert.
+ *
+ * La coherencia de las tablas paralelas ya la cubre patches.h;
+ * aquí se comprueba lo que depende del disco —que las ROMs existan, midan lo que deben y sean las
+ * mismas que empotra el plugin.
+ */
 
 #include <stdio.h>
 
@@ -22,7 +26,9 @@ static long file_size(const std::string &path)
     return len;
 }
 
-// Las 4 ROMs de cada juego + el firmware, con su tamaño exacto.
+/**
+ * @brief Las 4 ROMs de cada juego + el firmware, con su tamaño exacto.
+ */
 TEST_SUITE(patches_rom_files)
 {
     for (int set = 0; set < ROMSET_COUNT; set++)
@@ -47,8 +53,10 @@ TEST_SUITE(patches_rom_files)
                    check_fmt("%ld bytes, esperados %zu", prog, PROG_ROM_SIZE));
 }
 
-// Cada parche apunta a un juego de ROMs que existe y a una página válida de la
-// params ROM (offset alineable a 32 KB dentro de los 128 KB).
+/**
+ * @brief Cada parche apunta a un juego de ROMs que existe y a una página válida de la params ROM (offset
+ *        alineable a 32 KB dentro de los 128 KB).
+ */
 TEST_SUITE(patches_table)
 {
     for (int patch = 0; patch < NUM_PATCHES; patch++)
@@ -65,9 +73,10 @@ TEST_SUITE(patches_table)
     CHECK_EQ(names.size(), NUM_PATCHES);
 }
 
-// El plugin no lee de disco: empotra las ROMs con `juce_add_binary_data` desde
-// su CMakeLists. Si una de las dos listas cambia sin la otra, plugin y pruebas
-// dejan de probar lo mismo.
+/**
+ * @brief El plugin no lee de disco: empotra las ROMs con `juce_add_binary_data` desde su CMakeLists. Si una
+ *        de las dos listas cambia sin la otra, plugin y pruebas dejan de probar lo mismo.
+ */
 TEST_SUITE(patches_plugin_resources)
 {
     std::string cmakePath = g_roms_dir + "/../rdpiano_juce/CMakeLists.txt";

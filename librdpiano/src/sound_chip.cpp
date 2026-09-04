@@ -6,8 +6,10 @@
 
 #include <cmath>
 
-// LUT for the address speed
-// LUT for bits 5/6/7/8 of the subphase
+/**
+ * @file sound_chip.cpp
+ * @brief El bucle de síntesis y el descifrado de las tablas de onda.
+ */
 
 // Las permutaciones de pines de las ROM viven en rom_loader.h.
 
@@ -20,7 +22,7 @@ SoundChip::SoundChip(const u8 *temp_ic5, const u8 *temp_ic6, const u8 *temp_ic7)
 
 SoundChip::~SoundChip() { delete[] wave_slots; }
 
-u8 SoundChip::read(size_t offset) { return m_irq_id; }
+u8 SoundChip::read(size_t) { return m_irq_id; }
 
 void SoundChip::reset()
 {
@@ -47,45 +49,44 @@ void SoundChip::write(size_t offset, u8 data)
         return;
     }
 
-    // Cada part ocupa 16 bytes del mapa pero sólo tiene 8 registros. Antes el
-    // campo se sacaba con `offset % 8`, así que +8..+F se plegaban en silencio
-    // sobre +0..+7. Con el firmware RD200 daba igual: las únicas escrituras a
-    // esa mitad son el borrado de arranque (16 voces × 16 parts, todas 0x00 en
-    // la muestra 0) y plegadas volvían a poner a cero registros que ya nacen a
-    // cero. Se ignoran explícitamente en vez de por accidente aritmético: otro
-    // firmware (MKS-20, MK-80) que escriba datos reales ahí corrompía la
-    // síntesis sin avisar.
+    // Cada part ocupa 16 bytes del mapa pero sólo tiene 8 registros: +8..+F se
+    // descartan aquí y no por un `% 8` que los plegaría sobre +0..+7.
     if (field >= 8)
         return;
 
     SA_Part &part = m_parts[voiceI][partI];
 
-    // flags seems to be common for all parts?
-    if (field == 0x6)
+    switch (field)
     {
-        m_parts[voiceI][0].flags_0 = data & 1;
-        m_parts[voiceI][0].flags_1 = (data >> 1) & 1;
-    }
-    else if (field == 0x0)
-    {
+    case 0x0:
         part.pitch_lut_i &= 0x00FF;
         part.pitch_lut_i |= data << 8;
-    }
-    else if (field == 0x1)
-    {
+        break;
+    case 0x1:
         part.pitch_lut_i &= 0xFF00;
         part.pitch_lut_i |= data;
-    }
-    else if (field == 0x2)
+        break;
+    case 0x2:
         part.wave_addr_loop = data;
-    else if (field == 0x3)
+        break;
+    case 0x3:
         part.wave_addr_high = data;
-    else if (field == 0x4)
+        break;
+    case 0x4:
         part.env_dest = data;
-    else if (field == 0x5)
+        break;
+    case 0x5:
         part.env_speed = data;
-    else if (field == 0x7)
+        break;
+    // flags seems to be common for all parts?
+    case 0x6:
+        m_parts[voiceI][0].flags_0 = data & 1;
+        m_parts[voiceI][0].flags_1 = (data >> 1) & 1;
+        break;
+    case 0x7:
         part.env_offset = data;
+        break;
+    }
 }
 
 s32 SoundChip::update()
@@ -108,9 +109,9 @@ s32 SoundChip::update()
 
             const Ic19Out ic19 = tick_ic19(part, partFlags);
             const Ic9Out ic9 = tick_ic9(part, partFlags, tables);
-            const s32 exp_val =
-                tick_ic8(part, ic19, ic9, waves->exp[ic9.waverom_addr], waves->exp_sign[ic9.waverom_addr],
-                         waves->delta[ic9.waverom_addr], waves->delta_sign[ic9.waverom_addr], tables);
+            const WaveEntry &wave = waves->entries[ic9.waverom_addr];
+            const s32 exp_val = tick_ic8(part, ic19, ic9, wave.exp & WAVE_SAMPLE, (wave.exp & WAVE_SIGN) != 0,
+                                         wave.delta & WAVE_SAMPLE, (wave.delta & WAVE_SIGN) != 0, tables);
 
             // hack to prevent voices ringing when env value is 0, investigate
             if (part.env_value != 0)
@@ -150,7 +151,6 @@ void SoundChip::decode_samples(unsigned slot, const u8 *temp_ic5, const u8 *temp
     // costaría descifrar las tres ROM enteras primero.
     WaveTables &out = wave_slots[slot];
 
-    // Wave rom values
     for (size_t i = 0; i < 0x20000; i++)
     {
         size_t descrambled_i =
@@ -160,9 +160,10 @@ void SoundChip::decode_samples(unsigned slot, const u8 *temp_ic5, const u8 *temp
              ((i >> 12) & 1) << 12 | ((i >> 13) & 1) << 13 | ((i >> 14) & 1) << 14 | ((i >> 15) & 1) << 15 |
              ((i >> 16) & 1) << 16);
 
-        const u8 b5 = unscramble_data_wave(temp_ic5[unscramble_addr_wave((u32)descrambled_i)]);
-        const u8 b6 = unscramble_data_wave(temp_ic6[unscramble_addr_wave((u32)descrambled_i)]);
-        const u8 b7 = unscramble_data_wave(temp_ic7[unscramble_addr_wave((u32)descrambled_i)]);
+        const u32 addr = unscramble_addr_wave((u32)descrambled_i);
+        const u8 b5 = unscramble_data_wave(temp_ic5[addr]);
+        const u8 b6 = unscramble_data_wave(temp_ic6[addr]);
+        const u8 b7 = unscramble_data_wave(temp_ic7[addr]);
 
         uint16_t exp_sample =
             (((b5 >> 0) & 1) << 13 | ((b6 >> 4) & 1) << 12 | ((b7 >> 4) & 1) << 11 | ((~b6 >> 0) & 1) << 10 |
@@ -170,14 +171,12 @@ void SoundChip::decode_samples(unsigned slot, const u8 *temp_ic5, const u8 *temp
              ((b7 >> 2) & 1) << 5 | ((b7 >> 1) & 1) << 4 | ((~b5 >> 1) & 1) << 3 | ((b5 >> 3) & 1) << 2 |
              ((b6 >> 5) & 1) << 1 | ((~b6 >> 7) & 1) << 0);
         bool exp_sign = (~b7 >> 3) & 1;
-        out.exp[i] = exp_sample;
-        out.exp_sign[i] = exp_sign;
+        out.entries[i].exp = exp_sample | (exp_sign ? WAVE_SIGN : 0);
 
         uint16_t delta_sample = (((~b7 >> 6) & 1) << 8 | ((b5 >> 4) & 1) << 7 | ((b7 >> 0) & 1) << 6 |
                                  ((~b6 >> 3) & 1) << 5 | ((b5 >> 2) & 1) << 4 | ((~b5 >> 6) & 1) << 3 |
                                  ((b6 >> 6) & 1) << 2 | ((b7 >> 5) & 1) << 1 | ((~b6 >> 7) & 1) << 0);
         bool delta_sign = (b6 >> 1) & 1;
-        out.delta[i] = delta_sample;
-        out.delta_sign[i] = delta_sign;
+        out.entries[i].delta = delta_sample | (delta_sign ? WAVE_SIGN : 0);
     }
 }

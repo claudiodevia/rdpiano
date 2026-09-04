@@ -6,11 +6,16 @@
 #include "PluginParams.h"
 #include "rd_engine.h"
 
-//==============================================================================
 /**
- * El plugin: parámetros, presets y el puente con JUCE. La cadena de audio vive
- * en `RdPianoEngine` y los parámetros son un `AudioProcessorValueTreeState`
- * construido desde la tabla de `PluginParams.h`.
+ * @file PluginProcessor.h
+ * @brief El plugin: parámetros, presets y el puente con JUCE.
+ */
+
+/**
+ * @brief El procesador: parámetros, presets y el puente con JUCE.
+ *
+ * La cadena de audio vive en RdPianoEngine y los parámetros son un
+ * `AudioProcessorValueTreeState` construido desde la tabla de PluginParams.h.
  */
 class RdPiano_juceAudioProcessor : public juce::AudioProcessor,
                                    public juce::ChangeBroadcaster,
@@ -25,9 +30,9 @@ class RdPiano_juceAudioProcessor : public juce::AudioProcessor,
     //==============================================================================
     void parameterChanged(const juce::String &parameterID, float newValue) override;
 
-    // El motor puede cambiar de parche sin pasar por aquí: un program change
-    // MIDI lo hace. El temporizador corre en el hilo de mensajes y sólo lee un
-    // atómico; el hilo de audio no toca la interfaz.
+    /// El motor puede cambiar de parche sin pasar por aquí: un program change
+    /// MIDI lo hace. El temporizador corre en el hilo de mensajes y sólo lee un
+    /// atómico; el hilo de audio no toca la interfaz.
     void timerCallback() override;
 
     //==============================================================================
@@ -63,26 +68,46 @@ class RdPiano_juceAudioProcessor : public juce::AudioProcessor,
 
     //==============================================================================
 
-    // Los parámetros, con el acceso por índice de tabla que usa el editor.
-    juce::AudioProcessorValueTreeState apvts;
+    juce::AudioProcessorValueTreeState apvts; ///< Los parámetros, tal como los serializa el preset.
 
+    /**
+     * @brief Un parámetro por su índice de tabla, que es como lo pide el editor.
+     * @param id Índice del parámetro.
+     * @return El parámetro de JUCE.
+     */
     juce::RangedAudioParameter &param(RdParamId id) const;
+
+    /**
+     * @brief Valor actual de un parámetro.
+     * @param id Índice del parámetro.
+     * @return El valor sin normalizar.
+     */
     float paramValue(RdParamId id) const;
+
+    /**
+     * @brief Cambia un parámetro y avisa al host, como si lo hubiera movido el usuario.
+     * @param id Índice del parámetro.
+     * @param value Valor sin normalizar.
+     */
     void setParamValue(RdParamId id, float value);
 
-    // Espejos de lo que el motor ya sabe, para el editor y para los presets.
+    /// Espejos de lo que el motor ya sabe, para el editor y para los presets.
     int currentPatch = 0;
     int masterTune = 0;
 
     std::unique_ptr<RdPianoEngine> engine;
 
+    /**
+     * @brief Afina el instrumento y actualiza el espejo.
+     * @param tune Desviación con signo en el rango de un int16.
+     */
     void setMasterTune(int16_t tune);
 
   private:
     void syncParamsToEngine();
 
-    // Valores de los parámetros, resueltos una vez en el constructor: buscar por
-    // id desde el hilo de audio sería una búsqueda de cadena por bloque.
+    /// Valores de los parámetros, resueltos una vez en el constructor: buscar por
+    /// id desde el hilo de audio sería una búsqueda de cadena por bloque.
     std::atomic<float> *paramValues[kNumRdParams] = {};
 
     //==============================================================================
