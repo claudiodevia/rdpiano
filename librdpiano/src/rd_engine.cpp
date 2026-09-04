@@ -251,12 +251,21 @@ void RdPianoEngine::prepare(double newHostRate, int newMaxBlock)
 
     // Una petición sin atender se aplica ANTES de arrancar: el orden bueno es
     // seleccionar el parche y luego preparar (trampa 8 de CLAUDE.md), y quien
-    // pidió el cambio con el motor parado espera eso.
-    const int requested = patchRequest.exchange(-1, std::memory_order_acquire);
+    // pidió el cambio con el motor parado espera eso. Puede estar todavía en la
+    // atómica o ya recogida por serviceRequests() y esperando el cero de la
+    // rampa que este prepare() se lleva por delante: las dos entran por aquí, o
+    // sonaría el parche viejo con patch() diciendo el nuevo para siempre. Si hay
+    // en las dos manda la atómica, que es la más reciente. No hace falta
+    // finishChange(): boot() reinicia el firmware y el espejo se vacía con él.
+    int requested = patchRequest.exchange(-1, std::memory_order_acquire);
+    if (requested < 0 || requested >= NUM_PATCHES)
+        requested = declickPatch;
     if (requested >= 0 && requested < NUM_PATCHES && requested != currentPatch)
         applyPatch(requested);
 
-    const int tune = tuneRequest.exchange(kNoTuneRequest, std::memory_order_acquire);
+    int tune = tuneRequest.exchange(kNoTuneRequest, std::memory_order_acquire);
+    if (tune == kNoTuneRequest)
+        tune = declickTune;
     if (tune != kNoTuneRequest)
     {
         currentMasterTune = (int16_t)tune;

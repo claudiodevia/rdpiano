@@ -225,6 +225,9 @@ class RdPianoEngine
      */
     int16_t masterTune() const { return (int16_t)latestTune.load(std::memory_order_relaxed); }
 
+    /** @brief La afinación que está sonando ahora mismo, con la petición ya atendida. */
+    int16_t activeMasterTune() const { return currentMasterTune; }
+
     /**
      * @brief Retardo de grupo del remuestreador, para declarárselo al anfitrión.
      *

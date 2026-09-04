@@ -1146,6 +1146,86 @@ TEST_SUITE(engine_tune_held_notes)
 }
 
 /**
+ * @brief ------------------------------- preparar con un cambio a medio atender
+ */
+TEST_SUITE(engine_prepare_pending_change)
+{
+    // serviceRequests() saca la petición de la atómica y la deja en espera del
+    // cero de la rampa de declick, unos 6 ms. Si el anfitrión llamaba a
+    // prepareToPlay dentro de esa ventana —reconfigurar la interfaz, abrir el
+    // proyecto—, prepare() borraba el pendiente: sonaba el parche viejo mientras
+    // patch() y el panel enseñaban el nuevo, y la divergencia no se cerraba
+    // sola. Fija que prepare() repliegue lo pendiente en vez de tirarlo.
+    //
+    // El bloque es corto a propósito: 64 muestras a 48 kHz son ~1,3 ms, menos de
+    // los 6 ms de la bajada, así que el cambio queda pendiente de verdad.
+    const int BLOCK = 64;
+    std::vector<float> l(BLOCK, 0.0f), r(BLOCK, 0.0f);
+
+    {
+        auto e = make_engine(48000.0, BLOCK);
+        if (!e)
+        {
+            CHECK_MSG(false, "sin ROMs en %s", g_roms_dir.c_str());
+            return;
+        }
+
+        e->requestPatch(5);
+        e->render(l.data(), r.data(), BLOCK);
+        checks.add("parche-queda-pendiente", e->activePatch() != 5,
+                   check_fmt("el cambio ya se aplicó en el primer bloque: parche %d", e->activePatch()));
+
+        e->prepare(48000.0, BLOCK);
+        checks.add("parche-pendiente-no-se-pierde", e->activePatch() == e->patch(),
+                   check_fmt("suena %d, la interfaz enseña %d", e->activePatch(), e->patch()));
+        checks.add("parche-pendiente-es-el-pedido", e->activePatch() == 5,
+                   check_fmt("parche activo %d", e->activePatch()));
+
+        // Y el parche repescado suena.
+        e->pushMidi(0, 0x90, 60, 110);
+        Stereo after;
+        render_into(e.get(), after, BLOCK, 200);
+        checks.add("parche-pendiente-suena", rms(after.l, 0, after.l.size()) > 1e-4, "el parche repescado salió mudo");
+    }
+
+    {
+        auto e = make_engine(48000.0, BLOCK);
+        if (!e)
+            return;
+
+        e->requestMasterTune(1234);
+        e->render(l.data(), r.data(), BLOCK);
+        checks.add("afinacion-queda-pendiente", e->activeMasterTune() != 1234,
+                   check_fmt("el afinado ya se aplicó en el primer bloque: %d", (int)e->activeMasterTune()));
+
+        e->prepare(48000.0, BLOCK);
+        checks.add("afinacion-pendiente-no-se-pierde", e->activeMasterTune() == e->masterTune(),
+                   check_fmt("suena %d, la interfaz enseña %d", (int)e->activeMasterTune(), (int)e->masterTune()));
+        checks.add("afinacion-pendiente-es-la-pedida", e->activeMasterTune() == 1234,
+                   check_fmt("afinación activa %d", (int)e->activeMasterTune()));
+    }
+
+    // Con las dos fuentes ocupadas manda la atómica, que es la más reciente: lo
+    // que espera en declickPatch se pidió antes.
+    {
+        auto e = make_engine(48000.0, BLOCK);
+        if (!e)
+            return;
+
+        e->requestPatch(5);
+        e->render(l.data(), r.data(), BLOCK);
+        e->requestPatch(7);
+        e->requestMasterTune(1234);
+
+        e->prepare(48000.0, BLOCK);
+        checks.add("manda-lo-mas-reciente", e->activePatch() == 7 && e->activePatch() == e->patch(),
+                   check_fmt("suena %d, la interfaz enseña %d", e->activePatch(), e->patch()));
+        checks.add("manda-lo-mas-reciente-afinacion", e->activeMasterTune() == e->masterTune(),
+                   check_fmt("suena %d, la interfaz enseña %d", (int)e->activeMasterTune(), (int)e->masterTune()));
+    }
+}
+
+/**
  * @brief ------------------------------------------------- rampa de volumen
  */
 TEST_SUITE(engine_volume_ramp)
