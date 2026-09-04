@@ -2,7 +2,7 @@
 
 Cambios de cada versión publicada de RdPiano. La más nueva, arriba.
 
-## 1.0.1 — 2 de septiembre de 2026
+## 1.0.1 — 4 de septiembre de 2026
 
 ### Sonido
 
