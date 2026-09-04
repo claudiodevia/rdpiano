@@ -58,9 +58,9 @@ static const float kPatchFadeInMs = 15.0f;
 
 /// Subida cuando el cambio ha tenido que volver a disparar lo que se estaba
 /// tocando: más larga que la normal a propósito, porque es la que esconde el
-/// transitorio de ataque de las notas que reentran. Con la ganancia elevada al
-/// cuadrado (ver outputStage) el arranque es aún más plano.
-static const float kPatchFadeInHeldMs = 90.0f;
+/// golpe de martillo de las notas que reentran (los primeros milisegundos del
+/// ataque).
+static const float kPatchFadeInHeldMs = 80.0f;
 
 /// Cuánto baja el nivel del ataque por unidad de velocidad. Medido sobre los 16
 /// parches: entre v16 y v120 la curva es recta a 0,228 dB por unidad (por debajo
@@ -92,6 +92,16 @@ static inline int clamp_index(int v, int lo, int hi)
         return hi;
     return v;
 }
+
+/**
+ * @brief Curva de la rampa de declick: plana al arrancar, suave al llegar.
+ *
+ * Smoothstep, derivada cero en 0 y en 1. El arranque plano es lo que esconde el
+ * transitorio de la nota que reentra; que además se aplane al final es lo que
+ * evita el bombeo de la subida al cuadrado, que se pasaba media rampa 12 dB por
+ * debajo. En 0 y en 1 no cambia nada.
+ */
+static inline float declick_shape(float g) { return g * g * (3.0f - 2.0f * g); }
 
 static inline float clamp_step(float v, float lo, float hi)
 {
@@ -742,11 +752,7 @@ void RdPianoEngine::outputStage(float *left, float *right, int numFrames)
     {
         declickGain += clamp_step(declickTarget - declickGain, -declickDownStep, declickUpStep);
 
-        // La rampa se aplica al cuadrado: arranca mucho más plana que la lineal,
-        // que es lo que hace falta para que el ataque de una nota que reentra no
-        // asome. En 0 y en 1 no cambia nada, así que fuera del cambio de parche
-        // la salida sigue siendo la de siempre.
-        const float declick = declickGain * declickGain;
+        const float declick = declick_shape(declickGain);
 
         left[i] = outL[i] * outputGainSmoothed * declick;
         right[i] = outR[i] * outputGainSmoothed * declick;

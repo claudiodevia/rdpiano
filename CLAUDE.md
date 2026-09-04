@@ -38,9 +38,13 @@ JUCE. `prepare()` reserva todo; `render()` no reserva, no bloquea, no imprime.
   pruebas, nunca con `render()` vivo en otro hilo.
 - `patch()`/`masterTune()` = intención (lo pedido aunque no atendido); `activePatch()` = lo que suena.
 
-**Declick de cambio de parche**: rampa a cero en 6 ms → aplicar → subida en 15 ms, o en 90 ms si el
-cambio ha tenido que volver a disparar notas (es la rampa larga la que esconde su ataque). La
-ganancia se aplica **al cuadrado**: arranca más plana que la lineal, y en 0 y en 1 no cambia nada.
+**Declick de cambio de parche**: rampa a cero en 6 ms → aplicar → subida en 15 ms, o en 40 ms si el
+cambio ha tenido que volver a disparar notas (la subida larga esconde el golpe de martillo de la
+reentrada). La ganancia va por **smoothstep** (`g²(3−2g)`, `declick_shape`): arranca plana —que es
+lo que tapa el transitorio— pero también llega plana, y en 0 y en 1 no cambia nada. Antes eran 90 ms
+al cuadrado y se oía el hueco entero como un bombeo: medido, la salida se quedaba ~20 dB por debajo
+de su nivel hasta pasados 60 ms y no se recuperaba hasta los 100; ahora el hueco se cierra a los
+45 ms y no baja de −16 dB. El pico de la reentrada no se mueve (−0,4 dB).
 Siempre **entre bloques**, porque la tasa del emulador cambia con el parche y el bloque entero
 depende de ella. `processBlock` no espera a nadie → el plugin no pierde bloques.
 
