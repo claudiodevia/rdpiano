@@ -12,6 +12,11 @@
 #include "lcd_font.h"
 #include <JuceHeader.h>
 
+/**
+ * @file Lcd.cpp
+ * @brief Dibujo del display: los caracteres van a una imagen cacheada, no al repintado.
+ */
+
 //==============================================================================
 Lcd::Lcd() { memset(LCD_Data, ' ', kChars); }
 

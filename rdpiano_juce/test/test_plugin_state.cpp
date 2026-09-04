@@ -1,9 +1,11 @@
-// Presets y programas: la ida y vuelta del estado del plugin.
-//
-// Habla con el `AudioProcessor` sólo por su API pública —`getParameters()` por
-// id, `getStateInformation`/`setStateInformation`, `setCurrentProgram`— y nunca
-// por los punteros concretos: así sigue valiendo, sin editarla, si cambia cómo
-// se guarda el estado por dentro.
+/**
+ * @file test_plugin_state.cpp
+ * @brief Presets y programas: la ida y vuelta del estado del plugin.
+ *
+ * Habla con el `AudioProcessor` sólo por su API pública —`getParameters()` por id,
+ * `getStateInformation`/`setStateInformation`, `setCurrentProgram`— y nunca por los punteros
+ * concretos: así sigue valiendo, sin editarla, si cambia cómo se guarda el estado por dentro.
+ */
 
 #include <JuceHeader.h>
 
@@ -69,10 +71,11 @@ namespace
 
 } // namespace
 
-// Los diez parámetros existen, con ese id exacto, y su valor por defecto es el
-// mismo que el POD del motor da por defecto. Si las dos listas se separan, el
-// plugin arranca sonando distinto de como suena el motor en las pruebas del
-// núcleo.
+/**
+ * @brief Los diez parámetros existen, con ese id exacto, y su valor por defecto es el mismo que el POD del
+ *        motor da por defecto. Si las dos listas se separan, el plugin arranca sonando distinto de como suena
+ *        el motor en las pruebas del núcleo.
+ */
 TEST_SUITE(plugin_params_declared)
 {
     RdPiano_juceAudioProcessor p;
@@ -114,7 +117,9 @@ TEST_SUITE(plugin_params_declared)
     }
 }
 
-// Ida y vuelta completa: mover todo, guardar, restaurar en otra instancia.
+/**
+ * @brief Ida y vuelta completa: mover todo, guardar, restaurar en otra instancia.
+ */
 TEST_SUITE(plugin_state_roundtrip)
 {
     RdPiano_juceAudioProcessor source;
@@ -158,9 +163,10 @@ TEST_SUITE(plugin_state_roundtrip)
     CHECK_EQ(restored.engine->masterTune(), 4321);
 }
 
-// Una sesión guardada por una versión anterior no trae todos los atributos: lo
-// que falte tiene que volver al valor de fábrica, el mismo con el que arranca
-// el plugin.
+/**
+ * @brief Una sesión guardada por una versión anterior no trae todos los atributos: lo que falte tiene que
+ *        volver al valor de fábrica, el mismo con el que arranca el plugin.
+ */
 TEST_SUITE(plugin_state_missing_attributes)
 {
     RdPiano_juceAudioProcessor fresh;
@@ -189,7 +195,9 @@ TEST_SUITE(plugin_state_missing_attributes)
     CHECK_EQ(after.patch, 3);
 }
 
-// Un preset corrupto no debe dejar el plugin en un estado imposible.
+/**
+ * @brief Un preset corrupto no debe dejar el plugin en un estado imposible.
+ */
 TEST_SUITE(plugin_state_garbage)
 {
     RdPiano_juceAudioProcessor p;
@@ -213,7 +221,9 @@ TEST_SUITE(plugin_state_garbage)
     CHECK_EQ(p.engine->patch(), p.getCurrentProgram());
 }
 
-// Los programas son los parches de `patches.h`, con sus nombres.
+/**
+ * @brief Los programas son los parches de `patches.h`, con sus nombres.
+ */
 TEST_SUITE(plugin_programs)
 {
     RdPiano_juceAudioProcessor p;
@@ -239,8 +249,10 @@ TEST_SUITE(plugin_programs)
     CHECK_EQ(p.getCurrentProgram(), 5);
 }
 
-// El retardo de grupo del remuestreador, declarado al anfitrión: sin esto todo
-// lo que toque el plugin queda 1,4 ms tarde respecto de lo que el DAW cree.
+/**
+ * @brief El retardo de grupo del remuestreador, declarado al anfitrión: sin esto todo lo que toque el plugin
+ *        queda 1,4 ms tarde respecto de lo que el DAW cree.
+ */
 TEST_SUITE(plugin_latency)
 {
     RdPiano_juceAudioProcessor p;
@@ -259,10 +271,11 @@ TEST_SUITE(plugin_latency)
     p.releaseResources();
 }
 
-// La cola declarada: el anfitrión decide con ella cuánto sigue pidiendo bloques
-// después del último evento. Cuánto dura de verdad lo mide engine_tail_length en
-// la suite del núcleo; aquí sólo se comprueba que el plugin declara la del motor
-// y no un cero.
+/**
+ * @brief La cola declarada: el anfitrión decide con ella cuánto sigue pidiendo bloques después del último
+ *        evento. Cuánto dura de verdad lo mide engine_tail_length en la suite del núcleo; aquí sólo se
+ *        comprueba que el plugin declara la del motor y no un cero.
+ */
 TEST_SUITE(plugin_tail_length)
 {
     RdPiano_juceAudioProcessor p;
@@ -279,10 +292,11 @@ TEST_SUITE(plugin_tail_length)
     p.releaseResources();
 }
 
-// Los buses. Lo canónico en un instrumento sería no declarar entrada, y se
-// probó: Logic deja de cargar la AU —ventana vacía y sin sonido— aunque `auval`
-// la valide. Así que el bus de entrada estéreo se queda, y esta suite lo fija
-// para que nadie lo vuelva a quitar sin leer la trampa 12 de CLAUDE.md.
+/**
+ * @brief Los buses. Lo canónico en un instrumento sería no declarar entrada, y se probó: Logic deja de cargar
+ *        la AU —ventana vacía y sin sonido— aunque `auval` la valide. Así que el bus de entrada estéreo se
+ *        queda, y esta suite lo fija para que nadie lo vuelva a quitar sin leer la trampa 12 de CLAUDE.md.
+ */
 TEST_SUITE(plugin_bus_layout)
 {
     RdPiano_juceAudioProcessor p;

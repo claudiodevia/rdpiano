@@ -1,15 +1,16 @@
-// Harness de verificación end-to-end, headless y sin dependencias externas.
-//
-// Arranca el firmware real, carga cada uno de los 16 parches, le inyecta una
-// secuencia MIDI fija y mide el audio resultante. Sirve para dos cosas:
-//
-//   1) comprobaciones de cordura (¿suena?, ¿se apaga la nota?, ¿voces colgadas?)
-//   2) hash bit-exacto del stream por parche -> detecta cualquier cambio de
-//      audio introducido por sound_chip.cpp, los UNSCRAMBLE_* o el MCU.
-//
-// Uso:
-//   rdpiano_e2e [--roms DIR] [--patch N] [--wav-dir DIR]
-//               [--write-golden FILE] [--golden FILE]
+/**
+ * @file e2e.cpp
+ * @brief Harness de verificación end-to-end, headless y sin dependencias externas.
+ *
+ * Arranca el firmware real, carga cada uno de los 16 parches, le inyecta una secuencia MIDI fija y
+ * mide el audio resultante. Sirve para dos cosas:
+ *
+ *   1) comprobaciones de cordura (¿suena?, ¿se apaga la nota?, ¿voces colgadas?)
+ *   2) hash bit-exacto del stream por parche -> detecta cualquier cambio de audio introducido por
+ *      sound_chip.cpp, los unscramble_* o el MCU.
+ *
+ * Uso: rdpiano_e2e [--roms DIR] [--patch N] [--wav-dir DIR] [--write-golden FILE] [--golden FILE]
+ */
 
 #include <math.h>
 #include <stdio.h>
@@ -97,13 +98,16 @@ struct Accum
     double rms() const { return count ? sqrt(sumSquares / count) : 0.0; }
 };
 
-// El plugin escala así la señal seca: (sample << 5 >> 6) / 65536 * 0.5, y
-// después la compensación de headroom del parche (patches.h). Sólo afecta a
-// los WAV de --wav-dir, que existen para escuchar lo que sale del producto: el
-// hash y las comprobaciones van sobre la muestra cruda del emulador.
+/**
+ * @brief El plugin escala así la señal seca: (sample << 5 >> 6) / 65536 * 0.5, y después la compensación de
+ *        headroom del parche (patches.h). Sólo afecta a los WAV de --wav-dir, que existen para escuchar lo
+ *        que sale del producto: el hash y las comprobaciones van sobre la muestra cruda del emulador.
+ */
 static float plugin_scale(s32 sample, float gain) { return (float)(sample / 2) / 65536.0f * 0.5f * gain; }
 
-// Renderiza nSamples, acumulando en `total` y opcionalmente en `window`.
+/**
+ * @brief Renderiza nSamples, acumulando en `total` y opcionalmente en `window`.
+ */
 static void render(Mcu *mcu, bool rate32, size_t nSamples, Accum *total, Accum *window, std::vector<float> *wav,
                    float wavGain = 1.0f)
 {
@@ -159,7 +163,9 @@ static bool write_wav(const std::string &path, const std::vector<float> &samples
 
 // ---------------------------------------------------------------- escenario
 
-// Duraciones en segundos de cada fase de la prueba.
+/**
+ * @brief Duraciones en segundos de cada fase de la prueba.
+ */
 static const double SILENCE_SECS = 0.10;
 static const double NOTE_SECS = 0.50;
 static const double CHORD_SECS = 0.50;
@@ -273,7 +279,9 @@ static PatchResult run_patch(int patch, RomBank &roms, std::vector<float> *wav)
 
 // ---------------------------------------------------------------- umbrales
 
-// Calibrados sobre el comportamiento actual del emulador; ver README del test.
+/**
+ * @brief Calibrados sobre el comportamiento actual del emulador; ver README del test.
+ */
 static const double MIN_NOTE_RMS = 200.0;   // una nota tiene que sonar
 static const double MAX_SILENCE_RMS = 50.0; // antes de tocar, casi nada
 static const double MAX_TAIL_RMS = 200.0;   // la cola tiene que extinguirse

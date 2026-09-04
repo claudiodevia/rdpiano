@@ -2,6 +2,11 @@
 
 #include <string.h>
 
+/**
+ * @file rd_board.cpp
+ * @brief Construcción de la placa y carga de ROM; el mapa de memoria es inline en la cabecera.
+ */
+
 RdBoard::RdBoard(const u8 *temp_ic5, const u8 *temp_ic6, const u8 *temp_ic7, const u8 *temp_progrom,
                  const u8 *temp_paramsrom)
     : sound_chip(temp_ic5, temp_ic6, temp_ic7)

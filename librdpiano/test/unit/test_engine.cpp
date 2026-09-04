@@ -1,8 +1,11 @@
-// El simulador de host: RdPianoEngine instanciado, no copiado.
-//
-// Una suite por riesgo: invariancia de bloque, bloques de borde, tasas del
-// host, cero reservas en render(), finitud, cambio de parche en caliente,
-// temporización del MIDI y headroom. Ninguna necesita JUCE ni un DAW.
+/**
+ * @file test_engine.cpp
+ * @brief El simulador de host: RdPianoEngine instanciado, no copiado.
+ *
+ * Una suite por riesgo: invariancia de bloque, bloques de borde, tasas del host, cero reservas en
+ * render(), finitud, cambio de parche en caliente, temporización del MIDI y headroom. Ninguna
+ * necesita JUCE ni un DAW.
+ */
 
 #include <math.h>
 #include <stdio.h>
@@ -43,8 +46,10 @@ void operator delete[](void *p, size_t) noexcept { free(p); }
 
 // ---------------------------------------------------------------- ROMs
 
-// Las ROMs se leen una vez para todas las suites: cargarlas por prueba
-// dominaría el tiempo de la suite unitaria.
+/**
+ * @brief Las ROMs se leen una vez para todas las suites: cargarlas por prueba dominaría el tiempo de la suite
+ *        unitaria.
+ */
 struct EngineRoms
 {
     std::map<std::string, std::vector<u8>> files;
@@ -97,8 +102,10 @@ static EngineRoms &engine_roms()
     return r;
 }
 
-// Construye un motor preparado. Devuelve NULL si faltan las ROMs: de que
-// existan ya se queja patches_rom_files.
+/**
+ * @brief Construye un motor preparado. Devuelve NULL si faltan las ROMs: de que existan ya se queja
+ *        patches_rom_files.
+ */
 static std::unique_ptr<RdPianoEngine> make_engine(double hostRate, int maxBlock, int patch = 0)
 {
     EngineRoms &roms = engine_roms();
@@ -153,8 +160,9 @@ static bool all_finite(const std::vector<float> &v)
     return true;
 }
 
-// Renderiza `total` muestras en bloques del tamaño que diga `blocks`, que se
-// recorre cíclicamente.
+/**
+ * @brief Renderiza `total` muestras en bloques del tamaño que diga `blocks`, que se recorre cíclicamente.
+ */
 static Stereo render_blocks(RdPianoEngine *e, int total, const int *blocks, int numBlocks)
 {
     Stereo out;
@@ -184,8 +192,9 @@ static Stereo render_blocks(RdPianoEngine *e, int total, const int *blocks, int 
     return out;
 }
 
-// ------------------------------------------------- invariancia de bloque
-
+/**
+ * @brief ------------------------------------------------- invariancia de bloque
+ */
 TEST_SUITE(engine_block_invariance)
 {
     // El mismo stream, pedido de una vez y pedido a trozos irregulares. No es
@@ -289,8 +298,9 @@ TEST_SUITE(engine_block_invariance)
                check_fmt("%d muestras de silencio exacto en %d", dropouts, TOTAL));
 }
 
-// ------------------------------------------------- bloques de borde
-
+/**
+ * @brief ------------------------------------------------- bloques de borde
+ */
 TEST_SUITE(engine_edge_blocks)
 {
     const int MAXB = 512;
@@ -326,8 +336,9 @@ TEST_SUITE(engine_edge_blocks)
     CHECK(true); // llegar aquí sin caerse es la comprobación
 }
 
-// ------------------------------------------------- tasas del host
-
+/**
+ * @brief ------------------------------------------------- tasas del host
+ */
 TEST_SUITE(engine_host_rates)
 {
     // Longitud de salida exacta y sin deriva: el motor tiene que devolver
@@ -372,8 +383,9 @@ TEST_SUITE(engine_host_rates)
     }
 }
 
-// ------------------------------------------------- sin reservas en RT
-
+/**
+ * @brief ------------------------------------------------- sin reservas en RT
+ */
 TEST_SUITE(engine_no_alloc_in_render)
 {
     const int BLOCK = 512;
@@ -416,8 +428,9 @@ TEST_SUITE(engine_no_alloc_in_render)
                check_fmt("%lu aperturas", e->stats.resamplerOpens - opensBefore));
 }
 
-// ------------------------------------------------- finitud
-
+/**
+ * @brief ------------------------------------------------- finitud
+ */
 TEST_SUITE(engine_finite_at_extremes)
 {
     // Los cuatro efectos activos y todos los parámetros en sus extremos: ni un
@@ -481,8 +494,9 @@ TEST_SUITE(engine_finite_at_extremes)
     CHECK(inRange);
 }
 
-// ------------------------------------------------- cambio de parche
-
+/**
+ * @brief ------------------------------------------------- cambio de parche
+ */
 TEST_SUITE(engine_patch_change)
 {
     // Cambiar de parche entre bloques: tiene que seguir sonando, y sin una
@@ -536,8 +550,9 @@ TEST_SUITE(engine_patch_change)
     checks.add("parche-sin-clic", worstStep < 0.25, check_fmt("mayor salto entre muestras %.4f", worstStep));
 }
 
-// ------------------------------------------------- temporización del MIDI
-
+/**
+ * @brief ------------------------------------------------- temporización del MIDI
+ */
 TEST_SUITE(engine_midi_timing)
 {
     // pushMidi(frame, ...) -> la nota tiene que empezar a sonar en ese frame, no
@@ -594,8 +609,9 @@ TEST_SUITE(engine_midi_timing)
     CHECK(rms(l, 128, (size_t)BLOCK / 2) > 1e-4);
 }
 
-// ------------------------------------------------- headroom
-
+/**
+ * @brief ------------------------------------------------- headroom
+ */
 TEST_SUITE(engine_headroom)
 {
     // Dieciséis voces a velocidad 127: lo que se fija es que los 16 parches
@@ -674,8 +690,9 @@ TEST_SUITE(engine_headroom)
     }
 }
 
-// ------------------------------------------------- carga de ROM en dos fases
-
+/**
+ * @brief ------------------------------------------------- carga de ROM en dos fases
+ */
 TEST_SUITE(engine_patch_prepare)
 {
     // `prepareRomSetFor()` saca de `setPatch()` la parte cara —descifrar las
@@ -747,8 +764,10 @@ TEST_SUITE(engine_patch_prepare)
 
 // ------------------------------------------------- efectos: bypass y cola
 
-// El mayor salto entre muestras consecutivas de un tramo: la métrica de clic
-// que usa docs/RENDIMIENTO-DIRECTO.md.
+/**
+ * @brief El mayor salto entre muestras consecutivas de un tramo: la métrica de clic que usa docs/RENDIMIENTO-
+ *        DIRECTO.md.
+ */
 static double worst_step(const std::vector<float> &v, size_t from, size_t to)
 {
     if (to > v.size())
@@ -886,8 +905,9 @@ TEST_SUITE(engine_effect_bypass_ramp)
     }
 }
 
-// ------------------------------------------------- program change
-
+/**
+ * @brief ------------------------------------------------- program change
+ */
 TEST_SUITE(engine_program_change)
 {
     // El program change se reenviaba al firmware tal cual y dejaba el motor
@@ -921,8 +941,9 @@ TEST_SUITE(engine_program_change)
     checks.add("program-change-suena", level > 1e-4, check_fmt("rms %.6f tras el program change", level));
 }
 
-// ------------------------------------------------- declick del cambio de parche
-
+/**
+ * @brief ------------------------------------------------- declick del cambio de parche
+ */
 TEST_SUITE(engine_patch_declick)
 {
     // Cambiar de parche cortaba en seco lo que estuviera sonando, con un pico de
@@ -974,8 +995,9 @@ TEST_SUITE(engine_patch_declick)
     checks.add("declick-suena-despues", rms(after.l, 0, after.l.size()) > 1e-4, "el parche nuevo salió mudo");
 }
 
-// ------------------------------------------- notas y pedal en el cambio
-
+/**
+ * @brief ------------------------------------------- notas y pedal en el cambio
+ */
 TEST_SUITE(engine_patch_held_notes)
 {
     // El cambio de parche manda un program change al firmware —única forma de
@@ -1061,8 +1083,9 @@ TEST_SUITE(engine_patch_held_notes)
                check_fmt("pico %.5f tras el cambio", peak(afterPanic.l)));
 }
 
-// ------------------------------------------------- rampa de volumen
-
+/**
+ * @brief ------------------------------------------------- rampa de volumen
+ */
 TEST_SUITE(engine_volume_ramp)
 {
     // `volume` se leía una vez por bloque y saltaba: un mando movido rápido son
@@ -1102,8 +1125,9 @@ TEST_SUITE(engine_volume_ramp)
     checks.add("volumen-llega", ratio > 0.1 && ratio < 0.35, check_fmt("nivel x%.3f con volume 1,0 -> 0,2", ratio));
 }
 
-// ------------------------------------------------- latencia declarada
-
+/**
+ * @brief ------------------------------------------------- latencia declarada
+ */
 TEST_SUITE(engine_latency)
 {
     // El retardo de grupo del remuestreador, para que el anfitrión lo compense
@@ -1135,8 +1159,10 @@ TEST_SUITE(engine_latency)
 
 // ------------------------------------------------- velocidad del LFO
 
-// Periodo dominante de una envolvente muestreada cada `dt` segundos, por
-// autocorrelación. Devuelve -1 si no hay muestras suficientes o no hay periodo.
+/**
+ * @brief Periodo dominante de una envolvente muestreada cada `dt` segundos, por autocorrelación. Devuelve -1
+ *        si no hay muestras suficientes o no hay periodo.
+ */
 static double dominant_period(const std::vector<double> &env, double dt)
 {
     // Fuera el arranque —ataque y rampa de la mezcla— y fuera la media.
@@ -1177,12 +1203,13 @@ static double dominant_period(const std::vector<double> &env, double dt)
     return best == 0 ? -1.0 : best * dt;
 }
 
-// Periodo dominante de la modulación del chorus, en segundos.
-//
-// El observable es la diferencia wet-dry dividida por el nivel seco: el emulador
-// es determinista, así que dos motores idénticos —uno con chorus y otro sin él—
-// dan el mismo seco muestra a muestra, y normalizar quita la caída de la nota.
-// Sobre esa envolvente, autocorrelación. Devuelve -1 si no encuentra periodo.
+/**
+ * @brief Periodo dominante de la modulación del chorus, en segundos.
+ *
+ * El observable es la diferencia wet-dry dividida por el nivel seco: el emulador es determinista, así que dos
+ * motores idénticos —uno con chorus y otro sin él— dan el mismo seco muestra a muestra, y normalizar quita la
+ * caída de la nota. Sobre esa envolvente, autocorrelación. Devuelve -1 si no encuentra periodo.
+ */
 static double chorus_lfo_period(int patch, double hostRate, int block, double secs)
 {
     std::vector<float> wet, dry;
@@ -1256,11 +1283,12 @@ TEST_SUITE(engine_lfo_rate)
 
 // ------------------------------------------------- trémolo
 
-// La ganancia del trémolo, ventana a ventana y por canal. El emulador es
-// determinista, así que dos motores idénticos —uno con trémolo y otro sin él—
-// dan el mismo seco muestra a muestra y la razón de rms entre los dos ES la
-// ganancia, ya sin la caída de la nota. El EQ va detrás del trémolo y suaviza
-// un poco la medida: por eso las tolerancias no son estrechas.
+/**
+ * @brief La ganancia del trémolo, ventana a ventana y por canal. El emulador es determinista, así que dos
+ *        motores idénticos —uno con trémolo y otro sin él— dan el mismo seco muestra a muestra y la razón de
+ *        rms entre los dos ES la ganancia, ya sin la caída de la nota. El EQ va detrás del trémolo y suaviza
+ *        un poco la medida: por eso las tolerancias no son estrechas.
+ */
 struct TremoloEnvelope
 {
     std::vector<double> l, r;
@@ -1305,8 +1333,10 @@ static bool tremolo_envelope(TremoloEnvelope &env, int patch, double hostRate, i
     return env.l.size() >= 40;
 }
 
-// Recorrido de la envolvente, saltándose el arranque (ataque de la nota y
-// rampas de volumen y de headroom).
+/**
+ * @brief Recorrido de la envolvente, saltándose el arranque (ataque de la nota y rampas de volumen y de
+ *        headroom).
+ */
 static void envelope_range(const std::vector<double> &v, double &lo, double &hi)
 {
     lo = 1e9;
@@ -1398,9 +1428,11 @@ TEST_SUITE(engine_tremolo)
 
 // ------------------------------------------------- cola tras el note-off
 
-// Segundos desde el último note-off hasta que la salida se queda por debajo de
-// -60 dBFS para no volver. Renderiza a trozos y para en cuanto hay silencio, que
-// es lo que hace barata la medida de los 16 parches.
+/**
+ * @brief Segundos desde el último note-off hasta que la salida se queda por debajo de -60 dBFS para no
+ *        volver. Renderiza a trozos y para en cuanto hay silencio, que es lo que hace barata la medida de los
+ *        16 parches.
+ */
 static double measure_tail(int patch, double hostRate, double maxSecs)
 {
     const int BLOCK = 512;

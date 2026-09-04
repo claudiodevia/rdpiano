@@ -1,3 +1,10 @@
+/**
+ * @file standalone.cpp
+ * @brief Ejecutable de escucha: el emulador con audio por SDL y MIDI por portmidi.
+ *
+ * No entra en ctest; es la verificación auditiva de la que habla CLAUDE.md.
+ */
+
 #include <stdlib.h>
 
 #include <memory>

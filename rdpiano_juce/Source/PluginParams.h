@@ -1,13 +1,11 @@
-/*
-  ==============================================================================
-
-    Los diez parámetros del plugin, declarados una sola vez como tabla. El valor
-    por defecto de cada uno sale de `RdEngineParams`, el POD que lee el motor:
-    plugin y núcleo no pueden discrepar sobre qué es "de fábrica". La
-    serialización y la validación de rango las hace el APVTS.
-
-  ==============================================================================
-*/
+/**
+ * @file PluginParams.h
+ * @brief Los diez parámetros del plugin, declarados una sola vez como tabla.
+ *
+ * El valor por defecto de cada uno sale de RdEngineParams, el POD que lee el
+ * motor: plugin y núcleo no pueden discrepar sobre qué es "de fábrica". La
+ * serialización y la validación de rango las hace el APVTS.
+ */
 
 #pragma once
 
@@ -15,8 +13,11 @@
 
 #include "rd_engine.h"
 
-// Índice de cada parámetro en la tabla. Es también el orden en que el host los
-// ve, así que sólo se añade por el final.
+/**
+ * @brief Índice de cada parámetro en la tabla.
+ *
+ * Es también el orden en que el host los ve, así que sólo se añade por el final.
+ */
 enum RdParamId
 {
     kVolume = 0,
@@ -33,8 +34,10 @@ enum RdParamId
     kNumRdParams
 };
 
+/** @brief La declaración de un parámetro: lo que hace falta para crearlo en el APVTS. */
 struct RdParamSpec
 {
+    /** @brief Tipo del parámetro, que decide qué clase de JUCE lo representa. */
     enum Kind
     {
         Float,
@@ -42,17 +45,18 @@ struct RdParamSpec
         Bool
     };
 
-    const char *id;   // el que va en el preset: renombrarlo rompe las sesiones
-    const char *name; // el que ve el usuario en el host
+    const char *id;   ///< El que va en el preset: renombrarlo rompe las sesiones.
+    const char *name; ///< El que ve el usuario en el host.
     Kind kind;
     float minValue;
     float maxValue;
     float defaultValue;
 };
 
-// Los valores de fábrica son los del motor, literalmente.
+/** @brief Los valores de fábrica son los del motor, literalmente. */
 inline constexpr RdEngineParams kEngineDefaults{};
 
+/** @brief La tabla: la única declaración de los diez parámetros. */
 inline constexpr RdParamSpec rdParamSpecs[kNumRdParams] = {
     {"volume", "Volume", RdParamSpec::Float, 0.0f, 1.0f, kEngineDefaults.volume},
     {"chorusEnabled", "Chorus Enabled", RdParamSpec::Bool, 0.0f, 1.0f, kEngineDefaults.chorusEnabled ? 1.0f : 0.0f},
@@ -66,9 +70,12 @@ inline constexpr RdParamSpec rdParamSpecs[kNumRdParams] = {
     {"efxPhaserDepth", "Phaser Depth", RdParamSpec::Float, 0.0f, 1.0f, kEngineDefaults.efxPhaserDepth},
 };
 
-// Coherencia de la tabla, en compilación. El rango de los tres pares
-// rate/depth es 0..14 porque es lo que indexan `chorusRateToMsPeriod` y las
-// tablas de `lsp/`; el editor lo muestra como 1..15.
+/**
+ * @brief Coherencia de la tabla, comprobada en compilación.
+ *
+ * El rango de los tres pares rate/depth es 0..14 porque es lo que indexan
+ * `chorusRateToMsPeriod` y las tablas de `lsp/`; el editor lo muestra como 1..15.
+ */
 namespace rd_params_detail
 {
     constexpr bool defaults_in_range()
@@ -93,7 +100,8 @@ namespace rd_params_detail
 static_assert(rd_params_detail::defaults_in_range());
 static_assert(rd_params_detail::ids_present());
 
-// El layout que recibe el AudioProcessorValueTreeState, construido desde la
-// tabla. La serialización y los valores por defecto salen de aquí y de ningún
-// otro sitio.
+/**
+ * @brief Construye el layout del AudioProcessorValueTreeState desde la tabla.
+ * @return El layout; la serialización y los valores por defecto salen de aquí y de ningún otro sitio.
+ */
 juce::AudioProcessorValueTreeState::ParameterLayout createRdParameterLayout();

@@ -6,8 +6,10 @@
 
 #include <cmath>
 
-// LUT for the address speed
-// LUT for bits 5/6/7/8 of the subphase
+/**
+ * @file sound_chip.cpp
+ * @brief El bucle de síntesis y el descifrado de las tablas de onda.
+ */
 
 // Las permutaciones de pines de las ROM viven en rom_loader.h.
 
@@ -47,14 +49,8 @@ void SoundChip::write(size_t offset, u8 data)
         return;
     }
 
-    // Cada part ocupa 16 bytes del mapa pero sólo tiene 8 registros. Antes el
-    // campo se sacaba con `offset % 8`, así que +8..+F se plegaban en silencio
-    // sobre +0..+7. Con el firmware RD200 daba igual: las únicas escrituras a
-    // esa mitad son el borrado de arranque (16 voces × 16 parts, todas 0x00 en
-    // la muestra 0) y plegadas volvían a poner a cero registros que ya nacen a
-    // cero. Se ignoran explícitamente en vez de por accidente aritmético: otro
-    // firmware (MKS-20, MK-80) que escriba datos reales ahí corrompía la
-    // síntesis sin avisar.
+    // Cada part ocupa 16 bytes del mapa pero sólo tiene 8 registros: +8..+F se
+    // descartan aquí y no por un `% 8` que los plegaría sobre +0..+7.
     if (field >= 8)
         return;
 
@@ -155,7 +151,6 @@ void SoundChip::decode_samples(unsigned slot, const u8 *temp_ic5, const u8 *temp
     // costaría descifrar las tres ROM enteras primero.
     WaveTables &out = wave_slots[slot];
 
-    // Wave rom values
     for (size_t i = 0; i < 0x20000; i++)
     {
         size_t descrambled_i =

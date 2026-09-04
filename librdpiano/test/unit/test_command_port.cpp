@@ -1,5 +1,9 @@
-// El protocolo del firmware: fija los bytes de cada mensaje. No hacen falta
-// ROMs ni CPU, el puerto es una cola de bytes con nombres.
+/**
+ * @file test_command_port.cpp
+ * @brief El protocolo del firmware: fija los bytes de cada mensaje.
+ *
+ * No hacen falta ROM ni CPU: el puerto es una cola de bytes con nombres.
+ */
 
 #include <string>
 #include <vector>
@@ -7,7 +11,9 @@
 #include "command_port.h"
 #include "unit_test.h"
 
-// Vacía el puerto y devuelve los bytes en el orden en que los leería la CPU.
+/**
+ * @brief Vacía el puerto y devuelve los bytes en el orden en que los leería la CPU.
+ */
 static std::vector<u8> drain(CommandPort &port)
 {
     std::vector<u8> out;
@@ -30,10 +36,10 @@ static void check_bytes(CheckRun &checks, const char *name, const std::vector<u8
     checks.add(name, got == want, check_fmt("emitido [%s], esperado [%s]", g.c_str(), w.c_str()));
 }
 
-// ---------------------------------------------------------------------------
-// Los mensajes, uno a uno. Los bytes son los que estaban escritos a mano en
-// PluginProcessor.cpp, e2e.cpp, standalone.cpp y sendMidiCmd.
-
+/**
+ * @brief Los mensajes, uno a uno. Los bytes son los que estaban escritos a mano en PluginProcessor.cpp,
+ *        e2e.cpp, standalone.cpp y sendMidiCmd.
+ */
 TEST_SUITE(command_port_messages)
 {
     CommandPort port;
@@ -70,9 +76,9 @@ TEST_SUITE(command_port_messages)
     check_bytes(checks, "masterTune(0)", drain(port), {0xE0, 0x00, 0x00});
 }
 
-// ---------------------------------------------------------------------------
-// La codificación del master tune, valor a valor.
-
+/**
+ * @brief La codificación del master tune, valor a valor.
+ */
 TEST_SUITE(command_port_master_tune)
 {
     struct Case
@@ -123,10 +129,10 @@ TEST_SUITE(command_port_master_tune)
     CHECK_EQ(outOfRange, 0);
 }
 
-// ---------------------------------------------------------------------------
-// El arranque: esto fija la secuencia de bytes; que las dos capas la ejecuten
-// —y no la reimplementen— es cosa de Mcu::boot().
-
+/**
+ * @brief El arranque: esto fija la secuencia de bytes; que las dos capas la ejecuten —y no la reimplementen—
+ *        es cosa de Mcu::boot().
+ */
 TEST_SUITE(command_port_boot_sequence)
 {
     CommandPort port;
@@ -146,9 +152,9 @@ TEST_SUITE(command_port_boot_sequence)
     check_bytes(checks, "arranque afinado", drain(port), {0x30, 0xE0, 0x7f, 0x68});
 }
 
-// ---------------------------------------------------------------------------
-// Pánico: esta suite es su especificación.
-
+/**
+ * @brief Pánico: esta suite es su especificación.
+ */
 TEST_SUITE(command_port_all_notes_off)
 {
     CommandPort port;
@@ -187,10 +193,9 @@ TEST_SUITE(command_port_all_notes_off)
     CHECK_EQ(port.queue().dropped(), 0);
 }
 
-// ---------------------------------------------------------------------------
-// El anillo: que sea FIFO y que su comportamiento al desbordar esté decidido,
-// no sea accidental.
-
+/**
+ * @brief El anillo: que sea FIFO y que su comportamiento al desbordar esté decidido, no sea accidental.
+ */
 TEST_SUITE(command_port_ring)
 {
     CommandQueue q;

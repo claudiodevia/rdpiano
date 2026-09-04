@@ -7,8 +7,13 @@
 #include "resample/libresample.h"
 #include "rom_loader.h"
 
-// El periodo del chorus por posición del dial, en milisegundos. Es parte de la
-// cadena, no de la UI.
+/**
+ * @file rd_engine.cpp
+ * @brief La cadena de audio: constantes medidas, ciclo de vida y las fases de render().
+ */
+
+/// El periodo del chorus por posición del dial, en milisegundos. Es parte de la
+/// cadena, no de la UI.
 static const int chorusRateToMsPeriod[15] = {
     2700, // 1
     1380, // 2
@@ -27,13 +32,13 @@ static const int chorusRateToMsPeriod[15] = {
     175,  // 15
 };
 
-// El EQ medio, afinado de oído contra un MKS-20. Los coeficientes se calculan
-// una vez en prepare().
+/// El EQ medio, afinado de oído contra un MKS-20. Los coeficientes se calculan
+/// una vez en prepare().
 static const float kMidEqFreq = 350.0f;
 static const float kMidEqQ = 0.2f;
 static const float kMidEqGainDb = 8.0f;
 
-// El escalado seco: (sample << 5 >> 6) / 65536 * 0.5.
+/// El escalado seco: (sample << 5 >> 6) / 65536 * 0.5.
 static const int kEmuInputShift = 5;
 static const int kEmuOutputShift = 6;
 static const float kEmuToFloat = 1.0f / 65536.0f;
@@ -41,42 +46,42 @@ static const float kOutputScaling = 0.5f;
 
 static const float kPi = 3.14159265358979323846f;
 
-// La fase del trémolo se lleva en doble: es un acumulador, no un coeficiente.
+/// La fase del trémolo se lleva en doble: es un acumulador, no un coeficiente.
 static const double kTwoPi = 2.0 * 3.14159265358979323846;
 
-// Rampas de conmutación, en milisegundos. La de los efectos es la que evita el
-// salto duro del bypass; las dos del parche son el declick: bajar rápido, subir
-// despacio, que es como se oye menos.
+/// Rampas de conmutación, en milisegundos. La de los efectos es la que evita el
+/// salto duro del bypass; las dos del parche son el declick: bajar rápido, subir
+/// despacio, que es como se oye menos.
 static const float kEffectMixRampMs = 10.0f;
 static const float kPatchFadeOutMs = 6.0f;
 static const float kPatchFadeInMs = 15.0f;
 
-// Subida cuando el cambio ha tenido que volver a disparar lo que se estaba
-// tocando: más larga que la normal a propósito, porque es la que esconde el
-// transitorio de ataque de las notas que reentran. Con la ganancia elevada al
-// cuadrado (ver outputStage) el arranque es aún más plano.
+/// Subida cuando el cambio ha tenido que volver a disparar lo que se estaba
+/// tocando: más larga que la normal a propósito, porque es la que esconde el
+/// transitorio de ataque de las notas que reentran. Con la ganancia elevada al
+/// cuadrado (ver outputStage) el arranque es aún más plano.
 static const float kPatchFadeInHeldMs = 90.0f;
 
-// Cuánto baja el nivel del ataque por unidad de velocidad. Medido sobre los 16
-// parches: entre v16 y v120 la curva es recta a 0,228 dB por unidad (por debajo
-// de v16 se aplana, de ahí el suelo de la corrección). Es lo que convierte
-// "esta nota ya había decaído N dB" en la velocidad con la que hay que volver a
-// dispararla.
+/// Cuánto baja el nivel del ataque por unidad de velocidad. Medido sobre los 16
+/// parches: entre v16 y v120 la curva es recta a 0,228 dB por unidad (por debajo
+/// de v16 se aplana, de ahí el suelo de la corrección). Es lo que convierte
+/// "esta nota ya había decaído N dB" en la velocidad con la que hay que volver a
+/// dispararla.
 static const float kDbPerVelocityUnit = 0.228f;
 
-// Tope de la corrección: más allá, la velocidad resultante se sale de la parte
-// recta de la curva y el timbre deja de parecerse al que sonaba.
+/// Tope de la corrección: más allá, la velocidad resultante se sale de la parte
+/// recta de la curva y el timbre deja de parecerse al que sonaba.
 static const float kMaxRetriggerAttenDb = 30.0f;
 
-// El seguidor de nivel es un RMS de constante `kLevelTauMs`, no un detector de
-// pico: el pico del ataque de un acorde suma en fase y el del sustain no, así
-// que medir picos daba varios dB de decaimiento que no existían. La ventana de
-// ataque es más larga que la constante para que al RMS le dé tiempo a llenarse.
+/// El seguidor de nivel es un RMS de constante `kLevelTauMs`, no un detector de
+/// pico: el pico del ataque de un acorde suma en fase y el del sustain no, así
+/// que medir picos daba varios dB de decaimiento que no existían. La ventana de
+/// ataque es más larga que la constante para que al RMS le dé tiempo a llenarse.
 static const float kLevelTauMs = 25.0f;
 static const float kOnsetWindowMs = 80.0f;
 
-// El retardo de grupo se declara al anfitrión en el peor caso —el parche más
-// lento— para no renegociar la latencia en cada cambio de sonido.
+/// El retardo de grupo se declara al anfitrión en el peor caso —el parche más
+/// lento— para no renegociar la latencia en cada cambio de sonido.
 static const double kWorstSourceRate = 20000.0;
 
 static inline int clamp_index(int v, int lo, int hi)
@@ -97,8 +102,12 @@ static inline float clamp_step(float v, float lo, float hi)
     return v;
 }
 
-// Una rampa por muestra a partir de su duración, con suelo: `rate` puede ser 0
-// antes de prepare().
+/**
+ * @brief Una rampa por muestra a partir de su duración.
+ * @param ms Duración de la rampa.
+ * @param rate Tasa a la que corre; puede ser 0 antes de prepare(), de ahí el suelo.
+ * @return El paso por muestra, acotado a 1.
+ */
 static inline float ramp_step(float ms, double rate)
 {
     const double samples = ms * 0.001 * rate;
@@ -107,10 +116,10 @@ static inline float ramp_step(float ms, double rate)
 
 // ---------------------------------------------------------------- biquad
 
+// juce::dsp::ArrayCoefficients<float>::makePeakFilter, en float, con el mismo
+// orden de operaciones; `assignImpl` divide después todo por a0.
 void RdBiquad::setPeak(double sampleRate, float frequency, float q, float gainFactor)
 {
-    // juce::dsp::ArrayCoefficients<float>::makePeakFilter, en float, con el
-    // mismo orden de operaciones.
     const float A = sqrtf(gainFactor);
     const float omega = (2.0f * kPi * (frequency > 2.0f ? frequency : 2.0f)) / (float)sampleRate;
     const float alpha = sinf(omega) / (q * 2.0f);
@@ -125,7 +134,6 @@ void RdBiquad::setPeak(double sampleRate, float frequency, float q, float gainFa
     const float ra1 = c2;
     const float ra2 = 1.0f - alphaOverA;
 
-    // assignImpl: todo dividido por a0.
     const float inv = 1.0f / ra0;
     b0 = rb0 * inv;
     b1 = rb1 * inv;
@@ -345,14 +353,17 @@ void RdPianoEngine::sendTracked(u8 status, u8 data1, u8 data2)
     mcu->sendMidiCmd(status, data1, data2);
 }
 
-// Le devuelve al firmware el pedal y las teclas que siguen pulsadas, y devuelve
-// cuántas notas han reentrado. El pedal va primero: al revés, las notas
-// reenviadas nacerían sin sostenido. Son bytes a la cola de comandos y nada
-// más, así que vale desde el hilo de audio.
-//
-// La velocidad no es la original sino la que deja la nota en el nivel al que
-// había llegado decayendo: reentrar con el ataque entero es exactamente el
-// golpe de tecla que no debe oírse al cambiar de sonido.
+/**
+ * @brief Le devuelve al firmware el pedal y las teclas que siguen pulsadas.
+ *
+ * El pedal va primero: al revés, las notas reenviadas nacerían sin sostenido.
+ * Son bytes a la cola de comandos y nada más, así que vale desde el hilo de
+ * audio. La velocidad no es la original sino la que deja la nota en el nivel al
+ * que había llegado decayendo: reentrar con el ataque entero es exactamente el
+ * golpe de tecla que no debe oírse al cambiar de sonido.
+ *
+ * @return Cuántas notas han reentrado.
+ */
 int RdPianoEngine::restoreHeldNotes()
 {
     if (sustainDown)
@@ -410,8 +421,7 @@ void RdPianoEngine::requestMasterTune(int16_t tune)
     tuneRequest.store((int)tune, std::memory_order_release);
 }
 
-// Lo que `render()` atiende entre bloques. Es todo lo que antes corría el hilo
-// de UI con el cerrojo tomado.
+/** @brief Lo que render() atiende entre bloques: todo lo que antes corría el hilo de UI con el cerrojo tomado. */
 void RdPianoEngine::serviceRequests()
 {
     const int requested = patchRequest.exchange(-1, std::memory_order_acquire);
@@ -484,18 +494,29 @@ static inline void silence(float *left, float *right, int numFrames)
     }
 }
 
-// Bloque que no se puede rendir: la salida se limpia —dejarla intacta devolvería
-// al host la entrada o el bloque anterior en vez de silencio— y la cola MIDI se
-// vacía, porque sus eventos ya no tienen dónde ir.
+/**
+ * @brief Bloque que no se puede rendir.
+ *
+ * La salida se limpia —dejarla intacta devolvería al host la entrada o el bloque
+ * anterior en vez de silencio— y la cola MIDI se vacía, porque sus eventos ya no
+ * tienen dónde ir.
+ *
+ * @param left Canal izquierdo.
+ * @param right Canal derecho.
+ * @param numFrames Muestras del bloque.
+ */
 void RdPianoEngine::abortBlock(float *left, float *right, int numFrames)
 {
     silence(left, right, numFrames);
     midiCount = 0;
 }
 
-// Cuántas muestras del emulador pide este bloque, con la corrección de deriva.
-// Devuelve 0 si el bloque no se puede rendir; `blockError` sale con lo que hay
-// que acumular en `samplesError` si se rinde.
+/**
+ * @brief Cuántas muestras del emulador pide este bloque, con la corrección de deriva.
+ * @param numFrames Muestras del host que pide el anfitrión.
+ * @param blockError Sale con lo que hay que acumular en `samplesError` si el bloque se rinde.
+ * @return Muestras del emulador a generar, o 0 si el bloque no se puede rendir.
+ */
 int RdPianoEngine::framesForBlock(int numFrames, double *blockError)
 {
     const double renderBufferFramesFloat = (double)numFrames / hostRate * sourceRate;
@@ -533,9 +554,14 @@ int RdPianoEngine::framesForBlock(int numFrames, double *blockError)
     return renderBufferFrames;
 }
 
-// El bucle de síntesis: emulador, los dos efectos con sus rampas y el reparto
-// del MIDI, a `sourceRate`, hacia `emuL`/`emuR`. Devuelve cuántos eventos de la
-// cola se entregaron; los que quedan van más allá del último frame generado.
+/**
+ * @brief El bucle de síntesis: emulador, los dos efectos con sus rampas y el reparto del MIDI.
+ *
+ * Corre a `sourceRate` y escribe en `emuL`/`emuR`.
+ *
+ * @param emuFrames Muestras del emulador a generar.
+ * @return Cuántos eventos de la cola se entregaron; los que quedan van más allá del último frame.
+ */
 int RdPianoEngine::synthesise(int emuFrames)
 {
     const bool mode32khz = sourceRate == 32000;
@@ -545,7 +571,7 @@ int RdPianoEngine::synthesise(int emuFrames)
     // el phaser van 1,6x más rápidos con el mismo ajuste del panel. **Es
     // deliberado**: escalarlo por 20000/sourceRate se probó, se escuchó y se
     // descartó —sonaba peor—. Lo fija `engine_lfo_rate`, que falla si alguien lo
-    // "arregla". Ver docs/RENDIMIENTO-DIRECTO.md §10.1.
+    // "arregla".
     spaceD.rate = spaceDRateFromMs(1000.0f / chorusRateToMsPeriod[clamp_index(params.chorusRate, 0, 14)] / 4.0f);
     spaceD.depth = spaceDDepth(clamp_index(params.chorusDepth, 0, 14) / 15.0f);
 
@@ -649,7 +675,12 @@ int RdPianoEngine::synthesise(int emuFrames)
     return nextEvent;
 }
 
-// De `sourceRate` a la tasa del host: `emuL`/`emuR` entran, `outL`/`outR` salen.
+/**
+ * @brief De `sourceRate` a la tasa del host: `emuL`/`emuR` entran, `outL`/`outR` salen.
+ * @param emuFrames Muestras del emulador disponibles.
+ * @param numFrames Muestras del host a producir.
+ * @param blockError Corrección de deriva que devolvió framesForBlock().
+ */
 void RdPianoEngine::resampleBlock(int emuFrames, int numFrames, double blockError)
 {
     // `emuL`/`emuR` no se limpian: el bucle de síntesis les *asigna* las
@@ -676,8 +707,12 @@ void RdPianoEngine::resampleBlock(int emuFrames, int numFrames, double blockErro
     }
 }
 
-// Lo que va detrás del remuestreador, ya a la tasa del host: ganancia de parche,
-// declick, trémolo y EQ.
+/**
+ * @brief Lo que va detrás del remuestreador: ganancia de parche, declick, trémolo y EQ.
+ * @param left Canal izquierdo de salida.
+ * @param right Canal derecho de salida.
+ * @param numFrames Muestras del bloque.
+ */
 void RdPianoEngine::outputStage(float *left, float *right, int numFrames)
 {
     // Trémolo: la fase avanza por muestra y se acota a 2 pi, en vez de

@@ -321,10 +321,55 @@ pero mueva el hash es de **alto riesgo tímbrico: decírselo al usuario**.
   `-DRDPIANO_TRACE`.
 - Tipos MAME (`u8/s16/u32`) en el núcleo, tipos JUCE en el plugin.
 - `HACK:` / `TODO:` marcan comportamiento conocido-incorrecto: son contexto, no ruido.
-- **Documentación de clases: breve y concisa.** Una o dos líneas de qué es y por qué existe; el
+- **Documentación: Doxygen, breve y concisa.** Una o dos líneas de qué es y por qué existe; el
   detalle que no se deduce del código (contratos de RT, trampas) va aquí en CLAUDE.md, no en
-  comentarios largos sobre la declaración.
+  comentarios largos sobre la declaración. El estándar, abajo.
 - `patches.h` (offsets, sample rates, nombres, ROM set, headroom) lo comparten plugin y harness.
+
+## Estándar de documentación
+
+Doxygen en español, sobre la **declaración** y nunca dentro del cuerpo. Bloque `/** */` con `@brief`
+en primera línea; `@param`/`@return` solo cuando el nombre no lo dice ya; `///<` para campos y
+constantes. Los `#` de Doxygen no se usan: se referencia con el nombre a secas o con backticks.
+
+```cpp
+/**
+ * @file rd_engine.h
+ * @brief Una línea de qué contiene el archivo.
+ */
+
+/**
+ * @brief Qué es la clase, en una línea.
+ *
+ * Por qué existe o qué contrato tiene, si no se deduce. Dos o tres líneas como
+ * mucho; lo demás va a CLAUDE.md o a docs/.
+ */
+class Ejemplo
+{
+  public:
+    static constexpr int kTope = 16; ///< Qué acota.
+
+    /**
+     * @brief Qué hace, en imperativo.
+     * @param patch Qué significa, no de qué tipo es.
+     * @return Qué devuelve, y qué quiere decir el caso raro.
+     */
+    bool selectPatch(int patch);
+};
+```
+
+- **Qué se documenta**: todo archivo (`@file` + `@brief`), toda clase, struct y enum, y los métodos
+  públicos. Los `override` de JUCE, los getters obvios y los destructores no llevan nada; los
+  constructores solo si el orden de llamada importa.
+- **El `.cpp` no repite el bloque de la cabecera.** Ahí solo van los `HACK:`/`TODO:` y la razón de
+  una constante medida. Lo que solo existe en el `.cpp` (helpers en anónimo) se documenta ahí.
+- **Nada de comentarios interlineados**: el código se explica solo, y si no, se renombra o se parte
+  en una función con nombre. Las únicas excepciones son lo que el código no puede decir: `HACK:` /
+  `TODO:`, las trampas de arriba, los números mágicos del hardware (direcciones del mapa, bytes del
+  protocolo, opcodes) y los valores medidos a oído o con el harness.
+- **En las pruebas**, `@file` por archivo y un `@brief` sobre cada `TEST_SUITE` diciendo qué fija.
+  Dentro del cuerpo sí se comenta lo que un `CHECK` no puede decir por sí solo: qué invariante mide.
+- Excluidos, como en el formateo: `mcu_ops.h`, `mame_utils.h`, `lsp/`, `resample/`, `re_stuff/`.
 
 ## Git: no commitear
 

@@ -5,17 +5,21 @@
 #include <cstdio>
 #include <cstring>
 
+/**
+ * @file PluginEditor.cpp
+ * @brief Las dos tablas del panel —botones y modos del display— y los bucles que las recorren.
+ */
+
 static constexpr int bgWidth = 6140;
 static constexpr int bgHeight = 1503;
 static constexpr float scaleFactor = 5;
 static constexpr int uiWidth = bgWidth / scaleFactor;
 static constexpr int uiHeight = bgHeight / scaleFactor;
 
-//==============================================================================
-// El panel entero, en coordenadas del fondo. Es la única copia: el constructor,
-// `resized()`, `buttonClicked()` y `updateValues()` recorren esta tabla.
 typedef RdPiano_juceAudioProcessorEditor Editor;
 
+/// El panel entero, en coordenadas del fondo. Es la única copia: el constructor,
+/// resized(), buttonClicked() y updateValues() recorren esta tabla.
 const Editor::ButtonSpec Editor::buttonSpecs[Editor::kNumButtons] = {
     // MKS-20 / MK-80: los dos bancos de ocho parches
     {{2602, 806, 248, 248}, {2598, 800, 257, 258}, ButtonSpec::kSelectBank, 0, kVolume, kModePatch, kModePatch},
@@ -67,8 +71,8 @@ const Editor::ButtonSpec Editor::buttonSpecs[Editor::kNumButtons] = {
      kModePhaserDepth},
 };
 
-// Las etiquetas ocupan 15 columnas exactas: la fila de arriba es etiqueta más
-// el número del paso alineado a la derecha en dos columnas.
+/// Las etiquetas ocupan 15 columnas exactas: la fila de arriba es etiqueta más
+/// el número del paso alineado a la derecha en dos columnas.
 const Editor::ModeSpec Editor::modeSpecs[Editor::kNumDisplayModes] = {
     {nullptr, kVolume, false}, // kModePatch
     {nullptr, kVolume, true},  // kModeTune
@@ -80,8 +84,8 @@ const Editor::ModeSpec Editor::modeSpecs[Editor::kNumDisplayModes] = {
     {"PHASER DEPTH   ", kEfxPhaserDepth, false},
 };
 
-// Los 16 parches como los enseña el display: dos filas de 17. No es
-// `patchNames` de patches.h, que usa el formato corto "MKS-20: Piano 1".
+/// Los 16 parches como los enseña el display: dos filas de 17. No es
+/// `patchNames` de patches.h, que usa el formato corto "MKS-20: Piano 1".
 static const char *const displayPatchNames[NUM_PATCHES] = {
     "MKS-20           Piano 1          ", "MKS-20           Piano 2          ", "MKS-20           Piano 3          ",
     "MKS-20           Harpsichord      ", "MKS-20           Clavi            ", "MKS-20           Vibraphone       ",
@@ -90,7 +94,12 @@ static const char *const displayPatchNames[NUM_PATCHES] = {
     "MK-80            A. Piano 1       ", "MK-80            A. Piano 2       ", "MK-80            Clavi            ",
     "MK-80            Vibraphone       "};
 
-// Copia `text` en `line` a partir de `at`, sin salirse de las 34 columnas.
+/**
+ * @brief Copia un texto en una línea del display, sin salirse de las 34 columnas.
+ * @param line Las dos filas del display.
+ * @param at Columna en la que empezar.
+ * @param text Texto a copiar, terminado en cero.
+ */
 static void lcdPut(uint8_t (&line)[Lcd::kChars], int at, const char *text)
 {
     for (int i = 0; text[i] != '\0' && at + i < Lcd::kChars; i++)
@@ -215,9 +224,15 @@ void RdPiano_juceAudioProcessorEditor::buttonClicked(juce::Button *button)
     }
 }
 
-// El paso 0..14 que enseña el display para el parámetro de este modo. Se
-// calcula sobre el valor normalizado, así que sirve igual para los rangos
-// enteros 0..14 del chorus y del trémolo y para los 0..1 continuos del phaser.
+/**
+ * @brief El paso que enseña el display para el parámetro de un modo.
+ *
+ * Se calcula sobre el valor normalizado, así que sirve igual para los rangos
+ * enteros 0..14 del chorus y del trémolo y para los 0..1 continuos del phaser.
+ *
+ * @param m Modo del display.
+ * @return El paso, 0..kParamSteps-1.
+ */
 int RdPiano_juceAudioProcessorEditor::paramStep(DisplayMode m) const
 {
     const RdParamId id = modeSpecs[m].param;
@@ -225,8 +240,12 @@ int RdPiano_juceAudioProcessorEditor::paramStep(DisplayMode m) const
     return juce::jlimit(0, kParamSteps - 1, juce::roundToInt(normalised * (kParamSteps - 1)));
 }
 
-// "ETIQUETA        7" / " ______█________ ": la línea de parámetro que antes
-// se escribía seis veces, una por modo.
+/**
+ * @brief Escribe la línea de parámetro: "ETIQUETA        7" / " ______█________ ".
+ * @param line Las dos filas del display.
+ * @param spec Modo a dibujar.
+ * @param step Paso en el que está el parámetro.
+ */
 void RdPiano_juceAudioProcessorEditor::renderParamLine(uint8_t (&line)[Lcd::kChars], const ModeSpec &spec,
                                                        int step) const
 {

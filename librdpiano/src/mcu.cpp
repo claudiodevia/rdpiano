@@ -4,6 +4,11 @@
 
 #include <algorithm>
 
+/**
+ * @file mcu.cpp
+ * @brief El core HD63701 (macros y tablas derivadas de MAME) y el protocolo del firmware.
+ */
+
 #define pPPC m_ppc
 #define pPC m_pc
 #define pS m_s
@@ -337,12 +342,6 @@ Mcu::Mcu(const u8 *temp_ic5, const u8 *temp_ic6, const u8 *temp_ic7, const u8 *t
 
 void Mcu::reset()
 {
-    // Todo el estado, no sólo los registros de la CPU: RAM, latch, chip de
-    // sonido y cola de comandos van con ellos. La cola era la peor de las que
-    // sobrevivían —el handshake la consume en direcciones fijas del firmware
-    // (trampa 1), así que un byte huérfano de antes del reset se entregaba en
-    // mitad de la nueva secuencia de arranque—. Las ROM y la página de
-    // parámetros ya mapeada no se tocan (trampa 8).
     board.reset();
 
     m_tcsr = 0;
@@ -506,9 +505,6 @@ void Mcu::tcsr_w(u8 data)
     check_irq_lines();
 }
 
-// Los registros internos del chip dentro de 0x0000-0x001F: la placa se queda
-// con los dos puertos del bus de comandos y pasa el resto aquí. Lo que la CPU
-// no reconoce vale 0xFF.
 u8 Mcu::readCpuRegister(u16 addr)
 {
     // tcsr

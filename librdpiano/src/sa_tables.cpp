@@ -2,8 +2,12 @@
 
 #include <cmath>
 
-// Generación de las dos LUT de IC10/IC11, transcritas del silicio. No se toca
-// una operación: test_sa_tables.cpp fija la salida byte a byte.
+/**
+ * @file sa_tables.cpp
+ * @brief Generación de las dos LUT de IC10/IC11, transcritas del silicio.
+ *
+ * No se toca una operación: test_sa_tables.cpp fija la salida byte a byte.
+ */
 
 void sa_tables_generate(SaTables &out)
 {

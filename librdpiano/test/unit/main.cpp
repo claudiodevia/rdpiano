@@ -1,11 +1,13 @@
-// rdpiano_tests: suite unitaria del núcleo.
-//
-// Complementa a rdpiano_e2e, que es agregado (un hash por parche, con firmware
-// y CPU emulada). Aquí se prueban unidades sueltas, sin emular audio, para que
-// un fallo diga qué se rompió y no solo que algo cambió.
-//
-// Uso:
-//   rdpiano_tests [--roms DIR] [--vectors DIR] [--filter SUBCADENA] [--list]
+/**
+ * @file main.cpp
+ * @brief rdpiano_tests: la suite unitaria del núcleo.
+ *
+ * Complementa a rdpiano_e2e, que es agregado (un hash por parche, con firmware y CPU emulada).
+ * Aquí se prueban unidades sueltas, sin emular audio, para que un fallo diga qué se rompió y no
+ * solo que algo cambió.
+ *
+ * Uso: rdpiano_tests [--roms DIR] [--vectors DIR] [--filter SUBCADENA] [--list]
+ */
 
 #include <stdio.h>
 #include <string.h>

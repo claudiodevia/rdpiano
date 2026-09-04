@@ -1,11 +1,15 @@
-// Los tres bloques de SoundChip::update(). El hash del golden dice que *algo*
-// cambió; estos vectores dicen cuál de los tres sumadores. Cubren un escenario
-// musical en cuatro parches más los bordes: fin de envolvente con IRQ, el
-// silenciado marcado `investigate`, el wrap de fase y las dos banderas de la
-// voz en sus cuatro combinaciones.
-//
-// No hacen falta ROMs: los cuatro valores de la wave ROM que consume IC8 vienen
-// en el propio vector.
+/**
+ * @file test_sound_chip_blocks.cpp
+ * @brief Los tres bloques de SoundChip::update().
+ *
+ * El hash del golden dice que *algo* cambió; estos vectores dicen cuál de los tres sumadores.
+ * Cubren un escenario musical en cuatro parches más los bordes: fin de envolvente con IRQ, el
+ * silenciado marcado `investigate`, el wrap de fase y las dos banderas de la voz en sus cuatro
+ * combinaciones.
+ *
+ * No hacen falta ROMs: los cuatro valores de la wave ROM que consume IC8 vienen en el propio
+ * vector.
+ */
 
 #include <stdio.h>
 #include <string.h>
@@ -230,8 +234,10 @@ TEST_SUITE(sound_chip_blocks_vectors)
     report(checks, "silenciado investigate", badSilencing, vectors.size(), firstSilencing);
 }
 
-// Los bordes que los vectores tienen que estar cubriendo. Si un recorte futuro
-// del fichero se los lleva por delante, que se entere alguien.
+/**
+ * @brief Los bordes que los vectores tienen que estar cubriendo. Si un recorte futuro del fichero se los
+ *        lleva por delante, que se entere alguien.
+ */
 TEST_SUITE(sound_chip_blocks_coverage)
 {
     std::string error;

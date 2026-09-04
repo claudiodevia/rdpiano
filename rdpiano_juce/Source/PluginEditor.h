@@ -6,11 +6,16 @@
 #include "PluginProcessor.h"
 #include "lcd/Lcd.h"
 
-//==============================================================================
 /**
- * El panel, guiado por tablas: un `ButtonSpec` por botón y un `ModeSpec` por
- * modo del display. El constructor, `resized()`, `buttonClicked()` y
- * `updateValues()` son bucles sobre esas dos tablas.
+ * @file PluginEditor.h
+ * @brief El panel del plugin: botones, dial, fader y display.
+ */
+
+/**
+ * @brief El panel, guiado por tablas: un ButtonSpec por botón y un ModeSpec por modo del display.
+ *
+ * El constructor, resized(), buttonClicked() y updateValues() son bucles sobre
+ * esas dos tablas.
  */
 class RdPiano_juceAudioProcessorEditor : public juce::AudioProcessorEditor,
                                          public juce::Button::Listener,
@@ -32,11 +37,14 @@ class RdPiano_juceAudioProcessorEditor : public juce::AudioProcessorEditor,
     void sliderDragEnded(juce::Slider *) override;
     void changeListenerCallback(juce::ChangeBroadcaster *) override;
 
+    /** @brief Repinta lo que haya cambiado: display, testigos y, si se movió, la franja del fader. */
     void updateValues();
 
-    //==============================================================================
-    // Qué muestra el display y, con él, qué edita el dial alfa. Sólo uno puede
-    // estar activo a la vez.
+    /**
+     * @brief Qué muestra el display y, con él, qué edita el dial alfa.
+     *
+     * Sólo uno puede estar activo a la vez.
+     */
     enum DisplayMode
     {
         kModePatch = 0, // el nombre del parche; el dial elige parche
@@ -54,6 +62,7 @@ class RdPiano_juceAudioProcessorEditor : public juce::AudioProcessorEditor,
   private:
     RdPiano_juceAudioProcessor &audioProcessor;
 
+    /** @brief Un botón del panel: dibuja su recorte de la hoja de arte y su testigo rojo. */
     class MksButton : public juce::Button
     {
       public:
@@ -61,10 +70,10 @@ class RdPiano_juceAudioProcessorEditor : public juce::AudioProcessorEditor,
         float scaleFactor = 1.0f;
         bool enabled = false;
 
-        // La hoja de arte, que carga el editor una sola vez. `juce::Image` es un
-        // asa contada, así que copiarla aquí no copia píxeles; lo que no puede
-        // haber es un `ImageCache::getFromMemory()` dentro del paint, porque
-        // toma un cerrojo global y de vez en cuando vuelve a decodificar el PNG.
+        /// La hoja de arte, que carga el editor una sola vez. `juce::Image` es un
+        /// asa contada, así que copiarla aquí no copia píxeles; lo que no puede
+        /// haber es un `ImageCache::getFromMemory()` dentro del paint, porque
+        /// toma un cerrojo global y de vez en cuando vuelve a decodificar el PNG.
         juce::Image art;
 
         MksButton() : juce::Button("") {}
@@ -92,22 +101,25 @@ class RdPiano_juceAudioProcessorEditor : public juce::AudioProcessorEditor,
         }
     };
 
-    //==============================================================================
-    // Un botón del panel: dónde responde al ratón, qué trozo de arte dibuja y qué
-    // hace al pulsarlo. La misma tabla decide cuándo se enciende el testigo rojo.
+    /**
+     * @brief Un botón del panel: dónde responde al ratón, qué trozo de arte dibuja y qué hace al pulsarlo.
+     *
+     * La misma tabla decide cuándo se enciende el testigo rojo.
+     */
     struct ButtonSpec
     {
+        /** @brief Qué hace el botón al pulsarlo. */
         enum Action
         {
-            kSelectBank,  // `value` es el primer parche del banco
-            kSelectPatch, // `value` es el botón 1..8, dentro del banco actual
-            kToggleParam, // invierte `param`
-            kCycleModes,  // ninguno -> `first` -> `second` -> ninguno
+            kSelectBank,  ///< `value` es el primer parche del banco.
+            kSelectPatch, ///< `value` es el botón 1..8, dentro del banco actual.
+            kToggleParam, ///< Invierte `param`.
+            kCycleModes,  ///< Ninguno -> `first` -> `second` -> ninguno.
         };
 
-        // En coordenadas del fondo (6140x1503). `bounds` es el área sensible al
-        // ratón y `art` el recorte de interactable.png: no coinciden —el arte se
-        // desborda unos píxeles— y venían así del panel original.
+        /// En coordenadas del fondo (6140x1503). `bounds` es el área sensible al
+        /// ratón y `art` el recorte de interactable.png: no coinciden —el arte se
+        /// desborda unos píxeles— y venían así del panel original.
         int bounds[4];
         int art[4];
 
@@ -118,16 +130,16 @@ class RdPiano_juceAudioProcessorEditor : public juce::AudioProcessorEditor,
         DisplayMode second;
     };
 
-    // Un modo del display. `label` son los 15 caracteres de la primera fila; los
-    // dos modos que no editan un parámetro (parche y afinación) tienen su propia
-    // línea y no lo usan.
+    /** @brief Un modo del display: qué rótulo enseña y qué parámetro edita el dial. */
     struct ModeSpec
     {
+        /// Los 15 caracteres de la primera fila. Los dos modos que no editan un
+        /// parámetro (parche y afinación) tienen su propia línea y no lo usan.
         const char *label;
         RdParamId param;
 
-        // Con un modo "alternativo" activo, los botones de banco y de parche
-        // apagan su testigo. Los dos del phaser no cuentan (nunca contaron).
+        /// Con un modo "alternativo" activo, los botones de banco y de parche
+        /// apagan su testigo. Los dos del phaser no cuentan (nunca contaron).
         bool countsAsAlternative;
     };
 
@@ -135,42 +147,54 @@ class RdPiano_juceAudioProcessorEditor : public juce::AudioProcessorEditor,
     static const ButtonSpec buttonSpecs[kNumButtons];
     static const ModeSpec modeSpecs[kNumDisplayModes];
 
-    // Las hojas de arte, decodificadas una vez en el constructor y repartidas a
-    // los botones y al dial: ningún paint() vuelve a pasar por ImageCache.
+    /// Las hojas de arte, decodificadas una vez en el constructor y repartidas a
+    /// los botones y al dial: ningún paint() vuelve a pasar por ImageCache.
     juce::Image backgroundArt;
     juce::Image interactableArt;
 
     MksButton buttons[kNumButtons];
     DisplayMode mode = kModePatch;
 
-    // El dial de parches sólo cambia de sonido al SOLTARLO: mientras se arrastra
-    // enseña el nombre y nada más. Un gesto de extremo a extremo eran quince
-    // cambios de parche encadenados, con sus quince cortes de audio.
+    /// El dial de parches sólo cambia de sonido al SOLTARLO: mientras se arrastra
+    /// enseña el nombre y nada más. Un gesto de extremo a extremo eran quince
+    /// cambios de parche encadenados, con sus quince cortes de audio.
     bool dialDragging = false;
     int dialPatchPreview = -1;
 
-    // Última posición del fader ya pintada: el fondo sólo se repinta cuando se
-    // mueve, y sólo la franja del fader.
+    /// Última posición del fader ya pintada: el fondo sólo se repinta cuando se
+    /// mueve, y sólo la franja del fader.
     float paintedVolume = -1.0f;
 
-    // Los 15 pasos que enseña el display y recorre el dial. Los parámetros
-    // enteros van de 0 a 14 y los del phaser son 0..1 continuos: el paso se
-    // calcula sobre el valor normalizado y vale para los seis.
+    /// Los 15 pasos que enseña el display y recorre el dial. Los parámetros
+    /// enteros van de 0 a 14 y los del phaser son 0..1 continuos: el paso se
+    /// calcula sobre el valor normalizado y vale para los seis.
     static const int kParamSteps = 15;
 
+    /**
+     * @brief En qué paso está el parámetro que edita un modo.
+     * @param m Modo del display.
+     * @return El paso, 0..kParamSteps-1.
+     */
     int paramStep(DisplayMode m) const;
+
+    /**
+     * @brief Escribe la línea del display para un modo que edita un parámetro.
+     * @param line Fila del display, en el juego de caracteres del original.
+     * @param spec Modo a dibujar.
+     * @param step Paso en el que está el parámetro.
+     */
     void renderParamLine(uint8_t (&line)[Lcd::kChars], const ModeSpec &spec, int step) const;
 
     Lcd lcd;
 
+    /** @brief El aspecto del dial alfa: dibuja la hoja de arte girada en vez del rotatorio de JUCE. */
     class KnobLF : public juce::LookAndFeel_V3
     {
       public:
         KnobLF() = default;
         ~KnobLF() override = default;
 
-        // El dial, cargado por el editor: mismo motivo que en MksButton.
-        juce::Image dial;
+        juce::Image dial; ///< El dial, cargado por el editor: mismo motivo que en MksButton.
 
         void drawRotarySlider(juce::Graphics &g, int x, int y, int width, int height, float sliderPos,
                               const float rotaryStartAngle, const float rotaryEndAngle, juce::Slider &slider) override
