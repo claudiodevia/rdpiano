@@ -115,11 +115,12 @@ struct RdBiquad
  */
 struct RdEngineStats
 {
-    unsigned long tooFewFrames = 0;  ///< El bloque pedía menos de 2 muestras.
-    unsigned long tooManyFrames = 0; ///< No cabían en el búfer del emulador.
-    unsigned long blockTooLarge = 0; ///< numFrames por encima del preparado.
-    unsigned long clicks = 0;        ///< El remuestreador no consumió nada.
-    unsigned long midiDropped = 0;   ///< La cola de eventos se llenó.
+    unsigned long tooFewFrames = 0;   ///< El bloque pedía menos de 2 muestras.
+    unsigned long tooManyFrames = 0;  ///< No cabían en el búfer del emulador.
+    unsigned long blockTooLarge = 0;  ///< numFrames por encima del preparado.
+    unsigned long clicks = 0;         ///< El remuestreador no consumió nada.
+    unsigned long midiDropped = 0;    ///< La cola de eventos se llenó.
+    unsigned long programIgnored = 0; ///< Program change fuera de los 16 parches.
 
     /// resample_open() reserva ~600 KB y calcula un filtro Kaiser: 2,5 ms por
     /// handle, así que fuera de prepare() no se puede mover. test_engine lo
@@ -257,6 +258,11 @@ class RdPianoEngine
 
     /**
      * @brief Encola un evento MIDI para el bloque que viene. RT-safe: cola fija, sin reservas.
+     *
+     * El program change no se encola: es un cambio de parche completo, así que se
+     * convierte en requestPatch(). El número de programa es el parche, 0..15; uno
+     * mayor se ignora.
+     *
      * @param frame Posición dentro del bloque, en muestras del host.
      * @param status Byte de estado MIDI.
      * @param data1 Primer byte de datos.
@@ -310,7 +316,7 @@ class RdPianoEngine
     void applyPatch(int patch);
     void applyMasterTune(int16_t tune);
     void finishChange();
-    void serviceRequests();
+    void serviceRequests(int numFrames);
 
     /// Espejo de lo que el firmware cree pulsado, y su reenvío tras un cambio de
     /// parche: el program change que hace falta para releer la página de
@@ -344,6 +350,17 @@ class RdPianoEngine
     float declickUpStep = 1.0f;
     int declickPatch = -1;
     int declickTune = kNoTuneRequest;
+
+    /// Ventana de asentamiento del parche: el primer program change se aplica en
+    /// el acto —si esperase, la nota que viene detrás en la secuencia sonaría con
+    /// el parche viejo— y los que lleguen mientras la ventana está abierta se
+    /// quedan en `settlePatch`, de donde sale el último cuando se cierra. Una
+    /// ráfaga (el DAW localizando, un mando que barre) se cobra así un cambio,
+    /// no uno por mensaje: cada uno apaga el firmware y vuelve a disparar lo
+    /// pulsado.
+    int settlePatch = -1;
+    int settleFrames = 0;
+    int patchSettleFrames = 0;
 
     /// Mezcla de los dos efectos: 0 = seco, 1 = efecto. Se mueve en rampa, y
     /// `process()` corre siempre —también en bypass— para que la línea de retardo

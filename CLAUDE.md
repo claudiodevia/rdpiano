@@ -77,7 +77,12 @@ manda dos más; todos **apagan las voces y sueltan el pedal dentro del firmware*
   hilo de audio. `decodeRomSet`/`selectRomSet` suben por `RdBoard` y `Mcu`; `prepareRomSetFor()` sobrevive
   como no-op. Página cacheada ≡ descifrado: `engine_patch_prepare`.
 - **Program change MIDI**: lo intercepta `pushMidi()` → `requestPatch()`. Reenviarlo al firmware dejaba el
-  motor mudo (cambiaba el número de parche, no la página mapeada).
+  motor mudo (cambiaba el número de parche, no la página mapeada). El número de programa **es** el parche,
+  0–15; uno mayor se ignora y se cuenta en `stats.programIgnored` (con la máscara `& 0x0f` de antes, el
+  programa 20 sonaba como el parche 4). **Ventana de asentamiento** de 150 ms (`kPatchSettleMs`): el primero
+  sale en el acto —esperar dejaría sonar con el parche viejo la nota que viene detrás en la secuencia— y los
+  que lleguen mientras está abierta se cobran uno solo, el último, porque cada cambio apaga el firmware y
+  vuelve a disparar lo pulsado. Fija las dos cosas `engine_program_change_range` y `engine_patch_settle`.
 - **Protocolo del firmware** (0x30/0x31/0xE0/0x50…) solo en `command_port.h`; fuera se habla por intención
   (`boot()`, `selectPatch()`, `sendMidiCmd()`…). Cola = anillo fijo, cero reservas en RT.
 
@@ -181,6 +186,13 @@ manda dos más; todos **apagan las voces y sueltan el pedal dentro del firmware*
     `pluginkit -r <ruta>/rdpiano_juce.app/Contents/PlugIns/rdpiano_juce.appex` + "Restablecer y volver a
     explorar" en el gestor de módulos. Instalado en `/Applications` no estorba; el problema es un `.appex` que
     viva en `build/`.
+14. **Un note-on repetido en la misma tecla sin note-off cuelga una voz para siempre.** El firmware se queda
+    con dos voces en esa nota, el note-off apaga una y la otra sigue sonando sola —un tono crudo y muy
+    digital— sin que la callen ni el note-off ni el pánico. Medido de la nota 24 a la 84, a cualquier
+    distancia entre ataques, con el pedal arriba y abajo; salía tocando desde un DAW (notas solapadas en una
+    región) y se le echaba la culpa al cambio de parche, que está limpio. `sendTracked()` —único camino de
+    salida MIDI— suelta la tecla antes de volver a pulsarla, que es lo que hace un piano. Fija
+    `engine_repeated_note`.
 
 ## Build (solo CMake; no hay Projucer ni `.jucer`)
 
@@ -238,7 +250,7 @@ ctest --test-dir build/core --output-on-failure
   extinción tras note-off (detector de voces colgadas), polifonía 16, rango de pico y **hash bit-exacto por
   parche** contra `test/golden.txt`. `--patch N` para iterar (~0,2 s). Cambios en `sound_chip.cpp`,
   `unscramble_*` o el MCU mueven el hash.
-- **Unitario** (`test/unit/`, 53 suites, 502 checks, ~5 s): `test_board`, `test_patches`, `test_sa_tables`,
+- **Unitario** (`test/unit/`, 56 suites, 522 checks, ~5 s): `test_board`, `test_patches`, `test_sa_tables`,
   `test_rom_loader`, `test_command_port`, `test_sound_chip_blocks` (2.256 vectores), `test_lsp` (respuesta a
   impulso congelada), `test_resampler`, `test_engine`. Se añade con `TEST_SUITE(nombre)` + una línea en el
   CMakeLists; andamiaje = `test/check.h`. Regla: la prueba se escribe **antes** del refactor y pasa sin editarla
@@ -248,7 +260,9 @@ ctest --test-dir build/core --output-on-failure
   vigila `stats.resamplerOpens`, porque libresample usa `malloc`). Red de transitorios: `engine_effect_tail`
   (efecto encendido en silencio → silencio), `engine_effect_bypass_ramp`, `engine_program_change`,
   `engine_patch_declick`, `engine_patch_held_notes`, `engine_tune_held_notes` (acorde y pedal aguantados
-  sobreviven al afinado, sin salto y sin golpe de tecla), `engine_volume_ramp`, `engine_latency`,
+  sobreviven al afinado, sin salto y sin golpe de tecla), `engine_repeated_note` (trampa 14: la tecla
+  repetida sin soltar no deja voces colgadas), `engine_program_change_range` y `engine_patch_settle` (el
+  programa es el parche 0–15 y una ráfaga se cobra un cambio), `engine_volume_ramp`, `engine_latency`,
   `engine_lfo_rate` (periodo del LFO del chorus por autocorrelación de la diferencia wet-dry; fija que dependa
   de la tasa del parche), `engine_tremolo` (mismo método sobre la razón wet/dry por canal: periodo, oposición de
   fase entre canales, profundidad, y ritmo del **host**) y `engine_tail_length` (cola real de los 16 parches
