@@ -1,12 +1,12 @@
-# Vectores de IC19/IC9/IC8 (REFACTORIZACION §17.5).
+# Vectores de IC19/IC9/IC8.
 #
-# Capturados del codigo ANTERIOR a la extraccion de los tres bloques, con la
-# instrumentacion descrita en §17.5: un escenario musical (arranque, nota,
-# acorde, extincion y polifonia, en los parches 0, 3, 8 y 11) mas un barrido
-# de bordes escritos directamente en los registros del chip.
+# Capturados del codigo ANTERIOR a la extraccion de los tres bloques
+# (tick_ic19/tick_ic9/tick_ic8 de sa_blocks.h): un escenario musical (arranque,
+# nota, acorde, extincion y polifonia, en los parches 0, 3, 8 y 11) mas un
+# barrido de bordes escritos directamente en los registros del chip.
 #
 # No se regeneran para poner una prueba en verde. Si un cambio de audio es
-# intencionado, se escucha primero (§20).
+# intencionado, se escucha primero (ver "Verificar cambios" en CLAUDE.md).
 #
 # Un caso por linea, en hexadecimal salvo los booleanos y la muestra:
 #

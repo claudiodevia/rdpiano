@@ -1,9 +1,11 @@
 # Arquitectura de RdPiano
 
 **Alcance:** `librdpiano/`, `rdpiano_juce/`, `roms/`, build y CI.
-**Rama analizada:** `main` @ `995e067`.
-**Complemento:** los defectos concretos están en [AUDITORIA.md](docs/AUDITORIA.md); este documento
-describe *cómo está construido el sistema*, no qué está roto.
+**Árbol analizado:** `develop` @ `0e23248` (2026-09-11).
+**Complemento:** [REVISION-CODIGO.md](REVISION-CODIGO.md) es lo que se podía mejorar y lo que se hizo
+con ello; [FIRMWARE.md](FIRMWARE.md), qué firmware corre y por qué sólo ése. Este documento describe
+*cómo está construido el sistema*. Las trampas operativas —lo que hay que leer **antes** de
+modificar— viven en [CLAUDE.md](../CLAUDE.md), y no se repiten aquí.
 
 ---
 
@@ -13,24 +15,27 @@ describe *cómo está construido el sistema*, no qué está roto.
 2. [Vista de capas](#2-vista-de-capas)
 3. [Grafo de dependencias real](#3-grafo-de-dependencias-real)
 4. [El núcleo: `librdpiano`](#4-el-núcleo-librdpiano)
-   - 4.1 [`Mcu` — la CPU HD63701 y el bus](#41-mcu--la-cpu-hd63701-y-el-bus)
+   - 4.1 [`Mcu` y `RdBoard` — la CPU y el bus](#41-mcu-y-rdboard--la-cpu-y-el-bus)
    - 4.2 [El handshake CPU-A ↔ CPU-B](#42-el-handshake-cpu-a--cpu-b)
-   - 4.3 [`SoundChip` — IC19 / IC9 / IC8](#43-soundchip--ic19--ic9--ic8)
-   - 4.4 [ROMs y desencriptado de líneas](#44-roms-y-desencriptado-de-líneas)
-   - 4.5 [Qué es un "parche"](#45-qué-es-un-parche)
+   - 4.3 [`CommandPort` — el protocolo, en un solo sitio](#43-commandport--el-protocolo-en-un-solo-sitio)
+   - 4.4 [`SoundChip` — IC19 / IC9 / IC8](#44-soundchip--ic19--ic9--ic8)
+   - 4.5 [ROMs y desencriptado de líneas](#45-roms-y-desencriptado-de-líneas)
+   - 4.6 [Qué es un "parche"](#46-qué-es-un-parche)
+   - 4.7 [`RdPianoEngine` — la cadena de audio entera](#47-rdpianoengine--la-cadena-de-audio-entera)
 5. [La capa plugin: `rdpiano_juce`](#5-la-capa-plugin-rdpiano_juce)
-   - 5.1 [`PluginProcessor` — el orquestador](#51-pluginprocessor--el-orquestador)
+   - 5.1 [`PluginProcessor` — el puente con JUCE](#51-pluginprocessor--el-puente-con-juce)
    - 5.2 [Cadena de señal completa](#52-cadena-de-señal-completa)
    - 5.3 [Efectos `lsp/`](#53-efectos-lsp)
    - 5.4 [Resampling](#54-resampling)
    - 5.5 [`PluginEditor` y `Lcd`](#55-plugineditor-y-lcd)
 6. [Modelo de concurrencia](#6-modelo-de-concurrencia)
 7. [Ciclo de vida completo de una nota](#7-ciclo-de-vida-completo-de-una-nota)
-8. [Lo que es independiente de la plataforma](#8-lo-que-es-independiente-de-la-plataforma)
-9. [Plataforma: macOS](#9-plataforma-macos)
-10. [Build y CI](#10-build-y-ci)
-11. [Material de ingeniería inversa (`re_stuff/`)](#11-material-de-ingeniería-inversa-re_stuff)
-12. [Puntos frágiles de la arquitectura](#12-puntos-frágiles-de-la-arquitectura)
+8. [Pruebas](#8-pruebas)
+9. [Lo que es independiente de la plataforma](#9-lo-que-es-independiente-de-la-plataforma)
+10. [Plataforma: macOS](#10-plataforma-macos)
+11. [Build y CI](#11-build-y-ci)
+12. [Material de ingeniería inversa (`re_stuff/`)](#12-material-de-ingeniería-inversa-re_stuff)
+13. [Puntos frágiles de la arquitectura](#13-puntos-frágiles-de-la-arquitectura)
 
 ---
 
@@ -51,7 +56,7 @@ Consecuencia arquitectónica que gobierna todo lo demás:
 
 De esto se deriva la segunda regla estructural: **el reloj maestro es el audio**. No hay un bucle de
 CPU independiente; `Mcu::generate_next_sample()` produce una muestra y después avanza la CPU un
-número fijo de pasos ([mcu.cpp:581](/librdpiano/src/mcu.cpp#L581)).
+número fijo de pasos.
 
 ---
 
@@ -64,138 +69,142 @@ número fijo de pasos ([mcu.cpp:581](/librdpiano/src/mcu.cpp#L581)).
 └───────────────┬──────────────────────────────────────────────────────┘
                 │ processBlock(buffer, midiMessages)  [hilo de audio]
 ┌───────────────▼──────────────────────────────────────────────────────┐
-│  rdpiano_juce  —  CONOCE JUCE                                        │
+│  rdpiano_juce  —  CONOCE JUCE, y nada más que eso                    │
 │                                                                      │
-│  PluginProcessor ── parámetros DAW, patches, estado, orquestación     │
-│       │                                                              │
-│       ├── lsp/       SpaceD (chorus BBD), Phaser  · int32 punto fijo  │
-│       ├── resample/  libresample (Mazzoni/Smith)  · C, sinc windowed  │
-│       ├── juce::dsp  IIR peak EQ + tremolo                           │
-│       └── PluginEditor + lcd/  ── UI [hilo de mensajes]              │
+│  PluginProcessor ── APVTS, presets, buses, latencia y cola declaradas │
+│  PluginEditor + lcd/ ── el panel  [hilo de mensajes]                 │
 └───────────────┬──────────────────────────────────────────────────────┘
-                │ mcu->sendMidiCmd() / mcu->generate_next_sample()
+                │ engine->pushMidi() / render() / requestPatch()
 ┌───────────────▼──────────────────────────────────────────────────────┐
-│  librdpiano  —  SIN DEPENDENCIAS  (<stdio.h>, <queue>, <cmath>)      │
+│  librdpiano  —  SIN JUCE Y SIN stdio                                 │
 │                                                                      │
-│   Mcu ─────────────────────────► SoundChip                           │
-│   HD63701 + bus + ROMs           IC19 → IC9 → IC8                    │
-│   mcu_ops.h (2358 líneas, MAME)  16 voces × 10 partes                │
+│  RdPianoEngine ── LA FRONTERA: la cadena de audio entera             │
+│       ├── lsp/       SpaceD (chorus BBD), Phaser  · int32 punto fijo │
+│       ├── resample/  libresample (Mazzoni/Smith)  · C, sinc windowed │
+│       ├── RdBiquad   EQ medio, sin juce::dsp                        │
+│       │                                                              │
+│       └── Mcu ──► RdBoard ──┬──► SoundChip   IC19 → IC9 → IC8       │
+│           HD63701            ├──► CommandPort  protocolo del firmware│
+│           (core MAME)        └──► RAM, latch, ROMs                   │
 └──────────────────────────────────────────────────────────────────────┘
                                   ▲
                                   │  también consumido por
-                       librdpiano/test/standalone.cpp  (SDL2 + portmidi)
+                    librdpiano/test/  e2e.cpp · unit/ · standalone.cpp
 ```
 
-La frontera entre las dos capas es dura y deliberada: `librdpiano` **no incluye JUCE**, y el plugin
-llega a él a través de exactamente cuatro puntos de entrada públicos
-([mcu.h:38-43](/librdpiano/include/mcu.h#L38-L43)):
+La frontera entre las dos capas es dura y deliberada, y **está en `RdPianoEngine`**
+([rd_engine.h](../librdpiano/include/rd_engine.h)), no en el emulador: la cadena de audio completa
+—efectos, remuestreo, EQ, reparto del MIDI, declick— es C++ puro sin una línea de JUCE. El plugin
+sólo traduce: parámetros del host a `RdEngineParams`, `juce::MidiBuffer` a `pushMidi()`, y un
+`AudioBuffer` a los dos punteros de `render()`.
 
-| Punto de entrada | Quién lo llama | Desde qué hilo |
-|---|---|---|
-| `sendMidiCmd(u8,u8,u8)` | `processBlock` | audio |
-| `generate_next_sample(bool)` | `processBlock`, `setMasterTune`, `mcuReset` | audio **y** UI |
-| `loadSounds(...)` | `setCurrentProgram`, `setStateInformation` | UI |
-| `reset()` / `commands_queue` | `mcuReset` y cambios de patch | UI |
+El contrato de tiempo real está escrito en la propia cabecera:
 
-Esa doble procedencia de hilos es la razón de existir de `mcuLock` (§6).
+| Método | Contrato |
+|---|---|
+| `prepare(hostRate, maxBlock)` | Reserva **todo**. Idempotente. |
+| `render(l, r, n)` | No reserva, no bloquea, no imprime. |
+| `pushMidi(frame, …)` | Cola fija de 512 eventos, sin reservas. |
+| `requestPatch()` / `requestMasterTune()` | Un `exchange` atómico y nada más. Desde cualquier hilo. |
+| `setPatch()` / `setMasterTune()` / `allNotesOff()` | Corren el emulador **en el acto**: arranque y pruebas, nunca con `render()` vivo en otro hilo. |
 
 ---
 
 ## 3. Grafo de dependencias real
 
 ```
-PluginProcessor.cpp ──┬─► ../librdpiano/include/mcu.h ──► sound_chip.h ──► mame_utils.h
-                      │        (headerPath="../librdpiano/include" en el .jucer)
-                      ├─► lsp/spaced.h, lsp/phaser.h
-                      ├─► resample/libresample.h       (C, extern "C")
-                      └─► JuceHeader.h  ──► BinaryData (ROMs + PNGs empotrados)
+PluginProcessor.cpp ──┬─► PluginParams.h ──► rd_engine.h
+                      ├─► rd_engine.h    ──► patches.h, lsp/*.h, mame_utils.h, <atomic>
+                      └─► JuceHeader.h   ──► BinaryData (ROMs + PNGs empotrados)
 
 PluginEditor.cpp ─────┬─► PluginProcessor.h
                       ├─► lcd/Lcd.h ──► lcd/lcd_font.h
                       └─► JuceHeader.h
 
-mcu.cpp ──────────────┬─► mcu.h
-                      └─► mcu_ops.h   (#include a mitad del .cpp, línea 176 —
-                                       no es un header autónomo: depende de las
-                                       macros PC/A/B/CC/RM/WM definidas arriba)
+rd_engine.cpp ────────┬─► rd_engine.h, mcu.h, command_port.h, rom_loader.h
+                      └─► resample/libresample.h   (C, extern "C")
 
-sound_chip.cpp ───────► sound_chip.h + <cmath>
+mcu.h ────────────────► rd_board.h ──┬─► command_port.h
+                                     ├─► sound_chip.h ──► sa_blocks.h, sa_tables.h
+                                     ├─► rom_loader.h
+                                     └─► rd_trace.h
+
+mcu.cpp ──────────────► mcu_ops.h   (#include a mitad del .cpp — no es un header
+                                     autónomo: depende de las macros PC/A/B/CC/RM/WM
+                                     definidas arriba)
 ```
 
-Dos detalles no obvios:
+Tres detalles no obvios:
 
-- **`mcu_ops.h` no es un header normal.** Se incluye en medio de `mcu.cpp`
-  ([mcu.cpp:176](/librdpiano/src/mcu.cpp#L176)) porque los ~250 handlers de opcodes usan las macros
-  (`PC`, `EAD`, `SET_NZ8`, `RM`, `WM`…) definidas justo antes. Es código derivado de MAME (BSD-3);
-  no debe reescribirse por estilo.
-- **Las ROMs no se leen de disco en el plugin.** Están empotradas como `BinaryData` vía el `.jucer`
-  (`juce_add_binary_data` en [rdpiano_juce/CMakeLists.txt](/rdpiano_juce/CMakeLists.txt); hasta la
-  fase 3 eran recursos del `.jucer`). Solo el standalone de SDL
-  las carga con `fopen` desde el directorio de trabajo
-  ([standalone.cpp:157-161](/librdpiano/test/standalone.cpp#L157-L161)).
+- **`mcu_ops.h` no es un header normal.** Se incluye en medio de `mcu.cpp` porque los ~250 handlers
+  de opcodes usan las macros (`PC`, `EAD`, `SET_NZ8`, `RM`, `WM`…) definidas justo antes. Es código
+  derivado de MAME (BSD-3); no debe reescribirse por estilo.
+- **Las cabeceras del núcleo no incluyen la stdlib.** La única excepción es el `<atomic>` de
+  `rd_engine.h` —las peticiones que sustituyen al cerrojo— y los `<stddef.h>`/`<cstdint>` sueltos.
+  La traza sale por `RD_TRACE` ([rd_trace.h](../librdpiano/include/rd_trace.h)), que sin
+  `-DRDPIANO_TRACE` es un no-op.
+- **Las ROMs no se leen de disco en el plugin.** Están empotradas como `BinaryData` vía
+  `juce_add_binary_data` en [rdpiano_juce/CMakeLists.txt](../rdpiano_juce/CMakeLists.txt). Sólo el
+  harness, la suite unitaria y el standalone de SDL las cargan con `fopen`, con la ruta que les pasa
+  `--roms`.
 
 ---
 
 ## 4. El núcleo: `librdpiano`
 
-### 4.1 `Mcu` — la CPU HD63701 y el bus
+### 4.1 `Mcu` y `RdBoard` — la CPU y el bus
 
-`Mcu` es a la vez el core de CPU **y** la placa. La CPU es un HD63701 (variante del 6801) portado
-desde MAME: tabla de 256 punteros a método (`hd63701_insn`), tabla de ciclos `cycles_63701`, flags
-`flags8i/flags8d`, registros en `PAIR` endian-safe.
+Están separados a propósito: **`Mcu` es lo que hay dentro del chip** (juego de instrucciones,
+registros, temporizador, líneas de interrupción) y **`RdBoard` es todo lo soldado al bus** (RAM,
+chip de sonido, latch de banco, ROMs y el puerto de comandos).
 
-El bus está en `read_byte` / `write_byte`
-([mcu.cpp:456](/librdpiano/src/mcu.cpp#L456), [mcu.cpp:521](/librdpiano/src/mcu.cpp#L521)):
+El acople va en un solo sentido y por exactamente tres métodos, la interfaz `RdBoardCpu`
+([rd_board.h](../librdpiano/include/rd_board.h)): la placa le pide a la CPU el **contador de
+programa** (que es lo que mira el handshake), le fija **líneas de interrupción**, y le delega los
+registros de `0x0000-0x001F` que son del chip y no suyos.
+
+El mapa de memoria está en `RdBoard::read`/`RdBoard::write`, en la cabecera y `inline` porque se
+ejecuta millones de veces por segundo:
 
 ```
-0x0000  registros MCU  ┌ 0x00/0x01  dirección de puertos (no-op)
-0x001F                 │ 0x02       PUERTO 1 — bus de datos CPU-A ↔ CPU-B
-                       │ 0x03       PUERTO 2 — control / handshake
-                       │ 0x08       TCSR (timer control & status)
-                       └ 0x0D/0x0E  input capture (16 bits)
-0x0020
-  ...   RAM interna   (array `ram[]`, solo se usan 4 KB)
-0x0FFF
-0x1000  SoundChip     (16 voces × 256 B; escritura decodificada, lectura = m_irq_id)
-0x1FFF
-0x2000  latch de banco (cualquier escritura aquí fija `latch_val`, se usan 2 bits)
-0x3FFF
-0x4000  params ROM    (ventana de 32 KB dentro de 128 KB, banco = latch_val & 0b11)
-0xBFFF
-0xC000  program ROM   (8 KB espejados dos veces: (addr-0xC000) & 0xDFFF)
-0xFFFF
+0x0000-0x001F  registros MCU  ┌ 0x00/0x01  dirección de puertos (no-op)
+                              │ 0x02       PUERTO 1 — bus de datos CPU-A ↔ CPU-B
+                              │ 0x03       PUERTO 2 — control / handshake
+                              └ 0x08       TCSR (timer control & status)
+0x0000-0x0FFF  RAM            (`ram[0x1000]`: el mapa no direcciona más)
+0x1000-0x1FFF  SoundChip      (16 voces × 256 B; lectura = m_irq_id)
+0x2000-0x3FFF  latch de banco (cualquier escritura aquí fija `latch_val`, se usan 2 bits)
+0x4000-0xBFFF  params ROM     (ventana de 32 KB dentro de 128 KB, banco = latch_val & 0b11)
+0xC000-0xFFFF  program ROM    (8 KB espejados dos veces: (addr-0xC000) & 0x1FFF)
 ```
 
 El espejado de la program ROM merece atención: el array es de `0x2000` bytes pero la ventana es de
-16 KB, y la máscara `& 0xdfff` hace que `0xE000-0xFFFF` recaiga sobre `0x0000-0x1FFF`. Por eso los
-vectores de interrupción (`0xFFF6` ICI, `0xFFF8` IRQ1, `0xFFFC` NMI, `0xFFFE` RESET) se resuelven
-sobre los últimos bytes del dump de 8 KB.
+16 KB, y la máscara hace que `0xE000-0xFFFF` recaiga sobre `0x0000-0x1FFF`. Por eso los vectores de
+interrupción (`0xFFF6` ICI, `0xFFF8` IRQ1, `0xFFFC` NMI, `0xFFFE` RESET) se resuelven sobre los
+últimos bytes del dump de 8 KB.
 
 **Interrupciones.** Hay dos fuentes vivas:
 
 | Fuente | Vector | Cómo se dispara |
 |---|---|---|
-| **ICI** (input capture) | `0xFFF6` | `commands_queue` no vacía → `execute_set_input(M6801_TIN_LINE, ASSERT)` en [mcu.cpp:408-409](/librdpiano/src/mcu.cpp#L408-L409) |
+| **ICI** (input capture) | `0xFFF6` | La cola de comandos no está vacía → `M6801_TIN_LINE` a `ASSERT` |
 | **IRQ1** | `0xFFF8` | `SoundChip::m_irq_triggered` — un segmento de envolvente terminó |
 
-`execute_run()` sondea ambas antes de **cada instrucción**
-([mcu.cpp:406-413](/librdpiano/src/mcu.cpp#L406-L413)). El firmware limpia la IRQ del chip de sonido
-escribiendo en su espacio de registros, lo cual `write_byte` intercepta para bajar la línea
-([mcu.cpp:563-565](/librdpiano/src/mcu.cpp#L563-L565)).
+`execute_run()` sondea ambas antes de **cada instrucción**. El firmware limpia la IRQ del chip de
+sonido escribiendo en su espacio de registros, lo cual `RdBoard::write` intercepta para bajar la
+línea; escribir en el puerto 2 baja TIN por el mismo camino.
 
-**Temporización.** Nótese una imprecisión deliberada del modelo:
+**Temporización.** `execute_run()` ejecuta **una instrucción** por llamada, y
+`generate_next_sample()` la llama 100 veces (62 en los parches de 32 kHz) por muestra. Es decir: el
+emulador ejecuta **100 instrucciones por muestra**, no 100 ciclos. Funciona porque el firmware es un
+bucle de servicio, no código sensible a ciclo exacto — pero hay que tenerlo presente antes de
+"arreglar" nada aquí. El detalle completo, con el bucle por presupuesto de ciclos que se abandonó,
+está en [FIRMWARE.md §4](FIRMWARE.md).
 
-```cpp
-// mcu.cpp:581 — el comentario dice "ciclos", el bucle ejecuta instrucciones
-for (size_t cycle = 0; cycle < (sampleRate32 ? 62 : 100); cycle++)
-    execute_run();          // execute_run() → execute_one() = UNA instrucción
-```
-
-`m_icount` se decrementa con los ciclos reales de cada opcode pero nunca se usa como presupuesto
-(el bucle `do/while` que lo consumía está comentado, [mcu.cpp:415-427](/librdpiano/src/mcu.cpp#L415-L427)).
-Es decir: el emulador ejecuta **100 instrucciones por muestra** a 20 kHz, no 100 ciclos. Funciona
-porque el firmware es un bucle de servicio, no código sensible a ciclo exacto — pero es un detalle
-que hay que tener presente antes de "arreglar" nada aquí.
+**Reset.** `Mcu::reset()` reinicia **todo el estado**: sus registros y su temporizador, y vía
+`RdBoard::reset()` la RAM, el latch, la cola de comandos y las 160 `SA_Part`. Lo que **no** es
+estado —las dos ROM, la página de params ya mapeada, las tablas de onda descifradas— sobrevive. Por
+eso `boot()` no pierde el parche.
 
 ### 4.2 El handshake CPU-A ↔ CPU-B
 
@@ -203,43 +212,58 @@ Esta es la trampa más importante del proyecto. En la máquina real hay dos CPUs
 teclado y el MIDI, la **CPU-B** (la emulada) sintetiza. Se hablan por un bus paralelo de 8 bits con
 handshake por los puertos 1 y 2.
 
-RdPiano no emula la CPU-A. En su lugar, `read_byte` **reconoce el contador de programa** dentro de la
-rutina de lectura del firmware y le sirve el siguiente byte de la cola:
+RdPiano no emula la CPU-A. En su lugar, `RdBoard::read` **reconoce el contador de programa** dentro
+de la rutina de lectura del firmware y le sirve el siguiente byte de la cola:
 
 ```cpp
-// mcu.cpp:466 — HACK: only works with the RD200 ROM
-if (!commands_queue.empty() && (PCD == 0xE12B || PCD == 0xE15E || PCD == 0xE168))
-    data_comm_bus = commands_queue.front(), commands_queue.pop();
+// HACK: only works with the RD200 ROM (docs/FIRMWARE.md §2)
+const u32 pc = cpu->programCounter();
+CommandQueue &queue = command_port.queue();
+if (!queue.empty() && (pc == 0xE12B || pc == 0xE15E || pc == 0xE168))
+{
+    data_comm_bus = queue.front();
+    queue.pop();
+}
 ...
-// mcu.cpp:483 — puerto 2: "hay dato disponible"
-if (PCD == 0xE15A) return 0xFF;
+// puerto 2: "hay dato disponible"
+if (cpu->programCounter() == 0xE15A)
+    return 0xFF;
 ```
 
-Cuatro direcciones absolutas, codificadas a mano. **De ahí se sigue que solo se carga
-`RD200_B.bin`** aunque `roms/` contenga los dumps de firmware del MKS-20 (`mks20_cpub_1.0.bin`) y del
-MK-80 (`MK80_B.bin`): cambiar de firmware exige volver a desensamblar y recalcular esas cuatro
-direcciones. Las líneas comentadas justo debajo de cada `if` son precisamente el juego de direcciones
-del firmware MKS-20, dejadas como constancia.
+Cuatro direcciones absolutas, codificadas a mano. **De ahí se sigue que sólo se carga
+`RD200_B.bin`** aunque `roms/` contenga los dumps de firmware del MKS-20 y del MK-80: cambiar de
+firmware exige volver a desensamblar y recalcular esas cuatro direcciones. Las equivalentes del
+MKS-20, verificadas en su momento, están en [FIRMWARE.md §2](FIRMWARE.md).
 
-El "protocolo" que se encola en `sendMidiCmd()`
-([mcu.cpp:588](/librdpiano/src/mcu.cpp#L588)) **no es MIDI**, son bytes del bus interno:
+### 4.3 `CommandPort` — el protocolo, en un solo sitio
 
-| Evento MIDI | Bytes encolados |
+El "protocolo" que viaja por ese bus **no es MIDI**: son bytes del bus interno, y su única
+definición está en [command_port.h](../librdpiano/include/command_port.h). Fuera de ahí se habla por
+intención (`boot()`, `selectPatch()`, `sendMidiCmd()`, `allNotesOff()`), nunca por bytes.
+
+| Evento | Bytes encolados |
 |---|---|
-| Program Change `Cn pp` | `0x30 \| (pp & 0xF)` |
-| Note On `9n nn vv` | `0xC0`, `nn`, `vv` |
-| Note Off `8n nn` / `9n nn 00` | `0xB0`, `nn`, `0x00` |
+| Program change | `0x30 \| (pp & 0xF)` |
+| Note On | `0xC0`, nota, velocidad |
+| Note Off | `0xB0`, nota, `0x00` |
 | Sustain (CC 64) | `0x50 \| (0xF ó 0x0)` |
-| Master tune (desde la UI) | `0xE0`, msb, lsb |
+| Master tune | `0xE0`, msb, lsb |
 
 Todo lo demás (pitch bend, otros CC, aftertouch) se descarta silenciosamente.
 
-### 4.3 `SoundChip` — IC19 / IC9 / IC8
+La cola es un **anillo de tamaño fijo** (`CommandQueue::CAPACITY = 1024`), así que no reserva nunca
+—requisito para vivir dentro de `render()`—. Al desbordar descarta **el byte nuevo**, no el más
+viejo: tirar por delante partiría un mensaje que el firmware ya está leyendo a medias.
 
-`SoundChip::update()` ([sound_chip.cpp:213](/librdpiano/src/sound_chip.cpp#L213)) produce **una
-muestra mono** sumando 16 voces × 10 partes = **160 slots por muestra** (3,2 M actualizaciones de
-parte por segundo a 20 kHz). Cada slot atraviesa tres bloques que replican los sumadores reales de
-cada chip:
+La temporización no vive aquí: `boot()` y `setMasterTune()` tienen que correr la CPU *entre*
+mensajes, así que son de `Mcu`.
+
+### 4.4 `SoundChip` — IC19 / IC9 / IC8
+
+`SoundChip::update()` produce **una muestra mono** sumando 16 voces × 10 partes = **160 slots por
+muestra** (3,2 M actualizaciones de parte por segundo a 20 kHz). Cada slot atraviesa tres bloques
+que replican los sumadores reales de cada chip; están `inline` en
+[sa_blocks.h](../librdpiano/include/sa_blocks.h) como `tick_ic19` / `tick_ic9` / `tick_ic8`.
 
 ```
         SA_Part (estado por slot)
@@ -258,43 +282,50 @@ cada chip:
 │  ► volume  (14 bits, invertido)                                     │
 │  ► end_reached → IRQ al firmware, env_value := env_dest<<20         │
 └────────────────────────────────────────────────────────────────────┘
-                              │ volume
+                              │ volume  (Ic19Out: el bus real entre chips)
 ┌─ IC9 · FASE / DIRECCIÓN ───▼───────────────────────────────────────┐
-│  adder1: sub_phase += phase_exp_table[pitch_lut_i]   (24 bits)      │
+│  adder1: sub_phase += tables.phase_exp[pitch_lut_i]  (24 bits)      │
 │  adder2: bucle — si cruza wave_addr_loop, reengancha                │
 │  ► waverom_addr = (wave_addr_high << 11) | ((sub_phase >> 9) & 0x7FF)│
 │  ► ag3_sel_sample_type, ag1_phase_hi  (líneas de control a IC8)     │
 └────────────────────────────────────────────────────────────────────┘
-                              │ waverom_addr
+                              │ waverom_addr  (Ic9Out)
 ┌─ IC8 · SUMA LOGARÍTMICA ───▼───────────────────────────────────────┐
 │  De la wave ROM salen DOS valores por dirección:                    │
-│    · samples_exp   (14 bits + signo) — la muestra                   │
-│    · samples_delta ( 9 bits + signo) — pendiente para interpolar    │
+│    · exp    (14 bits + signo en el bit 15) — la muestra             │
+│    · delta  ( 9 bits + signo en el bit 15) — pendiente para interpolar│
 │  adder1: volume + exp                 → tmp_1                       │
 │  adder3: addr_table[(sub_phase>>5)&0xF] + delta                     │
 │  adder1': volume + (adder3 << 5)      → tmp_2                       │
-│  antilog: samples_exp_table[...]  ×2, se restan 0x8000 si negativo  │
+│  antilog: tables.samples_exp[...] ×2, se restan 0x8000 si negativo  │
 │  ► result += exp_val1 + exp_val2                                    │
 └────────────────────────────────────────────────────────────────────┘
 ```
 
 La clave conceptual: **todo el camino de señal es logarítmico**. El volumen no se *multiplica* por la
-muestra, se *suma* a su exponente, y una LUT de antilogaritmo (`samples_exp_table`, 32 K entradas)
-vuelve al dominio lineal. La interpolación entre muestras de la wave ROM se hace con un segundo tap
-(`samples_delta` escalado por `addr_table`, indexado por los bits 5-8 de la subfase), no con
-interpolación lineal en software.
+muestra, se *suma* a su exponente, y una LUT de antilogaritmo (`samples_exp`) vuelve al dominio
+lineal. La interpolación entre muestras de la wave ROM se hace con un segundo tap (`delta` escalado
+por `addr_table`, indexado por los bits 5-8 de la subfase), no con interpolación lineal en software.
 
-**Las LUTs se generan en el constructor, no se leen de ROM**
-([sound_chip.cpp:59-164](/librdpiano/src/sound_chip.cpp#L59-L164)): `phase_exp_table` (64 K entradas)
-y `samples_exp_table` (32 K) se reconstruyen evaluando *expresiones lógicas bit a bit* que replican
-las ROMs internas IC11/IC10 y las tablas cableadas dentro de los gate arrays. El comentario del
-autor es explícito: *"This is bit accurate, but I want to believe there is a better way"*. Coste:
-0x18000 evaluaciones de expresiones lógicas en cada construcción, y 320 KB de tablas residentes
-(256 KB de `phase_exp_table` + 64 KB de `samples_exp_table`), hoy compartidas por todas las
-instancias en `sa_tables.h`. Las muestras sí son de cada `SoundChip`: 512 KB por ranura de juego de
-ROM, un `WaveEntry` de `exp` y `delta` por dirección con el signo de cada uno en su bit 15.
+**Las LUT no se leen de ROM, se generan** evaluando *expresiones lógicas bit a bit* que replican las
+ROM internas IC10/IC11 y las tablas cableadas dentro de los gate arrays. El comentario del autor es
+explícito: *"This is bit accurate, but I want to believe there is a better way"*. Hoy viven en
+[sa_tables.h](../librdpiano/include/sa_tables.h) y son **compartidas por todas las instancias**:
+`phase_exp` (64 K entradas de 32 bits, 256 KB) + `samples_exp` (32 K de 16 bits, 64 KB) = 320 KB que
+se pagan una sola vez. `env_table` y `addr_table`, que son pequeñas y constantes, viven en
+[sa_blocks.h](../librdpiano/include/sa_blocks.h).
 
-**Decodificación de escrituras** ([sound_chip.cpp:171](/librdpiano/src/sound_chip.cpp#L171)):
+Las **muestras** sí son de cada `SoundChip`, en el montón y una ranura por juego de ROM:
+
+```cpp
+struct WaveEntry { uint16_t exp; uint16_t delta; };   // el signo, en el bit 15 de cada uno
+struct WaveTables { WaveEntry entries[0x20000]; };    // 512 KB por ranura, 3 ranuras
+```
+
+Meter el signo en el bit 15 en vez de en un `bool` aparte no es cosmético: baja la ranura de 768 KB a
+512 KB y deja una sola línea de caché por lectura en vez de cuatro tablas paralelas.
+
+**Decodificación de escrituras:**
 
 ```
 offset (0x000-0xFFF dentro del chip)
@@ -305,117 +336,192 @@ offset (0x000-0xFFF dentro del chip)
 
 Campos: `0/1` = pitch (hi/lo), `2` = loop, `3` = dirección alta de onda, `4` = destino de envolvente,
 `5` = velocidad, `6` = flags (se escriben siempre en la parte 0 — son de voz, no de parte),
-`7` = offset de envolvente. La lectura ignora el offset y devuelve siempre `m_irq_id`, que codifica
-`parte | (voz << 4)`: así el firmware sabe *qué* slot pidió atención.
+`7` = offset de envolvente. Cada part ocupa 16 bytes del mapa pero sólo tiene 8 registros: `+8..+F`
+se descartan, porque el firmware RD200 sólo escribe ahí ceros de arranque. La lectura ignora el
+offset y devuelve siempre `m_irq_id`, que codifica `parte | (voz << 4)`: así el firmware sabe *qué*
+slot pidió atención.
 
-**Dos hacks conscientes en `update()`**, ambos marcados en el código:
+**Dos hacks conscientes en `update()`**, ambos marcados en el código y **fijados por
+`test/vectors/ic_blocks.txt`** (2.256 vectores):
 
 1. `if (part.env_value == 0 && part.env_dest == 0) continue;` — atajo de rendimiento; sin él se
-   procesarían los 160 slots incluso en silencio.
+   procesarían los 160 slots incluso en silencio. Tiene efecto funcional: decide qué slots se
+   procesan.
 2. `if (part.env_value != 0) result += exp_val;` — silenciado condicional *"to prevent voices ringing
    when env value is 0, investigate"*. Es un parche sobre un síntoma; el propio código lo admite.
 
-### 4.4 ROMs y desencriptado de líneas
+### 4.5 ROMs y desencriptado de líneas
 
 En la placa real las líneas de dirección y de datos de las ROMs están permutadas (por trazado del
-PCB, no por protección). Al cargar hay que deshacer la permutación, y cada ROM tiene la suya:
+PCB, no por protección). Al cargar hay que deshacer la permutación, y cada ROM tiene la suya. Todo
+está hoy en [rom_loader.h](../librdpiano/include/rom_loader.h), fuera del emulador:
 
 | ROM | Contenido | Tamaño | Desencriptado |
 |---|---|---|---|
-| Program (`RD200_B.bin`) | Firmware CPU-B | 8 KB | `UNSCRAMBLE_ADDR_CPUB` (bitswap 14) + `UNSCRAMBLE_DATA_CPUB` (bitswap 8) — [mcu.cpp:241](/librdpiano/src/mcu.cpp#L241) |
-| Params (`IC18`) | Parámetros de parche | 128 KB | `UNSCRAMBLE_ADDR_PARAMS` (bitswap 17) + mismo bitswap de datos |
-| Wave (`IC5`/`IC6`/`IC7`) | Muestras | 3 × 128 KB | `UNSCRAMBLE_ADDR_WAVE` (permutación explícita bit a bit) + inversión adicional de bits de dirección en `load_samples` — [sound_chip.cpp:49](/librdpiano/src/sound_chip.cpp#L49) |
+| Program (`RD200_B.bin`) | Firmware CPU-B | 8 KB | `unscramble_program`: bitswap 14 de dirección + bitswap 8 de datos |
+| Params (`IC18`) | Parámetros de parche | 128 KB | `unscramble_params`: bitswap 17 + el mismo bitswap de datos |
+| Wave (`IC5`/`IC6`/`IC7`) | Muestras | 3 × 128 KB | `unscramble_wave`: permutación explícita bit a bit |
 
 Las tres ROMs de onda no contienen una muestra cada una: **cada muestra se reparte entre las tres**.
-`load_samples` ([sound_chip.cpp:353](/librdpiano/src/sound_chip.cpp#L353)) reensambla, por cada
-dirección, un valor exponente de 14 bits + signo y un valor delta de 9 bits + signo tomando bits
-sueltos (algunos invertidos) de `ic5`, `ic6` e `ic7`. Es una transcripción directa del ruteo de pines.
+La decodificación reensambla, por cada dirección, un exponente de 14 bits + signo y un delta de
+9 bits + signo tomando bits sueltos (algunos invertidos) de `ic5`, `ic6` e `ic7`. Es una
+transcripción directa del ruteo de pines.
 
-> **Regla operativa:** cualquier cambio en los `UNSCRAMBLE_*` o en `load_samples` es de altísimo
-> riesgo y **no tiene red de seguridad** — no hay tests. Se verifica de oído.
+> **Regla operativa:** cualquier cambio en los `unscramble_*` o en la decodificación de muestras
+> **mueve los 16 hashes de `golden.txt`**. El harness lo detecta, pero no juzga el timbre: eso se
+> verifica de oído. Hay además una suite propia, `test_rom_loader`.
 
-### 4.5 Qué es un "parche"
+### 4.6 Qué es un "parche"
 
-Un parche = **ROMs de onda** (IC5/6/7) + **offset dentro de la params ROM** + **frecuencia de
-muestreo**. Las tres cosas viven en tablas paralelas del plugin
-([PluginProcessor.cpp:30-74](/rdpiano_juce/Source/PluginProcessor.cpp#L30-L74)):
+Un parche = **juego de ROMs de onda** (IC5/6/7) + **offset dentro de la params ROM** + **frecuencia
+de muestreo**. Las cinco tablas paralelas viven en [patches.h](../librdpiano/include/patches.h), en
+el **núcleo**, y las comparten el plugin y el harness:
 
 ```
-patchToRomSet[16]  →  qué juego de ROMs (MKS-20 A, MKS-20 B, MK-80)
-patchToOffset[16]  →  dónde empieza el parche dentro de los 128 KB de params
-sampleRates[16]    →  20000 ó 32000 Hz
+patchNames[16]        →  "MKS-20: Piano 1" … "MK-80: Vibraphone"
+patchToRomSetId[16]   →  ROMSET_MKS20_A (0-2) · ROMSET_MKS20_B (3-7) · ROMSET_MK80 (8-15)
+patchToOffset[16]     →  dónde empieza el parche dentro de los 128 KB de params
+patchSampleRates[16]  →  20000 ó 32000 Hz
+patchOutputGain[16]   →  normalización de nivel (§5.2)
 ```
 
-`Mcu::loadSounds()` ([mcu.cpp:617](/librdpiano/src/mcu.cpp#L617)) hace algo bastante astuto:
+Las cinco están cerradas con `static_assert`: longitud correcta, offsets dentro de la ROM, romset
+válido, tasa que sea 20 k ó 32 k, ganancia en rango y nombres no vacíos. Un descuadre no compila.
 
-1. Desencripta la params ROM completa a `params_rom_tmp`.
-2. Rellena `params_rom` con `0xFF`.
-3. Copia la **página de 32 KB alineada** que contiene el offset pedido a `params_rom[0x8000]`
-   (es decir, al banco 1 → visible en `0x4000-0xBFFF` cuando `latch_val == 1`).
-4. **Parchea los bytes `0x00-0x02`** (banco 0, visibles en `0x4000-0x4002`) con
-   `{0x01, target_hi, target_lo}` — un puntero *banco + dirección* que redirige al firmware al
-   parche elegido.
+**El trabajo caro se hace una vez, al construir el motor** (~9 ms, ~2 MB). `SoundChip` guarda una
+ranura de tablas de onda **por juego de ROM** (3 × 512 KB) y `RdPianoEngine` las **16 páginas de
+params ya descifradas** (32 KB cada una). A partir de ahí, cambiar de parche es:
 
-Es decir: en vez de tocar el firmware, se le miente sobre dónde están sus datos. El firmware sigue
-su camino normal, lee el puntero en `0x4000` y aterriza donde queremos.
+1. `selectRomSet()` — mover un puntero a la ranura ya descifrada (sólo si el juego cambia de verdad).
+2. `selectPatchPage()` — un `memcpy` de 32 KB a `params_rom[0x8000]`, es decir al banco 1, visible en
+   `0x4000-0xBFFF` cuando `latch_val == 1`.
+3. **Parchear los bytes `0x00-0x02`** (banco 0, visibles en `0x4000-0x4002`) con
+   `{0x01, target_hi, target_lo}` — un puntero *banco + dirección* que redirige al firmware al parche
+   elegido.
+
+Total: **microsegundos**, lo que lo hace viable desde el hilo de audio. Esa es toda la razón de ser
+del desglose. El paso 3 es lo bonito: en vez de tocar el firmware, se le miente sobre dónde están sus
+datos. El firmware sigue su camino normal, lee el puntero en `0x4000` y aterriza donde queremos.
+
+`loadRomSet()` (descifrar) + `selectPatch()` (barato) siguen existiendo por separado, y `loadSounds()`
+es los dos juntos: es lo que usa quien no ha precalculado nada. `prepareRomSetFor()` sobrevive como
+no-op, para que un integrador antiguo siga compilando.
+
+### 4.7 `RdPianoEngine` — la cadena de audio entera
+
+Es la clase que el plugin ve, y la única que hay que entender para integrar el emulador en cualquier
+otro anfitrión. Concentra emulador, efectos, remuestreo, EQ, reparto del MIDI y los dos mecanismos
+que hacen que el instrumento se pueda tocar en directo: el **declick** y el **espejo de lo pulsado**.
+
+`render()` corre siempre las mismas cinco fases, en este orden:
+
+```
+serviceRequests()   ── atiende parche/afinación pendientes, entre bloques
+framesForBlock()    ── cuántas muestras del emulador toca, con corrección de deriva
+synthesise()        ── el bucle del emulador + chorus + phaser + volumen  (a sourceRate)
+resampleBlock()     ── libresample → la tasa del host
+outputStage()       ── ×patchOutputGain, trémolo, EQ medio, declick   (a hostRate)
+```
+
+**Los cambios que apagan el firmware van con declick, y son dos.** Tanto el cambio de parche como el
+de afinación mandan program changes que, *dentro del firmware*, apagan las voces y sueltan el pedal.
+Sin tratamiento, mover cualquiera de los dos diales cortaba el sonido en seco. El mecanismo es común:
+
+- Rampa a cero en **6 ms** → aplicar el cambio → subida en **15 ms**, o en **80 ms** si el cambio ha
+  tenido que volver a disparar notas (la subida larga esconde el golpe de martillo de la reentrada).
+- La ganancia va por **smoothstep** (`g²(3−2g)`): arranca plana —que es lo que tapa el transitorio—
+  pero también llega plana, y en 0 y en 1 no cambia nada.
+- Siempre **entre bloques**, nunca a mitad de uno: la tasa del emulador cambia con el parche y el
+  bloque entero depende de ella.
+- Si hay parche *y* afinación pendientes, **afina primero y cambia después**; al revés, los program
+  change del afinado matarían las notas que acaba de devolver el parche.
+
+**Notas y pedal sobreviven al cambio.** El motor lleva un espejo de lo que le ha enviado
+(`heldVelocity[128]` + `sustainDown`, actualizado en `sendTracked()`, el único camino por el que sale
+MIDI) y tras cambiar le devuelve el pedal y las teclas todavía pulsadas. Lo que estuviera sostenido
+**sólo por el pedal** (tecla ya soltada) no se resucita a propósito: serían decenas de ataques a la
+vez.
+
+**Y reentran al nivel al que habían llegado, no al de su ataque**, o se oiría el golpe de tecla que
+no se ha dado (+8 a +14 dB sobre lo que sonaba, medido). Dos seguidores de la salida cruda del
+emulador —`onsetSq`, el ataque de la última nota, y `levelSq`, el nivel de ahora, ambos RMS al
+cuadrado porque con detectores de pico el ataque de un acorde suma en fase y el sustain no— dan
+cuánto ha decaído; una constante medida (0,228 dB por unidad de velocidad, la curva velocidad→nivel
+es recta entre v16 y v120) lo convierte en cuánta velocidad restar. Queda en ±6 dB.
+
+**Program change MIDI:** lo intercepta `pushMidi()` y lo convierte en `requestPatch()`. Reenviarlo al
+firmware dejaba el motor mudo, porque cambiaba el número de parche pero no la página mapeada.
 
 ---
 
 ## 5. La capa plugin: `rdpiano_juce`
 
-### 5.1 `PluginProcessor` — el orquestador
+Son **tres archivos y dos tablas**. Todo lo que no es JUCE está en el núcleo.
 
-Concentra: parámetros expuestos al DAW, gestión de patches, persistencia de estado, resampling,
-efectos y el bucle de render. Los parámetros son 11 `juce::AudioParameter*`
-([PluginProcessor.h:67-77](/rdpiano_juce/Source/PluginProcessor.h#L67-L77)) — volumen, chorus
-(on/rate/depth), tremolo (on/rate/depth), EFX (on/phaser rate/depth). Los de reverb están declarados
-pero comentados: el `Reverb` de `lsp/reverb.cpp` **es un archivo vacío**.
+### 5.1 `PluginProcessor` — el puente con JUCE
 
-`getNumPrograms()` devuelve 16 = 8 parches MKS-20 + 8 parches MK-80, y el cambio de programa hace
-mucho más que mover un índice ([PluginProcessor.cpp:246](/rdpiano_juce/Source/PluginProcessor.cpp#L246)):
-recarga las tres wave ROMs (`loadSounds` desencripta 3 × 128 KB), reescribe la params ROM, encola
-`0x31`/`0x30` y actualiza `sourceSampleRate`. **Todo bajo `mcuLock`, desde el hilo de UI** (§6).
-
-`setMasterTune()` ([PluginProcessor.cpp:277](/rdpiano_juce/Source/PluginProcessor.cpp#L277)) es el
-caso más peculiar: para afinar hay que **correr el emulador desde el hilo de UI**, en un baile de
-tres pasos —
+Ya no orquesta nada: traduce. Los **diez** parámetros se declaran una sola vez como tabla en
+[PluginParams.h](../rdpiano_juce/Source/PluginParams.h), y sus valores de fábrica salen literalmente
+de `RdEngineParams`, el POD que lee el motor — plugin y núcleo no pueden discrepar sobre qué es "de
+fábrica".
 
 ```
-push 0x30  →  100 muestras  →  push 0xE0,msb,lsb  →  100 muestras  →  push 0x30
+kVolume · kChorusEnabled · kChorusRate · kChorusDepth
+kTremoloEnabled · kTremoloRate · kTremoloDepth
+kEfxEnabled · kEfxPhaserRate · kEfxPhaserDepth
 ```
 
-con el comentario `TODO: we need to do this horrible switcharoo since changing the tuning on patches
-different than 0 doesn't work`. El primer `0x30` fuerza al firmware al parche 0, se afina ahí, y el
-último `0x30` restaura. Las "100 muestras" son el tiempo mínimo para que el firmware consuma la cola.
+El `id` de cada uno es el que va en el preset: renombrarlo rompe las sesiones guardadas. El orden es
+el que ve el host, así que sólo se añade por el final.
+
+`masterTune` y `currentPatch` **no están ahí, y es deliberado**: no son automatizables porque el
+parche es el *programa* del anfitrión y la afinación no es un mando de mezcla. Viajan en el preset
+como propiedades de la raíz del árbol APVTS, con los nombres de atributo de siempre.
+
+El procesador es además `juce::Timer` **a 10 Hz**: el motor puede cambiar de parche sin pasar por
+aquí (un program change MIDI lo hace), así que el temporizador lee ese atómico desde el hilo de
+mensajes y actualiza espejo, preset y panel. El hilo de audio no toca la interfaz.
+
+`getNumPrograms()` devuelve 16, y `setCurrentProgram()` es hoy una línea: `requestPatch()`.
+
+**Buses:** entrada estéreo + salida estéreo. La entrada **no se lee nunca** —`processBlock` la
+sobrescribe entera— y en un instrumento sobra, pero quitarla **rompe Logic**: lo inserta, no enseña
+la interfaz y no suena. Probado y revertido; lo fija `plugin_bus_layout`.
+
+**Latencia y cola declaradas.** `latencySamples()` es el retardo de grupo del remuestreador (67
+muestras a 48 kHz), y es el **peor caso** (parche de 20 kHz) a propósito: no se renegocia al cambiar
+de sonido. `tailLengthSeconds()` son 3 s, el doble de la cola real más larga de los 16 parches
+(1,45 s a −60 dBFS, parche 5). Con los 0 s de antes el anfitrión dejaba de pedir bloques al soltar la
+tecla y cortaba el final de la nota al exportar o al congelar la pista.
 
 ### 5.2 Cadena de señal completa
 
 ```
   MIDI del host
-       │  sendMidiCmd() → commands_queue
+       │  pushMidi() → cola fija de 512 eventos
        ▼
 ┌──────────────────────────────────────────────────────────────────┐
-│  BUCLE INTERNO — corre a sourceSampleRate (20 000 ó 32 000 Hz)   │
+│  synthesise() — corre a sourceRate (20 000 ó 32 000 Hz)          │
 │                                                                  │
 │  mcu->generate_next_sample(mode32khz)   →  s32 mono              │
 │       │  << 5                                                    │
 │       ▼                                                          │
-│  SpaceD (chorus BBD)   [si chorusEnabled; si no, bypass directo]  │
+│  SpaceD (chorus BBD)   ── mezcla en rampa, nunca bypass duro     │
 │       │  >> 6                                                    │
 │       ▼                                                          │
-│  Phaser (EFX)          [si efxEnabled]   << 5 … >> 6             │
+│  Phaser (EFX)          ── ídem            << 5 … >> 6            │
 │       │                                                          │
-│       ▼  / 65536.0f  * volume                                    │
-│  emu_sample_buffer L/R   (float, ya estéreo por duplicación)     │
+│       ▼  × 1/65536 × volume(interpolado dentro del bloque)       │
+│  emuL / emuR   (float, aún mono duplicado si el chorus está a 0) │
 └───────────────────────┬──────────────────────────────────────────┘
-                        │  libresample, factor = destRate/sourceRate
+                        │  libresample, factor = hostRate/sourceRate
                         ▼
 ┌──────────────────────────────────────────────────────────────────┐
-│  A LA FRECUENCIA DEL HOST                                        │
-│    × 0.5 (scaling fijo)                                          │
-│    tremolo — dos senos en contrafase (L/R), por muestra          │
-│    juce::dsp IIR peak filter: 350 Hz, Q 0.2, +8 dB               │
-│      "tuned by ear listening to the MKS-20"                      │
+│  outputStage() — a la frecuencia del host                        │
+│    × 0.5 × patchOutputGain[parche]   (interpolado en el bloque)  │
+│      × declickGain (smoothstep)                                  │
+│    trémolo — dos senos en contrafase (L/R), a rate/2 Hz          │
+│    RdBiquad peak: 350 Hz, Q 0.2, +8 dB  "tuned by ear"           │
 └───────────────────────┬──────────────────────────────────────────┘
                         ▼
                   buffer de salida del host
@@ -423,123 +529,148 @@ different than 0 doesn't work`. El primer `0x30` fuerza al firmware al parche 0,
 
 Detalles con consecuencias:
 
-- **El estéreo es falso hasta el chorus.** El emulador es mono (`s32`); L y R se duplican y solo se
-  separan al pasar por SpaceD, que sí tiene taps distintos por canal. Con el chorus desactivado la
-  salida es mono duplicado.
-- **El tremolo va después del resampler**, a la frecuencia del host, con un contador de fase
-  (`tremoloPhase`) que avanza por muestra de salida. Los otros efectos van *antes*, a la del emulador.
+- **El estéreo es falso hasta el chorus.** El emulador es mono (`s32`); L y R se duplican y sólo se
+  separan al pasar por SpaceD, que sí tiene taps distintos por canal.
+- **Los efectos corren SIEMPRE**, encendidos o no. `SpaceD::process()`/`Phaser::process()` son lo
+  único que avanza sus líneas de retardo; saltárselos las congela y sueltan el audio viejo entero al
+  reactivar —un estallido de −11 dBFS salido de la nada—. El bypass es la **mezcla**, en rampa de
+  10 ms; con mezcla 0 ó 1 la salida es bit a bit la de antes. Coste: +0,03 ms/bloque, constante.
+- **`patchOutputGain[]` normaliza los 16 parches a +6 dBFS** (acorde de 16 notas, vel 127). Se aplica
+  en la salida, **tras** el emulador y `lsp/` (aritmética entera del hardware), así que no mueve el
+  golden ni los hashes de `test_lsp.cpp`. Se regenera con `rdpiano_e2e --headroom`, que es
+  idempotente y no entra en ctest. **No hay limitador detrás**: peor caso medido +10,8 dBFS con
+  chorus de fábrica.
+- **Ganancia y volumen se interpolan *dentro* del bloque.** Una lectura por bloque era zíper al mover
+  el mando y un escalón de hasta 12 dB al cambiar de parche. Con el valor quieto el paso es
+  exactamente 0 y la salida es idéntica.
+- **El trémolo va después del resampler**, con fase propia acotada a 2π, y modula a `rate/2` Hz del
+  reloj del **host** sea cual sea el parche. Los LFO del chorus y el phaser van *antes*, al ritmo del
+  **emulador**: los cinco parches de 32 kHz modulan 1,6× más rápido con el mismo ajuste de panel. Es
+  deliberado —escalarlo se probó, se escuchó y se descartó— y lo fija `engine_lfo_rate`.
 - Los desplazamientos `<<5` / `>>6` adaptan el rango del emulador al punto fijo de 24 bits que usan
   los efectos `lsp` — no son ganancia arbitraria.
+- **El declick va después del remuestreador**, multiplicando junto a la ganancia de salida. Ahí el
+  cero es cero de verdad; aplicado antes quedaría cola del parche viejo sonando por debajo de las
+  tablas de onda nuevas.
+- `RdBiquad` es `juce::dsp::IIR::Filter<float>` reimplementado (misma forma directa II traspuesta,
+  mismos coeficientes) salvo su `snapToZero`, que fuera de Intel es un no-op. Existe para que el EQ
+  no obligue al núcleo a conocer JUCE.
 
 ### 5.3 Efectos `lsp/`
 
-`spaced.cpp`, `phaser.cpp` y `enhancer.cpp` no son DSP escrito a mano: son **transcripciones del
-microcódigo del DSP de efectos original**. Se reconoce al instante por la forma:
+`spaced.cpp` y `phaser.cpp` no son DSP escrito a mano: son **transcripciones del microcódigo del DSP
+de efectos original**. Se reconoce al instante por la forma:
 
 ```cpp
 accA = (readMemOffs(120) * 127) >> 7;      // multiplicar-acumular con coeficiente
 writeMemOffs(117, clamp_24(accA_1));       // saturación a 24 bits
 ```
 
-Un acumulador (`accA`/`accB`), una IRAM circular de 128 posiciones direccionada por
-`(memOffs + bufferPos) & 0x7f`, y —en SpaceD— una ERAM de 64 K palabras para las líneas de retardo
-largas del chorus BBD. Las variables se llaman `accA_0`, `accA_1`, `accA_370`… porque son *pasos del
-microprograma*, no conceptos. Las tablas `spaceDRateTable`, `spaceDDepthTable`, `phaserRateTable`,
-`phaserDepthTable`, `phaserResonanceTable` son volcados de las tablas de la máquina.
+Un acumulador (`accA`/`accB`), una IRAM circular direccionada por `(memOffs + bufferPos) & 0x7f`, y
+—en SpaceD— una ERAM de 64 K palabras (`int32_t eram[0x10000]` = **256 KB**) para las líneas de
+retardo largas del chorus BBD. Las variables se llaman `accA_0`, `accA_1`, `accA_370`… porque son
+*pasos del microprograma*, no conceptos. Las tablas `spaceDRateTable`, `spaceDDepthTable`,
+`phaserRateTable`, `phaserDepthTable` y `phaserResonanceTable` son volcados de las tablas de la
+máquina.
 
-Estado del código:
+Son los dos únicos que quedan: `enhancer.cpp` y `reverb.cpp` existieron —el segundo, vacío— y se
+borraron. `lsp/` está excluido del formateo y de la norma de documentación, como el código de MAME.
 
-| Archivo | Estado |
-|---|---|
-| `spaced.cpp` | Activo — chorus, único efecto por defecto (`chorusEnabled = true`) |
-| `phaser.cpp` | Activo — EFX, desactivado por defecto |
-| `enhancer.cpp` | **Compilado pero nunca instanciado** en el plugin |
-| `reverb.cpp` | **Vacío** (solo el `#include`); los parámetros de reverb están comentados |
-
-Nota de coste: `SpaceD::eram` son `int32_t[0x10000]` = **256 KB por instancia**, y `reset()` lo pone
-a cero entero con `memset` — que se llama desde `prepareToPlay()`.
+Su respuesta al impulso está **congelada por hash** en `test_lsp.cpp`. Detecta cualquier cambio; no
+juzga si suena mejor o peor.
 
 ### 5.4 Resampling
 
 Se usa **libresample** de Dominic Mazzoni (basada en `resample-1.7` de Julius O. Smith): C puro,
-interpolación sinc con ventana, calidad alta (`resample_open(1, ratio, ratio)`).
+interpolación sinc con ventana, calidad alta.
 
-Es necesario porque el emulador solo puede correr a 20 000 o 32 000 Hz —son las frecuencias reales de
+Es necesario porque el emulador sólo puede correr a 20 000 ó 32 000 Hz —son las frecuencias reales de
 la máquina y están ligadas al parche—, mientras que el host pide 44 100, 48 000, 96 000…
-El plugin gestiona el desfase acumulado con `samplesError`
-([PluginProcessor.cpp:400-409](/rdpiano_juce/Source/PluginProcessor.cpp#L400-L409)): cada bloque
-calcula cuántas muestras del emulador *debería* haber producido (fraccionario), redondea hacia
-arriba, y corrige en bloques posteriores cuando el error acumulado supera un cuarto de bloque.
 
-Los resamplers se reabren cuando cambia cualquiera de las dos frecuencias — es decir, **también al
-cambiar de parche**, porque `sourceSampleRate` salta entre 20 k y 32 k
-([PluginProcessor.cpp:489-498](/rdpiano_juce/Source/PluginProcessor.cpp#L489-L498)).
+Dos cosas importan aquí:
 
-> Detalle histórico: el bit del puerto 2 que en la máquina real selecciona la frecuencia
-> (`current_sample_rate`, [mcu.cpp:538](/librdpiano/src/mcu.cpp#L538)) está marcado como
-> `TODO: Currently not working`. La frecuencia real sale de la tabla `sampleRates[]` del plugin, no
-> del emulador.
+- **Los handles se abren en `prepare()` y no se tocan más.** `resample_open()` reserva ~600 KB y
+  calcula un filtro Kaiser: 2,5 ms por handle, imposible dentro de `render()`. Se abren para todo el
+  rango de factores de esta tasa de host, así que **cambiar de parche no los reabre** aunque
+  `sourceRate` salte de 20 k a 32 k. `stats.resamplerOpens` lo vigila, y `test_engine` falla si sube
+  durante el render — porque libresample usa `malloc` y el `operator new` sustituido no lo vería.
+- **La deriva se corrige por bloque.** `framesForBlock()` calcula cuántas muestras del emulador
+  *debería* haber producido (fraccionario), redondea, y corrige en bloques posteriores cuando el
+  error acumulado pasa de un cuarto de bloque. Por eso `emuCapacity` se dimensiona para 32 kHz —el
+  parche cambia sin re-preparar— más `maxBlock/4` de margen.
 
 ### 5.5 `PluginEditor` y `Lcd`
 
-La UI es una **reproducción fotográfica del panel**: un PNG de 6140 × 1503 px escalado por 5
-(1228 × 300 lógicos), con tamaño fijo (`setResizeLimits` con mínimo == máximo). Los controles son
-recortes de un segundo PNG (`interactable.png`) dibujados sobre el fondo; los botones simulan la
-pulsación desplazando el recorte 8 px en diagonal y pintan un rectángulo rojo cuando están activos
-([PluginEditor.h:40-68](/rdpiano_juce/Source/PluginEditor.h#L40-L68)).
+La UI es una **reproducción fotográfica del panel**, con tamaño fijo. Está guiada por dos tablas:
+`ButtonSpec`×17 (un botón cada una) y `ModeSpec`×8 (un modo del display). El **dial alfa** es modal,
+igual que en la máquina real: su efecto depende de qué modo esté activo, y los botones "params"
+ciclan entre modos.
 
-El **dial alfa** es modal, igual que en la máquina real: su efecto depende de qué modo esté activo
-(`tuneMode`, `chorusRateMode`, `chorusDepthMode`, `tremoloRateMode`, …). Los botones "params" ciclan
-entre modos (rate → depth → ninguno), y `updateValues()` es un `if/else` largo que decide qué
-mostrar en el LCD y a qué posición llevar el dial.
+```
+kModePatch · kModeTune · kModeChorusRate · kModeChorusDepth
+kModeTremoloRate · kModeTremoloDepth · kModePhaserRate · kModePhaserDepth
+```
 
-`Lcd` ([lcd/Lcd.cpp](/rdpiano_juce/Source/lcd/Lcd.cpp)) emula un display de caracteres 2 × 17 con una
-fuente de 5 × 7 píxeles (`lcd_font.h`), dibujando **cada píxel como un `fillRect`** con dos colores
-(encendido `0xFF233336`, apagado `0xFF73A5A9`) — 2 × 17 × 35 = 1190 rectángulos por repintado. El
-carácter `\xff` se usa como marcador de posición en las barras de nivel (`_______________`).
+Tres decisiones de rendimiento que ya están tomadas y conviene no deshacer:
 
-La sincronización UI ↔ procesador va por `juce::ChangeBroadcaster`: `PluginProcessor` hereda de
-`ChangeBroadcaster` y de `AudioProcessorParameter::Listener`, así que cualquier cambio de parámetro
-(venga del DAW, de la automatización o de la UI) dispara `sendChangeMessage()` →
-`changeListenerCallback()` → `updateValues()` → `repaint()`.
+- **Las tres hojas de arte se decodifican una sola vez en el constructor** y se reparten a los botones
+  y al dial. Nada de `ImageCache::getFromMemory()` dentro de un `paint()`.
+- **El display se dibuja a una `juce::Image` cacheada**, que sólo se rehace al cambiar el texto, la
+  escala o el tamaño. Son 2 × 17 caracteres de 5 × 7 píxeles = **1.190 rectángulos** por repintado, y
+  antes se pagaban todos, siempre.
+- `updateValues()` repinta el fondo **sólo si se movió el fader**; cada control se repinta solo.
+
+`Lcd` guarda **bytes, no `juce::String`**: con una cadena de JUCE el marcador `0xff` de la barra de
+parámetros salía en UTF-8 de dos bytes y descuadraba la fila.
+
+**Los diales de parche y de afinación aplican al soltarlos** (`sliderDragEnded`); arrastrando sólo
+enseñan el nombre o los Hz. Los dos apagan el firmware, y un gesto entero serían decenas de
+reentradas encadenadas.
+
+La sincronización UI ↔ procesador va por `juce::ChangeBroadcaster` más el temporizador de 10 Hz de
+§5.1.
 
 ---
 
 ## 6. Modelo de concurrencia
 
-Hay **dos hilos** que tocan el emulador, y un solo candado: `juce::SpinLock mcuLock`.
+**No hay ningún cerrojo.** Lo hubo —un `juce::SpinLock` que el hilo de UI tomaba para hacer
+`loadSounds()` mientras el hilo de audio giraba en vacío— y se eliminó entero. Hoy el emulador es
+propiedad exclusiva del hilo de audio, y tocarlo desde fuera es **publicar una petición**:
 
 ```
-  HILO DE AUDIO (tiempo real, el host manda)         HILO DE MENSAJES (UI)
-  ────────────────────────────────────────           ──────────────────────
-  processBlock()                                      buttonClicked()
-    └─ mcuLock.enter()                                  ├─ setCurrentProgram()
-       for (renderBufferFrames)                         │    └─ mcuLock.enter()
-         ├─ sendMidiCmd()                               │       loadSounds()  ← 1,7-2,7 ms
-         ├─ generate_next_sample()                      │       mcuLock.exit()
-         ├─ SpaceD::process()                           │
-         └─ Phaser::process()                           ├─ setMasterTune()
-       mcuLock.exit()                                   │    └─ mcuLock.enter()
-    resample_process()                                  │       200 × generate_next_sample()
-    tremolo + midEQ                                     │       mcuLock.exit()
-                                                        └─ mcuReset()
-                                                             └─ 1024 × generate_next_sample()
+  HILO DE AUDIO (tiempo real, el host manda)      HILO DE MENSAJES (UI)
+  ────────────────────────────────────────        ──────────────────────
+  processBlock()                                   sliderDragEnded()
+    └─ engine->pushMidi(...)                         └─ engine->requestPatch(n)
+    └─ engine->render(l, r, n)                            └─ patchRequest.exchange(n)
+         ├─ serviceRequests()  ◄───────────────────────────┘  (un atómico, nada más)
+         │    └─ rampa a cero → applyPatch() → rampa arriba
+         ├─ framesForBlock()                         timerCallback()  @10 Hz
+         ├─ synthesise()                               └─ engine->patch()  (lee un atómico)
+         ├─ resampleBlock()
+         └─ outputStage()
 ```
 
-Tres propiedades del diseño que conviene entender antes de tocarlo:
+Cuatro propiedades del diseño:
 
-1. **El candado cubre el bucle de render entero**, no muestra a muestra. Un bloque de 512 muestras a
-   48 kHz son ~213 muestras del emulador con toda su CPU emulada dentro de la sección crítica.
-2. **Es un spinlock.** Cuando el hilo de UI lo toma para hacer `loadSounds()` (que desencripta
-   3 × 128 KB de wave ROM + 128 KB de params), el hilo de audio **gira en vacío** hasta que termine.
-   Un `juce::SpinLock` no cede el procesador.
-3. **El hilo de UI ejecuta el emulador.** No es una llamada a un setter: `setMasterTune` corre 200
-   muestras completas de síntesis, y `mcuReset` corre 1024. Es la única forma de hacer avanzar el
-   firmware, porque no hay bucle de CPU independiente (§1).
+1. **`processBlock` no espera a nadie.** No hay sección crítica que pueda estar tomada, así que el
+   plugin no pierde bloques por mucho que se manosee el panel.
+2. **Las peticiones se colapsan.** `requestPatch()` es un `exchange`: barrer el dial de parche deja
+   una sola petición pendiente, no dieciséis. Es justo lo que hace falta con un mando.
+3. **Intención y realidad están separadas.** `patch()` y `masterTune()` devuelven *lo pedido aunque no
+   se haya atendido* —es lo que la interfaz debe enseñar— y `activePatch()` / `activeMasterTune()`,
+   lo que está sonando. Sin esa distinción el panel parpadea.
+4. **Las vías síncronas siguen existiendo, y son trampa.** `setPatch()`, `setMasterTune()` y
+   `allNotesOff()` corren el emulador en el acto. Son para el arranque y para las pruebas; usarlas
+   con `render()` vivo en otro hilo es una carrera.
 
-Fuera de `mcuLock` no hay más sincronización: los `juce::AudioParameter*` se leen directamente desde
-el hilo de audio (son atómicos internamente), y `SpaceD`/`Phaser` solo los tocan sus respectivos
-`process()`.
+Hay una excepción de orden que importa: **`prepare()` atiende una petición pendiente *antes* de
+arrancar el firmware**, en vez de dejársela a `render()`. Es porque re-llamar a `setPatch()` después
+de `prepare()` cambia el audio; el orden bueno es seleccionar parche → preparar.
+
+`RdEngineStats` son contadores no atómicos que la UI lee cuando quiere: el núcleo no imprime desde el
+hilo de audio, así que lo que iría a un log es un contador.
 
 ---
 
@@ -551,201 +682,207 @@ sonido:
 ```
  1. El host entrega  90 3C 64  en el midiBuffer de processBlock()
 
- 2. sendMidiCmd(0x90, 0x3C, 0x64)  →  commands_queue ← [0xC0, 0x3C, 0x64]
-                                       (protocolo interno, NO MIDI)
+ 2. engine->pushMidi(frame, 0x90, 0x3C, 0x64)  →  cola fija de 512 eventos
 
- 3. generate_next_sample():
+ 3. render() → synthesise(): al llegar el bucle a la muestra que toca,
+    sendTracked() lo apunta en heldVelocity[0x3C] y lo traduce:
+      commandPort  ←  [0xC0, 0x3C, 0x64]     (protocolo interno, NO MIDI)
+
+ 4. generate_next_sample():
       a) SoundChip::update() produce la muestra de ESTE instante
       b) 100 iteraciones de execute_run():
            - la cola no está vacía → se asierta la línea TIN
            - el firmware entra por el vector ICI (0xFFF6)
            - la rutina en 0xE12B/0xE15E/0xE168 lee el puerto 1
-           - read_byte reconoce el PC y sirve 0xC0, luego 0x3C, luego 0x64
+           - RdBoard::read reconoce el PC y sirve 0xC0, luego 0x3C, luego 0x64
 
- 4. El firmware (código Roland de 1986, sin modificar) decide:
+ 5. El firmware (código Roland de 1986, sin modificar) decide:
       - qué voz libre asignar
       - qué parche/muestra corresponde a la nota 0x3C
       - qué envolvente aplicar según la velocidad 0x64
     y escribe ~40 bytes en 0x1000-0x1FFF
 
- 5. write_byte enruta esas escrituras a SoundChip::write(), que las decodifica
-    en (voz, parte, campo) y rellena los SA_Part
+ 6. RdBoard::write enruta esas escrituras a SoundChip::write(), que las
+    decodifica en (voz, parte, campo) y rellena los SA_Part
 
- 6. En las siguientes llamadas a update(), esos slots ya no cumplen
+ 7. En las siguientes llamadas a update(), esos slots ya no cumplen
     (env_value == 0 && env_dest == 0) → se procesan por IC19/IC9/IC8
     y empiezan a contribuir a `result`
 
- 7. Cuando un segmento de envolvente termina, IC19 pone m_irq_triggered,
+ 8. Cuando un segmento de envolvente termina, IC19 pone m_irq_triggered,
     execute_run() asierta IRQ1, el firmware atiende, lee m_irq_id para
     saber qué slot fue, y programa el siguiente segmento
 
- 8. Las muestras salen por la cadena de efectos → resampler → host
+ 9. Las muestras salen por chorus → phaser → resampler → ganancia →
+    trémolo → EQ → el buffer del host
 ```
 
-El paso 4 es lo que hace especial a este proyecto: la asignación de voces, el robo de voces, las
+El paso 5 es lo que hace especial a este proyecto: la asignación de voces, el robo de voces, las
 curvas de velocidad y el comportamiento del pedal **no están implementados en RdPiano**. Son el
 firmware original tomando decisiones.
 
 ---
 
-## 8. Lo que es independiente de la plataforma
+## 8. Pruebas
 
-Casi todo el árbol es portable; lo que sigue no depende de macOS más que por ser la única
-plataforma que se compila:
+Tres suites, todas en ctest:
 
-**Código.** `librdpiano/` completo (CPU, chip de sonido, ROMs, LUTs), `lsp/`, `lcd/`, `resample/`,
-`PluginProcessor`, `PluginEditor`. No hay un solo `#ifdef _WIN32`/`__APPLE__`/`__linux__` en el
-código del proyecto. La única condicional de plataforma en todo el árbol está en la librería de
-terceros: `resample_defs.h` incluye `config.h` salvo en `WIN32`/`__CYGWIN__`
-([resample_defs.h:17](/librdpiano/src/resample/resample_defs.h#L17)).
+| Suite | Qué es | Tamaño |
+|---|---|---|
+| `rdpiano_tests` | Unitaria, `librdpiano/test/unit/` | 53 suites, 502 comprobaciones, ~8 s |
+| `rdpiano_e2e` | Harness bit-exacto contra `golden.txt` | 16 parches, ~4 s |
+| `rdpiano_plugin_tests` | Presets, buses, latencia y cola | 8 suites, 108 comprobaciones |
 
-**Toolchain.** Hasta la fase 3, los exportadores salían del `.jucer` vía Projucer 8.0.1
-(`--resave`); desde entonces, de `juce_add_plugin`. Los mismos módulos JUCE —hoy los de JUCE
-9.0.1— y el mismo `librdpiano/include`, ahora como usage requirement del target del núcleo. El
-estándar subió de C++20 a **C++23** en todo el árbol, con el núcleo además en **C23** para las
-fuentes C de `resample/`.
+El **e2e** ([e2e.cpp](../librdpiano/test/e2e.cpp)) corre headless a ~40× tiempo real: arranque
+silencioso, nota, acorde, extinción tras note-off (detector de voces colgadas), polifonía 16, rango
+de pico y un **hash bit-exacto por parche**. `--patch N` para iterar en ~0,2 s. Cambios en
+`sound_chip.cpp`, en los `unscramble_*` o en el MCU mueven el hash.
 
-**Recursos.** Las ROMs y los PNGs se empotran como `BinaryData` en el binario: no hay archivos
-externos que instalar ni rutas que resolver en tiempo de ejecución. El plugin es autocontenido.
+De la unitaria, la pieza clave es **`test_engine.cpp`**: un simulador de host (bloques irregulares,
+22–96 kHz, cambios de parche en caliente, extremos de parámetros) y lo único que verifica **cero
+reservas en `render()`**, sustituyendo el `operator new` global y vigilando `stats.resamplerOpens`.
+Su red de transitorios cubre lo que ningún hash puede: `engine_effect_tail`,
+`engine_effect_bypass_ramp`, `engine_program_change`, `engine_patch_declick`,
+`engine_tune_held_notes`, `engine_volume_ramp`, `engine_latency`, `engine_lfo_rate`,
+`engine_tremolo` y `engine_tail_length`.
 
-**Flujo de audio.** El host llama a `processBlock`, el emulador corre a 20/32 kHz, libresample
-adapta a la frecuencia del host. Ninguna parte del pipeline usa SIMD, APIs de sistema ni aceleración
-específica de plataforma — todo es C++ escalar y `juce::dsp` portable.
+**Lo que ninguna prueba juzga es el timbre.** Los efectos y el emulador están congelados por hash: el
+hash detecta cualquier cambio, pero no dice si suena mejor o peor. La verificación es auditiva, con
+`test/standalone.cpp` o el plugin en un DAW. Tampoco está cubierta la UI.
 
-**Estado y persistencia.** `getStateInformation`/`setStateInformation` serializan a XML: desde la
-fase 3, el árbol del `AudioProcessorValueTreeState` con los diez parámetros, más `masterTune` y
-`currentPatch` como propiedades de la raíz `<RdPiano>` — los mismos nombres de atributo de antes,
-para que las sesiones guardadas se sigan abriendo.
-
-**CI.** El job de [`.github/workflows/main.yml`](.github/workflows/main.yml) sigue la receta
-[`download-juce.sh`](/scripts/download-juce.sh) → `build-osx.sh` → subir artefactos. En
-`master`, un segundo job publica una release rodante con tag `latest`.
+**Golden y vectores no se regeneran para poner algo en verde.** Si el cambio de audio es
+intencionado: `--wav-dir DIR`, escuchar, y sólo entonces `--write-golden`.
 
 ---
 
-## 9. Plataforma: macOS
+## 9. Lo que es independiente de la plataforma
 
-> **Actualizado en la fase 3** (REFACTORIZACION §16.3). El Projucer y el `.jucer` ya no existen: el
-> plugin sale de `juce_add_plugin` en
-> [rdpiano_juce/CMakeLists.txt](/rdpiano_juce/CMakeLists.txt), colgando del
-> [`CMakeLists.txt`](/CMakeLists.txt) de la raíz que construye también el núcleo y las pruebas.
-> Lo que sigue valiendo de este apartado son las particularidades de la plataforma —AU/AUv3, firma,
-> cuarentena, rutas de instalación, bundles— y los identificadores, que se conservaron uno a uno.
-> Lo que cambia:
->
-> ```
-> build-osx.sh
->   └─ cmake -S . -B build/plugin -G Xcode -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64"
->   └─ cmake --build build/plugin --config Release --target rdpiano_juce_All
->
-> Artefactos → build/plugin/rdpiano_juce/rdpiano_juce_artefacts/Release/
->   AU/rdpiano_juce.component      VST3/rdpiano_juce.vst3
->   Standalone/rdpiano_juce.app    AUv3/rdpiano_juce.appex
->   LV2/rdpiano_juce.lv2           (antes RdPiano.lv2; el URI no cambia)
-> ```
->
-> El generador es Xcode porque `juce_add_plugin` sólo crea el objetivo AUv3 con ese generador, y el
-> objetivo de despliegue se fija en 11.0. Con JUCE 8.0.1 estaba en 10.13 —el que ponía el
-> Projucer— porque aquel JUCE llamaba a `CGWindowListCreateImage`, no disponible en el SDK de
-> macOS 15+; JUCE 9 lo resolvió y el suelo pasa a ser el del binario universal. El CI corre en
-> `macos-26` y el binario es universal arm64+x86_64.
+Casi todo el árbol es portable; lo que sigue no depende de macOS más que por ser la única plataforma
+que se compila:
 
-El proyecto compila **solo para macOS**. Los exportadores de Windows (`VS2022`) y Linux
-(`LINUX_MAKE`), sus scripts de build y sus jobs de CI se eliminaron del `.jucer`, de
-`rdpiano_juce/build/` y del workflow.
+**Código.** `librdpiano/` completo (CPU, placa, chip de sonido, motor, ROMs, LUT), `lsp/`,
+`resample/`, `lcd/`, `PluginProcessor`, `PluginEditor`. No hay un solo `#ifdef _WIN32` /
+`__APPLE__` / `__linux__` en el código del proyecto. La única condicional de plataforma en todo el
+árbol está en la librería de terceros: `resample_defs.h` incluye `config.h` salvo en
+`WIN32`/`__CYGWIN__`.
 
-Produce los cuatro formatos declarados en el `.jucer`.
+**El núcleo no conoce ni JUCE ni `stdio`.** Tampoco `rd_engine.cpp`. Eso es lo que permite que la
+suite unitaria y el harness compilen sin JUCE, y lo que haría viable otro anfitrión.
+
+**Toolchain.** C++23 en todo el árbol, con C23 para las fuentes C de `resample/`. Módulos de JUCE
+9.0.1, y `librdpiano/include` como usage requirement del target del núcleo.
+
+**Recursos.** Las ROMs y los PNG se empotran como `BinaryData` en el binario: no hay archivos
+externos que instalar ni rutas que resolver en tiempo de ejecución. El plugin es autocontenido.
+
+**Estado y persistencia.** `getStateInformation`/`setStateInformation` serializan a XML: el árbol del
+`AudioProcessorValueTreeState` con los diez parámetros, más `masterTune` y `currentPatch` como
+propiedades de la raíz `<RdPiano>` — los mismos nombres de atributo de siempre, para que las sesiones
+guardadas se sigan abriendo.
+
+---
+
+## 10. Plataforma: macOS
+
+El proyecto compila **sólo para macOS**, y produce cinco formatos:
 
 ```
-build-osx.sh
-  └─ JUCE/Projucer.app/Contents/MacOS/Projucer --resave rdpiano_juce.jucer
-  └─ cd Builds/MacOSX && xcodebuild -configuration Release
-
-Artefactos → Builds/MacOSX/build/Release/
-  rdpiano_juce.component   (AU  — Logic Pro, GarageBand, MainStage)
-  rdpiano_juce.vst3        (VST3 — Live, Reaper, Bitwig, Cubase)
-  rdpiano_juce.app         (Standalone, CoreAudio + CoreMIDI)
-  AUv3                     (declarado en el .jucer; el CI no lo empaqueta)
+build/plugin/rdpiano_juce/rdpiano_juce_artefacts/Release/
+  AU/rdpiano_juce.component      VST3/rdpiano_juce.vst3
+  Standalone/rdpiano_juce.app    AUv3/rdpiano_juce.appex
+  LV2/rdpiano_juce.lv2
 ```
 
 **Particularidades reales de esta plataforma:**
 
-- **AU y AUv3 solo existen aquí.** Son formatos de Apple; el `pluginCode="RDPN"` y
-  `pluginManufacturerCode="GlZs"` del `.jucer` son los identificadores de cuatro caracteres que exige
-  el registro de Audio Units.
-- **Firma y cuarentena.** Los binarios del CI **no están firmados ni notarizados**. Gatekeeper los
-  bloquea. El README documenta el remedio:
-  `sudo xattr -rd com.apple.quarantine ~/Library/Audio/Plug-Ins/Components/<plugin>.component`.
-  Es el punto de fricción número uno para usuarios de macOS.
-- **El CI usa `macos-13` (Intel).** El artefacto que se publica es x86_64 (o universal, según lo que
-  decida Xcode por defecto en ese runner); en Apple Silicon corre bajo Rosetta salvo que el host lo
-  cargue en modo Intel. Compilando localmente en un Mac ARM sí se obtiene un binario nativo.
-- **Rutas de instalación:** `~/Library/Audio/Plug-Ins/Components/` (AU) y
-  `~/Library/Audio/Plug-Ins/VST3/` (VST3).
-- **Empaquetado:** los tres artefactos son *bundles* (directorios), por eso el CI los comprime con
-  `zip -r` antes de subirlos — subir un directorio sin comprimir rompería los permisos y los enlaces
-  simbólicos internos del bundle.
-- El exportador `XCODE_IPHONE` (`Builds/iOS`) existe en el `.jucer` pero **no está en el CI**: es
-  para AUv3 en iOS/iPadOS, sin soporte activo.
+- **AU y AUv3 sólo existen aquí.** Son formatos de Apple; `RDPN` (plugin code) y `GlZs`
+  (manufacturer code) son los identificadores de cuatro caracteres que exige el registro de Audio
+  Units. Los cinco formatos comparten `aumu RDPN GlZs`.
+- **El generador es Xcode a propósito:** `juce_add_plugin` sólo crea el objetivo AUv3 con él. El
+  deployment target es 11.0, y hay que pasárselo a `juceaide` por `MACOSX_DEPLOYMENT_TARGET`, porque
+  es una invocación anidada que no hereda la caché.
+- **Siempre universal** (`arm64;x86_64`). Hubo un modo nativo y se quitó: ahorraba compilación y nada
+  en ejecución —macOS carga una sola rebanada del universal, y no hay flags por arquitectura en
+  ningún `CMakeLists`— y su producto no cargaba bajo Rosetta.
+- **Firma y cuarentena.** Los binarios del CI **no están firmados ni notarizados**; Gatekeeper los
+  bloquea. El remedio está en el README: `sudo xattr -rd com.apple.quarantine <ruta>`. Es el punto de
+  fricción número uno para los usuarios.
+- **Rutas de instalación** (`sh scripts/build-osx.sh AU install`, que pide la contraseña una sola vez
+  con `sudo -v` y copia con `ditto` sobre el destino ya borrado):
 
-**Local y CI usan el mismo script.** [`download-juce.sh`](/scripts/download-juce.sh) descarga
-el ZIP de release de macOS —que ya trae módulos *y* Projucer precompilado— y lo descomprime en
-`build/juce`. Antes había dos pasos (`git clone` del repo + `download-projucer.sh` para bajar además el
-ZIP): descargaban lo mismo dos veces, porque el ZIP de release es un superconjunto del repo.
+  | Formato | Destino |
+  |---|---|
+  | AU | `/Library/Audio/Plug-Ins/Components` |
+  | VST3 | `/Library/Audio/Plug-Ins/VST3` |
+  | LV2 | `/Library/Audio/Plug-Ins/LV2` |
+  | Standalone | `/Applications` |
 
-> **Actualizado.** El árbol descargado vivía en `rdpiano_juce/JUCE` —donde el `.jucer` buscaba los
-> módulos (`MODULEPATH path="./JUCE/modules"`) y `build-osx.sh` el Projucer—. Sin `.jucer`, esa
-> ruta ya no la exige nadie: JUCE es una descarga, no fuente del proyecto, y se guarda con el resto
-> de lo generado bajo `build/` (`build/juce`, `build/plugin`, `build/core`, `build/core-asan`), de
-> modo que `rm -rf build` sea la limpieza completa. La ruta es la variable de caché
-> `RDPIANO_JUCE_DIR` del [`CMakeLists.txt`](/CMakeLists.txt) de la raíz.
-
----
-
-## 10. Build y CI
-
-> **Actualizado en la fase 3.** Ya no hay dos sistemas: `CMakeLists.txt` en la raíz →
-> `librdpiano/` (librería, harness, suite unitaria, standalone SDL) + `rdpiano_juce/` (los cinco
-> formatos y `rdpiano_plugin_tests`). El plugin **enlaza** el target `librdpiano` en vez de listar y
-> recompilar sus fuentes, así que añadir un `.cpp` al núcleo es una línea en
-> `librdpiano/CMakeLists.txt` y nada más. `librdpiano/` se sigue pudiendo configurar por su cuenta
-> —es lo que hace el CI del núcleo, que no necesita JUCE— y sólo entonces fuerza ASan.
->
-> Tampoco es cierto ya lo de "no hay tests automatizados": desde las fases 0-3 hay 38 suites y 427
-> comprobaciones de núcleo, el harness bit-exacto contra `golden.txt`, y 5 suites y 95
-> comprobaciones del plugin. La tabla de riesgo de más abajo sigue valiendo para el **timbre**, que
-> es lo único que ninguna prueba juzga.
-
-**El `.jucer` era la fuente de verdad, no CMake.** Projucer genera los proyectos nativos a partir de
-él, así que **añadir un archivo fuente o un recurso exige editar `rdpiano_juce.jucer`**, no basta con
-ponerlo en el disco. Un `.cpp` nuevo en `Source/` que no aparezca en el `<MAINGROUP>` sencillamente no
-se compila, sin error ni aviso.
-
-`librdpiano` sí tiene su propio [`CMakeLists.txt`](/librdpiano/CMakeLists.txt), pero **solo para
-desarrollo del núcleo**: construye la librería y el standalone de SDL, requiere SDL2 + portmidi, y
-fuerza `-fsanitize=address` de forma incondicional (intencional: es un banco de pruebas, no un
-artefacto de distribución).
-
-Ese standalone ([test/standalone.cpp](/librdpiano/test/standalone.cpp)) es el único "entorno de
-prueba" del proyecto: crea un puerto MIDI virtual con `Pm_CreateVirtualInput("RdPiano", ...)`, abre
-SDL a 20 kHz y llena el buffer de audio llamando a `generate_next_sample()` directamente desde el
-callback. Carga las ROMs con `fopen` desde el directorio de trabajo, así que hay que ejecutarlo desde
-donde estén los `.BIN`.
-
-**Verificación.** No hay tests automatizados de ningún tipo. La verificación es **auditiva**. Esto
-tiene una consecuencia directa sobre el riesgo de cada zona del código:
-
-| Zona | Riesgo de tocarla |
-|---|---|
-| `sound_chip.cpp` (IC19/IC9/IC8, LUTs) | **Muy alto** — un bit mal y el timbre cambia de forma sutil e imposible de detectar sin comparar de oído con una máquina real |
-| `UNSCRAMBLE_*`, `load_samples` | **Muy alto** — ruido o silencio inmediato, o peor: sonido casi correcto |
-| Direcciones del handshake (`0xE12B`…) | **Muy alto** — el firmware deja de recibir comandos |
-| `PluginProcessor` (buffers, resample, hilos) | Medio — los fallos son audibles (clicks, silencio) y reproducibles |
-| `PluginEditor`, `Lcd` | Bajo — visual, sin efecto sobre el audio |
+  **AUv3 no tiene destino propio:** JUCE lo empotra en el `.app` del Standalone
+  (`XCODE_EMBED_APP_EXTENSIONS`), así que se registra al instalar la aplicación. No hay VST2 (JUCE 9
+  lo quitó).
+- **Empaquetado:** los artefactos son *bundles* (directorios), por eso el CI los comprime con `zip -r`
+  antes de subirlos — subir un directorio sin comprimir rompería permisos y enlaces internos.
+- **Ojo con el Standalone sin instalar.** Abrir el `.app` desde `build/` registra su AUv3 empotrado, y
+  a partir de ahí el sistema resuelve `aumu RDPN GlZs` a ese `.appex` del directorio de compilación,
+  que eclipsa el `.component` instalado: Logic deja de cargar la AU. Está detallado en la trampa 13
+  de [CLAUDE.md](../CLAUDE.md), con cómo deshacerlo.
 
 ---
 
-## 11. Material de ingeniería inversa (`re_stuff/`)
+## 11. Build y CI
+
+**Sólo CMake.** No hay Projucer ni `.jucer`: el `CMakeLists.txt` de la raíz cuelga de sí
+`librdpiano/` (librería, harness, suite unitaria, standalone SDL) y `rdpiano_juce/` (los cinco
+formatos y `rdpiano_plugin_tests`). El plugin **enlaza** el target `librdpiano` en vez de listar y
+recompilar sus fuentes, así que añadir un `.cpp` al núcleo es **una línea** en
+`librdpiano/CMakeLists.txt` y nada más.
+
+```bash
+sh scripts/download-juce.sh   # JUCE 9.0.1 → build/juce
+sh scripts/build-osx.sh ALL   # cinco formatos universales
+sh scripts/build-osx.sh AU install
+```
+
+Los dos scripts son POSIX `sh` sobre `scripts/common.sh` (paleta, log, `paso`, `cmd`, `fatal`, `fin`
+y el trap de salida). **No imprimen la salida de CMake ni de Xcode**: una etiqueta por paso y, al
+final, tiempo, número de avisos *distintos* y ruta de los productos; el resto va a `logs/`, donde se
+conservan los 10 últimos por script. Si un paso falla, vuelcan las últimas 40 líneas y salen con el
+mismo estado. El color se apaga solo si la salida no es un terminal, que es lo que ve la CI.
+
+Ninguno repite trabajo hecho: `download-juce.sh` no baja nada si `build/juce` ya es la versión
+correcta (según el `project(JUCE VERSION …)` de su raíz), y `build-osx.sh` sólo reconfigura si la
+caché del binary dir no sirve.
+
+**Todo lo generado vive bajo `build/`** (`juce/`, `plugin/`, `core/`, `core-asan/`), de modo que
+`rm -rf build` deja el árbol como recién clonado y `rm -rf build/plugin build/core*` limpia sin
+re-bajar JUCE.
+
+Para trabajar en el núcleo no hace falta JUCE:
+
+```bash
+cmake -S librdpiano -B build/core -DRDPIANO_SANITIZE=OFF -DCMAKE_BUILD_TYPE=Release
+cmake --build build/core --target rdpiano_tests rdpiano_e2e
+ctest --test-dir build/core --output-on-failure
+```
+
+Configurar `librdpiano/` suelto fuerza `-fsanitize=address` (intencional: es un banco de pruebas, no
+un artefacto de distribución); desde la raíz, OFF.
+
+**CI** ([.github/workflows/main.yml](../.github/workflows/main.yml)): cuatro jobs — `ctest` sin ASan,
+`ctest` con ASan, build de macOS (que incluye `rdpiano_plugin_tests`) y, en `master`, una release
+rodante con tag `latest` que depende de los tres anteriores. Los runners de macOS son `macos-26` y el
+binario es universal. `-Wall -Wextra` están en `librdpiano/CMakeLists.txt` y el núcleo compila con
+cero avisos.
+
+**La versión oficial** es el `VERSION` de `juce_add_plugin` en
+[rdpiano_juce/CMakeLists.txt](../rdpiano_juce/CMakeLists.txt), y no hay otra: de ahí salen los
+`CFBundleShortVersionString`/`CFBundleVersion` de los bundles, las versiones del `.ttl` del LV2 y las
+macros `JucePlugin_Version*`. Publicar = cambiar esa línea y añadir la entrada al
+[CHANGELOG](../CHANGELOG.md).
+
+---
+
+## 12. Material de ingeniería inversa (`re_stuff/`)
 
 **No se compila y no forma parte del producto.** Es el rastro del proceso que hizo posible el
 emulador, conservado por valor documental:
@@ -754,54 +891,60 @@ emulador, conservado por valor documental:
 |---|---|
 | `disasm/` | Desensamblados de los firmwares (RD200 A/B, MK80 B, MKS20 B). Aquí es donde se localizaron las direcciones `0xE12B`/`0xE15E`/`0xE168`/`0xE15A` del handshake |
 | `verilog/` | Modelos Verilog de IC8/IC9/IC19 + testbenches. Su propio README advierte: *"probably most of them wrong"* — material de investigación, **no fuente de verdad** |
-| `luts/` | Scripts para caracterizar las ROMs LUT internas (IC10, IC11). El README documenta el hallazgo clave: ambas se reproducen perfectamente con una exponencial, mientras que las cuatro LUTs implementadas con puertas lógicas dentro de los gate arrays solo se pueden evaluar bit a bit — que es exactamente lo que hace el constructor de `SoundChip` |
+| `luts/` | Scripts para caracterizar las ROM LUT internas (IC10, IC11). El README documenta el hallazgo clave: ambas se reproducen perfectamente con una exponencial, mientras que las LUT implementadas con puertas lógicas dentro de los gate arrays sólo se pueden evaluar bit a bit — que es exactamente lo que hace `sa_tables.cpp` |
 | `silicon_tooling/` | Cadena JS/Python para extraer celdas de fotos del silicio y convertirlas a Verilog/KiCad/ELK |
 | `ident_cells/` | Recortes fotográficos de celdas estándar Fujitsu, clasificados por tipo |
-| `rom_tools/` | Utilidades de desencriptado de ROMs (`descramble.c`, `descramble_wave.py`) — versiones sueltas de lo que hoy vive en los macros `UNSCRAMBLE_*` |
+| `rom_tools/` | Utilidades de desencriptado de ROMs (`descramble.c`, `descramble_wave.py`) — versiones sueltas de lo que hoy vive en `rom_loader.h` |
 
 La relación práctica con el código de producción: `re_stuff/luts/` explica **por qué** las tablas de
-`sound_chip.cpp` son expresiones lógicas y no fórmulas, y `re_stuff/disasm/` es el sitio donde hay que
+`sa_tables.cpp` son expresiones lógicas y no fórmulas, y `re_stuff/disasm/` es el sitio donde hay que
 volver si alguna vez se quiere soportar otro firmware.
 
 ---
 
-## 12. Puntos frágiles de la arquitectura
+## 13. Puntos frágiles de la arquitectura
 
-Esto no es la lista de bugs (esa está en [AUDITORIA.md](docs/AUDITORIA.md)), sino las decisiones de
+No es la lista de bugs —esa está en [REVISION-CODIGO.md](REVISION-CODIGO.md)— sino las decisiones de
 diseño que condicionan cualquier trabajo futuro:
 
 1. **Un solo firmware soportado.** El handshake por direcciones absolutas ata el proyecto a
-   `RD200_B.bin`. Los dumps del MKS-20 y del MK-80 están en `roms/` y empotrados en el plugin, pero
-   inertes.
-   Soportar otro firmware = volver al desensamblado. Una alternativa estructural sería emular de
-   verdad el protocolo de los puertos en vez de reconocer PCs, pero eso exige entender el handshake
-   completo, no solo dónde lee el firmware.
+   `RD200_B.bin`. Los dumps del MKS-20 y del MK-80 están en `roms/` pero inertes. Soportar otro
+   firmware = volver al desensamblado. Una alternativa estructural sería emular de verdad el
+   protocolo de los puertos en vez de reconocer PCs, pero eso exige entender el handshake completo,
+   no sólo dónde lee el firmware.
 
-2. **El hilo de UI ejecuta el emulador.** Es inevitable dado que no hay bucle de CPU independiente,
-   pero convierte cualquier acción de la UI (cambiar de parche, afinar) en trabajo pesado bajo un
-   spinlock compartido con el hilo de audio.
+2. **Cambiar de parche o afinar sigue costando notas.** El modelo sin cerrojo quitó el problema de
+   concurrencia, pero no el de fondo: el program change que hace falta para que el firmware relea la
+   página de parámetros **apaga las voces dentro del firmware**. Todo el aparato de declick, espejo
+   de lo pulsado y reentrada compensada en nivel existe para disimular eso. Es reconstrucción, no
+   continuidad: lo sostenido sólo por el pedal no vuelve, y la reentrada queda en ±6 dB.
 
 3. **El acoplamiento entre parche y frecuencia de muestreo.** Cambiar de parche puede cambiar
-   `sourceSampleRate`, lo que obliga a reabrir los resamplers. Mientras `current_sample_rate` (el bit
-   real del puerto 2) no funcione, esta información vive duplicada: en la tabla del plugin y,
-   teóricamente, en el emulador.
+   `sourceRate` de 20 k a 32 k. Ya no obliga a reabrir los resamplers —se abren para todo el rango en
+   `prepare()`— pero sí decide el ritmo de los LFO de chorus y phaser, y obliga a dimensionar los
+   búferes para el peor caso. Mientras el bit real del puerto 2 no funcione, esta información vive
+   duplicada: en `patchSampleRates[]` y, teóricamente, en el emulador.
 
 4. **Los dos hacks de `SoundChip::update()`** son parches sobre síntomas de un modelo que aún no es
    del todo correcto. El propio código dice `investigate`. El atajo de rendimiento, además, tiene
    efecto funcional: decide qué slots se procesan.
 
-5. **La ausencia total de tests** sobre código donde un bit invertido produce un cambio tímbrico
-   sutil. Sería viable —y de alto valor— una prueba de regresión que renderice una secuencia MIDI
-   fija y compare el hash del PCM resultante: no valida corrección, pero detecta cualquier cambio
-   involuntario en el camino de señal.
+5. **Ninguna prueba juzga el timbre.** El golden y los vectores detectan *cambios*, no *regresiones*:
+   un cambio en `sound_chip.cpp` que pase el harness pero mueva el hash es de alto riesgo tímbrico y
+   hay que decirlo explícitamente. La única verificación real es escuchar.
 
-6. **Huella de memoria por instancia.** `Mcu` tiene `params_rom[0x20000]` + `params_rom_tmp[0x20000]` +
-   `ram[0x10000]` (de la que se usan 4 KB) = 328 KB; `SoundChip` añade 1,5 MB de muestras (tres
-   ranuras de 512 KB, una por juego de ROM) y comparte con las demás instancias los 320 KB de LUT,
-   y `SpaceD::eram` otros 256 KB. Total ≈ 2,1 MB de estado residente por instancia. Cada
-   instancia del plugin paga ese coste íntegro; instanciarlo 8 veces en un proyecto no es gratis.
+6. **Huella de memoria por instancia.** `SoundChip` son 1,5 MB de muestras (tres ranuras de 512 KB,
+   una por juego de ROM), `RdPianoEngine` 512 KB de páginas de params ya descifradas (16 × 32 KB),
+   `RdBoard` 128 KB de params ROM + 8 KB de firmware + 4 KB de RAM, y `SpaceD::eram` otros 256 KB.
+   Total ≈ 2,4 MB por instancia, más los 320 KB de LUT que **se comparten** entre todas. Es el precio
+   de que cambiar de parche cueste microsegundos; cada instancia del plugin lo paga íntegro.
+
+7. **El bus de entrada que no se puede quitar.** Un instrumento con bus de entrada estéreo que nunca
+   lee es incorrecto de libro, y `auval` valida igual sin él — pero Logic no carga la AU sin bus de
+   entrada. Está probado, revertido y fijado por `plugin_bus_layout`. No volver a intentarlo.
 
 ---
 
-*Documento generado a partir del análisis del código en `main` @ `995e067`. Los enlaces a
-`archivo:línea` corresponden a ese estado del árbol.*
+*Documento escrito contra `develop` @ `0e23248`. Cuando el código y este documento discrepen, manda
+el código; las trampas operativas están en [CLAUDE.md](../CLAUDE.md), que se mantiene al día con
+cada cambio.*
