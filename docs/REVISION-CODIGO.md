@@ -2,8 +2,9 @@
 
 **Alcance:** `librdpiano/` (núcleo, motor y pruebas) y `rdpiano_juce/` (plugin y panel).
 **Revisión original:** `develop` @ `dcf66c9`, árbol limpio.
-**Estado al día:** 2026-09-02, `develop` @ `a5ef3df` más los cambios todavía en el árbol de trabajo
-(F5, F9 y la reversión de F13).
+**Hallazgos al día:** 2026-09-02, `develop` @ `a5ef3df` más los cambios todavía en el árbol de
+trabajo (F5, F9 y la reversión de F13).
+**Cifras al día:** 2026-09-11, `develop` @ `0e23248`.
 **Excluidos del juicio de estilo:** `mcu_ops.h`, `mame_utils.h`, `lsp/`, `resample/` y `re_stuff/`
 (código de MAME, transcripciones de silicio o de terceros; ver trampa 5 de CLAUDE.md). Sí se
 comentan sus **datos** —tamaños de tabla, memoria residente— porque eso no es estilo.
@@ -22,10 +23,14 @@ resultó romper Logic) y **uno abierto** (F12, el único de riesgo alto).
 ### 0.1 Hoy, medido
 
 ```
-rdpiano_tests           50 suite(s), 482 comprobacion(es), 0 fallida(s)      4,1 s
-rdpiano_e2e             16 parche(s), 0 fallidas, 0 hash(es) distinto(s)     2,0 s
+rdpiano_tests           53 suite(s), 502 comprobacion(es), 0 fallida(s)      8,3 s
+rdpiano_e2e             16 parche(s), 0 fallidas, 0 hash(es) distinto(s)     3,8 s
 rdpiano_plugin_tests     8 suite(s), 108 comprobacion(es), 0 fallida(s)      0,8 s
 ```
+
+Las tres suites y las veinte comprobaciones que el núcleo ha ganado desde la revisión son de
+`test_engine.cpp`: el declick de la afinación y la reentrada de las notas al cambiar de parche. Son
+también las que explican que la suite tarde el doble, porque rinden bloques enteros.
 
 `-Wall -Wextra` ya no hay que activarlos a mano: están en `librdpiano/CMakeLists.txt` y el núcleo
 compila con **cero avisos** (los quince de la revisión eran F14 y F1). El build del plugin sólo saca
@@ -421,7 +426,7 @@ catorce.
 
 ## 5. Pruebas y build
 
-La suite unitaria es rápida (4,1 s) y el e2e también (2,0 s) y bit-exacto, `test_engine.cpp` verifica
+La suite unitaria sigue siendo rápida (8,3 s) y el e2e también (3,8 s) y bit-exacto, `test_engine.cpp` verifica
 cero reservas en `render()` sustituyendo `operator new`, y la regla de no regenerar el golden para
 poner algo en verde está escrita donde tiene que estar.
 

@@ -99,6 +99,7 @@ y vuelve a abrirlo. Logic Pro, la primera vez, tarda unos segundos en revisarlo.
 - Cambias de sonido mientras tocas y la música no se corta: las notas y el pedal siguen sonando.
 - Afinas sobre la marcha sin que el instrumento se quede mudo.
 - Los diales enseñan el valor mientras los giras y lo aplican al soltarlos.
+- Puedes cambiar de sonido desde tu teclado, sin tocar la pantalla.
 
 **Sonido**
 

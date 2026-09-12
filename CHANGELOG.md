@@ -2,6 +2,23 @@
 
 Cambios de cada versión publicada de RdPiano. La más nueva, arriba.
 
+## 1.0.2 — 12 de septiembre de 2026
+
+### Sonido
+
+- Tocar la misma tecla dos veces seguidas sin soltarla, algo habitual con notas
+  que se pisan en una pista, ya no deja una nota sonando para siempre.
+
+### Uso en directo
+
+- Ya se puede cambiar de sonido desde el teclado o desde una pista, sin tocar la
+  pantalla. Si llegan varios cambios seguidos, solo se aplica el último.
+
+### Documentación
+
+- Instrucciones de instalación más claras y paso a paso, pensadas para quien no
+  tiene experiencia técnica.
+
 ## 1.0.1 — 4 de septiembre de 2026
 
 ### Sonido

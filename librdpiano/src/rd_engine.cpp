@@ -63,6 +63,12 @@ static const float kChangeFadeInMs = 15.0f;
 /// ataque).
 static const float kChangeFadeInHeldMs = 80.0f;
 
+/// Ventana de asentamiento del parche. Un cambio apaga el firmware y vuelve a
+/// disparar lo que estuviera pulsado, así que dos seguidos se oyen como un
+/// redisparo doble: con esto, una ráfaga de program change se cobra un cambio y
+/// no uno por mensaje. El primero de la ráfaga no espera.
+static const float kPatchSettleMs = 150.0f;
+
 /// Cuánto baja el nivel del ataque por unidad de velocidad. Medido sobre los 16
 /// parches: entre v16 y v120 la curva es recta a 0,228 dB por unidad (por debajo
 /// de v16 se aplana, de ahí el suelo de la corrección). Es lo que convierte
@@ -260,6 +266,8 @@ void RdPianoEngine::prepare(double newHostRate, int newMaxBlock)
     int requested = patchRequest.exchange(-1, std::memory_order_acquire);
     if (requested < 0 || requested >= NUM_PATCHES)
         requested = declickPatch;
+    if (requested < 0 || requested >= NUM_PATCHES)
+        requested = settlePatch;
     if (requested >= 0 && requested < NUM_PATCHES && requested != currentPatch)
         applyPatch(requested);
 
@@ -285,6 +293,10 @@ void RdPianoEngine::prepare(double newHostRate, int newMaxBlock)
     declickGain = 1.0f;
     declickPatch = -1;
     declickTune = kNoTuneRequest;
+
+    patchSettleFrames = (int)(kPatchSettleMs * 0.001f * (float)hostRate);
+    settlePatch = -1;
+    settleFrames = 0;
 
     // `boot()` reinicia el firmware entero, así que el espejo de lo pulsado
     // arranca vacío con él.
@@ -374,6 +386,16 @@ void RdPianoEngine::trackMidi(u8 status, u8 data1, u8 data2)
 
 void RdPianoEngine::sendTracked(u8 status, u8 data1, u8 data2)
 {
+    // Un segundo note-on en una tecla que el firmware ya cree pulsada le deja una
+    // voz encendida PARA SIEMPRE: el note-off que llega después apaga sólo una de
+    // las dos y la otra se queda sonando sola, con su timbre crudo. Medido de la
+    // nota 24 a la 84, a cualquier distancia entre los dos ataques, con el pedal
+    // arriba y abajo, y ni el note-off ni el pánico la callan. Un piano redispara,
+    // así que la tecla se suelta antes de volver a pulsarla; con eso no cuelga
+    // ninguna. Lo fija `engine_repeated_note`.
+    if ((u8)(status >> 4) == 0x9 && data2 > 0 && heldVelocity[data1 & 0x7f] != 0)
+        sendTracked((u8)(0x80 | (status & 0x0f)), data1, 0);
+
     trackMidi(status, data1, data2);
     mcu->sendMidiCmd(status, data1, data2);
 }
@@ -428,6 +450,8 @@ void RdPianoEngine::setPatch(int patch)
     // Cambio inmediato: manda sobre cualquier petición a medio atender.
     patchRequest.store(-1, std::memory_order_relaxed);
     declickPatch = -1;
+    settlePatch = -1;
+    settleFrames = 0;
     applyPatch(patch);
     finishChange();
 }
@@ -447,12 +471,33 @@ void RdPianoEngine::requestMasterTune(int16_t tune)
     tuneRequest.store((int)tune, std::memory_order_release);
 }
 
-/** @brief Lo que render() atiende entre bloques: todo lo que antes corría el hilo de UI con el cerrojo tomado. */
-void RdPianoEngine::serviceRequests()
+/**
+ * @brief Lo que render() atiende entre bloques: todo lo que antes corría el hilo de UI con el cerrojo tomado.
+ * @param numFrames Muestras del bloque, que es lo que avanza la ventana de asentamiento.
+ */
+void RdPianoEngine::serviceRequests(int numFrames)
 {
+    if (numFrames > 0)
+    {
+        settleFrames -= numFrames;
+        if (settleFrames < 0)
+            settleFrames = 0;
+    }
+
     const int requested = patchRequest.exchange(-1, std::memory_order_acquire);
     if (requested >= 0 && requested < NUM_PATCHES)
-        declickPatch = requested == currentPatch ? -1 : requested;
+        settlePatch = requested;
+
+    // Con la ventana cerrada el cambio sale en el acto; con la ventana abierta
+    // espera, y mientras tanto el que llegue se queda con el sitio. La salida
+    // sigue sonando durante la espera: el declick empieza al promoverlo, no al
+    // pedirlo.
+    if (settlePatch >= 0 && settleFrames == 0)
+    {
+        declickPatch = settlePatch == currentPatch ? -1 : settlePatch;
+        settlePatch = -1;
+        settleFrames = patchSettleFrames;
+    }
 
     // Afinar apaga el firmware igual que cambiar de parche (el switcharoo de
     // `Mcu::setMasterTune()`), así que va por el mismo declick: sin él, mover el
@@ -518,9 +563,16 @@ void RdPianoEngine::pushMidi(int frame, u8 status, u8 data1, u8 data2)
     // El program change es un cambio de parche completo, con su página de
     // parámetros: reenviarlo al firmware tal cual dejaba el motor mudo, porque
     // la página mapeada seguía siendo la del parche anterior.
+    //
+    // El número de programa ES el parche, 0..15. Uno mayor se ignora en vez de
+    // envolverse: con la máscara de antes, el programa 20 sonaba como el parche 4
+    // sin que nadie lo hubiera pedido.
     if ((status & 0xf0) == 0xc0)
     {
-        requestPatch(data1 & 0x0f);
+        if (data1 < NUM_PATCHES)
+            requestPatch(data1);
+        else
+            stats.programIgnored++;
         return;
     }
 
@@ -824,7 +876,7 @@ void RdPianoEngine::render(float *left, float *right, int numFrames)
 {
     // Cambios de parche y de afinación pedidos desde fuera: aquí, entre
     // bloques, y no en el hilo que los pidió. Es lo que quita el cerrojo.
-    serviceRequests();
+    serviceRequests(numFrames);
 
     if (numFrames <= 0)
     {

@@ -1658,3 +1658,173 @@ TEST_SUITE(engine_tail_length)
     checks.add("cola-declarada-sin-exagerar", RdPianoEngine::kTailSeconds < worst * 3.0,
                check_fmt("%.2f s declarados para una cola de %.2f s", RdPianoEngine::kTailSeconds, worst));
 }
+
+/**
+ * @brief ------------------------------------------------- nota repetida sin soltar
+ */
+TEST_SUITE(engine_repeated_note)
+{
+    // Un segundo note-on en una tecla que el firmware ya tenía pulsada le dejaba
+    // una voz encendida para siempre: el note-off apagaba una de las dos y la
+    // otra se quedaba sonando sola, con su timbre crudo —el "ruido digital" que
+    // aparecía tocando desde un DAW—. Ni el note-off ni el pánico la callaban.
+    // Colgaba de la nota 24 a la 84, a cualquier distancia entre ataques, con el
+    // pedal arriba y abajo. Ahora la tecla se suelta antes de volver a pulsarla.
+    const int BLOCK = 256;
+    const int NOTAS[] = {36, 60, 84};
+
+    for (int conPedal = 0; conPedal < 2; conPedal++)
+    {
+        for (int nota : NOTAS)
+        {
+            auto e = make_engine(48000.0, BLOCK);
+            if (!e)
+            {
+                CHECK_MSG(false, "sin ROMs en %s", g_roms_dir.c_str());
+                return;
+            }
+            e->params.chorusEnabled = false;
+
+            if (conPedal)
+                e->pushMidi(0, 0xB0, 64, 127);
+            e->pushMidi(0, 0x90, (u8)nota, 100);
+
+            Stereo primera;
+            render_into(e.get(), primera, BLOCK, 8);
+
+            // El segundo ataque sin note-off en medio: lo que colgaba la voz.
+            e->pushMidi(10, 0x90, (u8)nota, 100);
+            Stereo segunda;
+            render_into(e.get(), segunda, BLOCK, 8);
+
+            // Redispara de verdad, no se queda muda de tanto protegerla.
+            const double nivel = rms(segunda.l, 0, segunda.l.size());
+            checks.add(check_fmt("repetida-suena-n%d-%s", nota, conPedal ? "pedal" : "seco"), nivel > 1e-3,
+                       check_fmt("rms %.6f tras el segundo ataque", nivel));
+
+            // Y se apaga: pedal arriba y las 128 notas, como el pánico del host.
+            e->pushMidi(0, 0xB0, 64, 0);
+            for (int n = 0; n < 128; n++)
+                e->pushMidi(0, 0x80, (u8)n, 0);
+
+            Stereo cola;
+            render_into(e.get(), cola, BLOCK, (int)(48000.0 * 3 / BLOCK));
+
+            const size_t ultimo = cola.l.size() - (size_t)(48000.0 * 0.5);
+            const double colaRms = rms(cola.l, ultimo, cola.l.size());
+            checks.add(check_fmt("repetida-no-cuelga-n%d-%s", nota, conPedal ? "pedal" : "seco"), colaRms < 1e-5,
+                       check_fmt("rms %.6f dos segundos y medio despues de apagarlo todo", colaRms));
+        }
+    }
+}
+
+/**
+ * @brief ------------------------------------------------- rango del program change
+ */
+TEST_SUITE(engine_program_change_range)
+{
+    // El número de programa ES el parche, 0..15. Antes se enmascaraba con 0x0f,
+    // así que el programa 20 sonaba como el parche 4 sin que nadie lo pidiera.
+    const int BLOCK = 256;
+    auto e = make_engine(48000.0, BLOCK);
+    if (!e)
+    {
+        CHECK_MSG(false, "sin ROMs en %s", g_roms_dir.c_str());
+        return;
+    }
+    e->params.chorusEnabled = false;
+
+    Stereo out;
+
+    // Dentro de rango: el programa es el parche. Entre uno y otro se deja pasar
+    // la ventana de asentamiento, que es lo que colapsa las ráfagas.
+    const int DENTRO[] = {5, 15, 0};
+    for (int programa : DENTRO)
+    {
+        e->pushMidi(0, 0xC0, (u8)programa, 0);
+        render_into(e.get(), out, BLOCK, 40); // ~213 ms
+        checks.add(check_fmt("programa-%d-es-el-parche-%d", programa, programa), e->activePatch() == programa,
+                   check_fmt("parche %d", e->activePatch()));
+    }
+
+    // Fuera de rango: se ignora, y el parche se queda donde estaba.
+    const unsigned long ignoradosAntes = e->stats.programIgnored;
+    const int FUERA[] = {16, 20, 127};
+    for (int programa : FUERA)
+    {
+        e->pushMidi(0, 0xC0, (u8)programa, 0);
+        render_into(e.get(), out, BLOCK, 40);
+    }
+
+    checks.add("programa-fuera-de-rango-no-cambia", e->activePatch() == 0 && e->patch() == 0,
+               check_fmt("parche %d, pedido %d", e->activePatch(), e->patch()));
+    checks.add("programa-fuera-de-rango-se-cuenta", e->stats.programIgnored - ignoradosAntes == 3,
+               check_fmt("%lu ignorados", e->stats.programIgnored - ignoradosAntes));
+}
+
+/**
+ * @brief ------------------------------------------------- asentamiento del cambio de parche
+ */
+TEST_SUITE(engine_patch_settle)
+{
+    // Cada cambio de parche apaga el firmware y vuelve a disparar lo pulsado, así
+    // que una ráfaga de program change —el DAW localizando, un mando asignado al
+    // programa— encadenaba una reentrada por mensaje. Ahora el primero sale en el
+    // acto y los de detrás se cobran uno solo, el último.
+    const int BLOCK = 256;
+
+    {
+        auto e = make_engine(48000.0, BLOCK);
+        if (!e)
+        {
+            CHECK_MSG(false, "sin ROMs en %s", g_roms_dir.c_str());
+            return;
+        }
+        e->params.chorusEnabled = false;
+
+        // Uno suelto no espera: si esperase, la nota que viene detrás en la
+        // secuencia sonaría con el parche viejo.
+        Stereo out;
+        e->pushMidi(0, 0xC0, 7, 0);
+        render_into(e.get(), out, BLOCK, 6); // ~32 ms, la rampa de bajada son 6
+        checks.add("uno-suelto-no-espera", e->activePatch() == 7, check_fmt("parche %d a los 32 ms", e->activePatch()));
+    }
+
+    {
+        auto e = make_engine(48000.0, BLOCK);
+        e->params.chorusEnabled = false;
+
+        // Ráfaga: veinte program change distintos, uno por bloque (~107 ms).
+        std::vector<float> l(BLOCK, 0.0f), r(BLOCK, 0.0f);
+        int cambios = 0;
+        int anterior = e->activePatch();
+        int ultimo = 0;
+
+        for (int i = 0; i < 20; i++)
+        {
+            ultimo = 1 + (i % 15);
+            e->pushMidi(0, 0xC0, (u8)ultimo, 0);
+            e->render(l.data(), r.data(), BLOCK);
+            if (e->activePatch() != anterior)
+            {
+                cambios++;
+                anterior = e->activePatch();
+            }
+        }
+
+        // Y lo que falte de ventana, para que salga el que quedó esperando.
+        for (int i = 0; i < 60; i++)
+        {
+            e->render(l.data(), r.data(), BLOCK);
+            if (e->activePatch() != anterior)
+            {
+                cambios++;
+                anterior = e->activePatch();
+            }
+        }
+
+        checks.add("rafaga-se-colapsa", cambios <= 2, check_fmt("%d cambios aplicados de 20 mensajes", cambios));
+        checks.add("rafaga-gana-el-ultimo", e->activePatch() == ultimo,
+                   check_fmt("parche %d, ultimo pedido %d", e->activePatch(), ultimo));
+    }
+}
