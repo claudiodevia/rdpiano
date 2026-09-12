@@ -119,6 +119,14 @@ manda dos más; todos **apagan las voces y sueltan el pedal dentro del firmware*
   change MIDI) para espejo, preset y panel.
 - Diales de parche y afinación aplican **al soltarlos** (`sliderDragEnded`); arrastrando solo enseñan nombre o
   Hz, porque ambos apagan el firmware y un gesto entero serían decenas de reentradas encadenadas.
+- **Tamaño fijo a propósito**: `setResizeLimits(uiWidth, uiHeight, uiWidth, uiHeight)`, es decir mínimo =
+  máximo, que es como JUCE declara un editor no redimensionable. Así **Logic escala él mismo la ventana** al
+  arrastrar el borde, que es el comportamiento nativo que se quiere. Declararlo redimensionable
+  (`setResizable`) lo rompe: Logic deja de escalar y da el tamaño por bueno, y el wrapper AU de JUCE solo
+  acepta cambios que vengan de dentro (`EditorCompHolder::resizeHostWindow()` devuelve la vista a su tamaño
+  en `parentSizeChanged`), así que la única forma de redimensionar pasa a ser un asa dibujada en la esquina
+  del panel. Probado y revertido el 2026-09-11. Todo el panel escala por `sfC` en `resized()`/`paint()`, así
+  que el día que haga falta el arte aguanta cualquier tamaño; lo que no aguanta es el AU.
 - Repintado: `updateValues()` toca el fondo solo si se movió el fader; cada control se repinta solo; las tres
   hojas de arte se decodifican una vez en el constructor del editor (nada de `ImageCache` en `paint()`); el
   display es una `juce::Image` que solo se rehace al cambiar texto, escala o tamaño (1.190 rectángulos de
