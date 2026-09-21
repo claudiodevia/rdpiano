@@ -20,7 +20,7 @@ class SoundChip
 {
   public:
     /// Ranuras de tablas de onda descifradas: una por juego de ROM, para que
-    /// cambiar de juego sea activar una ranura y no descifrar 768 KB.
+    /// cambiar de juego sea activar una ranura y no descifrar 512 KB.
     static constexpr unsigned NUM_WAVE_SLOTS = 3;
 
     SoundChip(const u8 *temp_ic5, const u8 *temp_ic6, const u8 *temp_ic7);

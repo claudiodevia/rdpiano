@@ -1,68 +1,82 @@
 # Firmware: variantes, handshake y trazas retiradas
 
-**Alcance:** qué firmware ejecuta el emulador, por qué solo ese, y qué se sabe de los otros.
-
-Esta nota recoge conocimiento que hasta ahora vivía en forma de código comentado dentro de
-[mcu.cpp](../librdpiano/src/mcu.cpp) y del `.jucer`, ambos ya retirados; la lista de ROMs
-empotradas vive hoy en [rdpiano_juce/CMakeLists.txt](../rdpiano_juce/CMakeLists.txt). El código
-comentado se borró en su momento; lo que sabía, está aquí.
-
----
+**Alcance:** qué firmware ejecuta el emulador, por qué solo ese, y qué se sabe de los otros. Recoge lo que
+antes era código comentado en [mcu.cpp](../librdpiano/src/mcu.cpp) y en el `.jucer`, ya retirados.
 
 ## 1. Qué firmware se ejecuta
 
-El emulador carga **`roms/RD200_B.bin`** (8 KB) como ROM de programa de la CPU-B, y solo ese,
-aunque en `roms/` haya dumps de otras máquinas de la misma familia:
+Solo **`roms/RD200_B.bin`** (8 KB), como ROM de programa de la CPU-B:
 
 | Fichero | Máquina | Estado |
 |---|---|---|
 | `RD200_B.bin` | RD-1000 / RD-200, CPU-B | **El que se ejecuta** |
-| `RD200_A.bin` | RD-1000 / RD-200, CPU-A | No se emula: la CPU-A se sustituye por `sendMidiCmd()` |
-| `mks20_cpub_1.0.bin` | MKS-20, CPU-B v1.0 | Alternativa conocida; ver §2 |
-| `mks20_cpua_1.1.BIN` | MKS-20, CPU-A v1.1 | Idem CPU-A |
-| `MK80_B.bin`, `MKS20_A.BIN`, `MKS20_B.BIN` | Rhodes MK-80 / MKS-20 | Dumps, no usados por el emulador |
+| `RD200_A.bin` | RD-1000 / RD-200, CPU-A | No se emula: la sustituye `sendMidiCmd()` |
+| `mks20_cpub_1.0.bin` | MKS-20, CPU-B v1.0 | Alternativa conocida (§2) |
+| `mks20_cpua_1.1.BIN` | MKS-20, CPU-A v1.1 | Ídem CPU-A |
+| `MK80_B.bin`, `MKS20_A.BIN`, `MKS20_B.BIN` | Rhodes MK-80 / MKS-20 | Dumps sin usar |
+| `RD200_IC5/6/7/18.bin` | RD-1000, onda y parámetros | Dumps sin usar: ningún parche los referencia |
 
-Los dumps de **onda** (IC5/IC6/IC7) y de **parámetros** (IC18) sí se usan los tres juegos: son los
-que distinguen un parche MKS-20 de uno MK-80 ([patches.h](../librdpiano/include/patches.h)). Lo que
-está atado a una sola variante es el **firmware**, por lo que explica el apartado siguiente.
+De **onda y parámetros** se usan tres juegos (dos del MKS-20 y el del MK-80, `romSetFiles` en
+[patches.h](../librdpiano/include/patches.h)): son los que distinguen los parches. Lo atado a una sola
+variante es el **firmware**.
 
 ## 2. Por qué el firmware no es intercambiable: el handshake por PC
 
-`RdBoard::read` ([rd_board.h](../librdpiano/include/rd_board.h)) no implementa el bus de datos
-entre CPU-A y CPU-B: lo *simula* comparando el contador de programa con direcciones concretas de la
-rutina de recepción del firmware. Cuando la CPU está ejecutando una de esas instrucciones, el puerto
-1 devuelve el siguiente byte de la cola del `CommandPort`; el resto del tiempo devuelve `0xff`.
+No se emula la CPU-A ni el bus entre las dos. `RdBoard::read` ([rd_board.h](../librdpiano/include/rd_board.h))
+lo **simula** mirando el contador de programa: si la CPU está en una instrucción de la rutina de recepción
+del firmware, el puerto 1 entrega el siguiente byte de la cola del `CommandPort`; si no, `0xFF`.
+
+```mermaid
+sequenceDiagram
+    participant Q as CommandQueue
+    participant C as Rutina ICI de RD200_B
+    participant B as RdBoard::read
+    Q-->>C: cola no vacía, línea TIN, vector ICI
+    C->>B: puerto 2, espera DAV a 0, PC 0xE127
+    B-->>C: 0x00
+    C->>B: puerto 1, PC 0xE12B
+    B->>Q: front y pop
+    B-->>C: byte 1, el comando
+    opt comando con bit 7: 0xB0, 0xC0, 0xE0
+        C->>B: puerto 2, espera DAV a 1, PC 0xE15A
+        B-->>C: 0xFF
+        C->>B: puerto 1, PC 0xE15E
+        B-->>C: byte 2
+        C->>B: puerto 1 tras esperar DAV a 0, PC 0xE168
+        B-->>C: byte 3
+    end
+    C->>B: puerto 1 hasta leer 0xFF, PC fuera de la lista
+    B-->>C: 0xFF sin tocar la cola
+    C->>B: escribe puerto 2
+    B-->>C: baja TIN, RTI
+```
+
+El PC que se compara es el de la instrucción **siguiente** a la lectura (`LDAA P1DR` en `0xE129` → PC
+`0xE12B`), y los mensajes de un byte (`0x30`, `0x50`) no pasan por la rama de bit 7. Fuente:
+`re_stuff/disasm/rd200_rom_b.asm`, `hdlr_TMR_IC`.
 
 | Firmware | Puerto 1 (datos) | Puerto 2 (control) |
 |---|---|---|
 | `RD200_B.bin` (**en uso**) | `0xE12B`, `0xE15E`, `0xE168` | `0xE15A` |
 | `mks20_cpub_1.0.bin` | `0xE0E4`, `0xE111`, `0xE11B` | `0xE10D` |
 
-Cambiar de firmware **exige recalcular estas cuatro direcciones** desasistiendo la rutina de
-recepción del dump nuevo; no basta con sustituir el fichero. Las de MKS-20 de la tabla se
-verificaron en su momento y funcionaban, junto con el recurso `mks20_cpub_1.0.bin` empotrado en el
-plugin. Ese recurso se retiró al dejar de empotrarlo (ocupaba 8 KB en cada binario y nada lo
-referenciaba); el fichero sigue en `roms/` para quien quiera retomarlo.
-
-Ver también [ARQUITECTURA §4.2](ARQUITECTURA.md#42-el-handshake-cpu-a--cpu-b) y la trampa 1 de
-[CLAUDE.md](../CLAUDE.md).
+Cambiar de firmware **exige recalcular las cuatro direcciones** desensamblando su rutina de recepción
+(`re_stuff/disasm/`); sustituir el fichero no basta. Las del MKS-20 se verificaron en su día, con
+`mks20_cpub_1.0.bin` empotrado en el plugin; se dejó de empotrar (8 KB por binario que nada usaba) y el
+fichero sigue en `roms/`. Ver también la trampa 1 de [CLAUDE.md](../CLAUDE.md).
 
 ## 3. El bit de sample rate del puerto 2
 
-El firmware escribe en el puerto 2 (`0x0003`) un bit —`(data >> 2) & 1`— que en la máquina real
-selecciona la tasa de muestreo. El emulador lo leía en `Mcu::current_sample_rate`, pero **nunca
-llegó a funcionar**: el valor no se corresponde con la tasa real del parche. La tasa que se usa
-sale de `patchSampleRates[]` en [patches.h](../librdpiano/include/patches.h), tanto en el plugin
-como en el harness, y se le pasa a `generate_next_sample(bool sampleRate32)`.
-
-El campo se retiró por eso. Si alguien quiere retomarlo, el punto de partida es la escritura del
-puerto 2 en `RdBoard::write` y comparar el bit con la columna de `patchSampleRates[]`.
+El firmware escribe en el puerto 2 (`0x0003`) un bit, `(data >> 2) & 1`, que en la máquina real elige la
+tasa. El emulador lo leía en `Mcu::current_sample_rate`, pero **nunca funcionó**: no coincide con la tasa
+real del parche. El campo se retiró; la tasa sale de `patchSampleRates[]` y llega a
+`generate_next_sample(bool sampleRate32)`, en plugin y harness. Para retomarlo: la escritura del puerto 2
+en `RdBoard::write`, comparada con `patchSampleRates[]`.
 
 ## 4. El bucle de ejecución y su "failsafe"
 
-`Mcu::execute_run()` ejecuta **una** instrucción por llamada, y `generate_next_sample()` la llama
-100 veces (62 a 32 kHz) por muestra. Hubo una versión con bucle por presupuesto de ciclos, del
-estilo del `execute_run` de MAME:
+`Mcu::execute_run()` ejecuta **una instrucción** por llamada, y `generate_next_sample()` lo llama 100 veces
+(62 a 32 kHz) por muestra. Hubo un bucle por presupuesto de ciclos, al estilo de MAME:
 
 ```cpp
 do {
@@ -75,19 +89,16 @@ do {
 } while (m_icount > 0);
 ```
 
-Se abandonó porque el reloj maestro del emulador es el audio, no la CPU: quien decide cuánto corre
-la CPU es `generate_next_sample()`. Los estados `WAI`/`SLP` se atraviesan ejecutando instrucciones,
-no esperando.
+Se abandonó porque el reloj maestro es el audio: cuánto corre la CPU lo decide `generate_next_sample()`,
+y `WAI`/`SLP` se atraviesan ejecutando instrucciones, no esperando.
 
-`m_icount` sobrevivió un tiempo a ese cambio: `increment_counter()` lo iba restando y nadie lo
-recargaba, así que se volvía negativo en la primera instrucción, `eat_cycles()` dejaba de hacer nada
-y a los ~5,9 minutos de audio cruzaba `INT_MIN` —desbordamiento con signo, es decir UB, que
-`-fsanitize=undefined` aborta—. El campo y `increment_counter()` ya no existen;
-`eat_cycles()` se queda como no-op porque lo llaman `WAI` y `SLP` en `mcu_ops.h`, que es código de
-MAME y no se reescribe. La tabla `Mcu::cycles_63701[]` sí sigue ahí, como punto de partida para
-quien retome el modelo de ciclos.
+| Resto del modelo de ciclos | Estado |
+|---|---|
+| `m_icount` + `increment_counter()` | **Retirados.** Nadie recargaba el contador: negativo en la primera instrucción y desbordamiento con signo (UB, lo aborta `-fsanitize=undefined`) a los ~5,9 min de audio. |
+| `eat_cycles()` | No-op: lo llaman `WAI` y `SLP` en `mcu_ops.h`, código de MAME que no se reescribe. |
+| `Mcu::cycles_63701[]` | Se conserva como punto de partida para retomar el modelo. |
 
-Ojo con retomarlo: `execute_run()` ejecuta **una instrucción** por llamada, no un ciclo, y a ~3,5
-ciclos por instrucción las 100 llamadas por muestra salen a ~6,1 MHz efectivos frente a los 2 MHz
-del chip real. Cerrar ese factor 3 cambia la temporización del firmware y con ella el sonido: movería
-los 16 hashes de `golden.txt`, y eso el harness lo detecta pero no lo juzga.
+**Ojo al retomarlo:** a ~2,9 ciclos por instrucción de media (medido con `cycles_63701[]`, sin contar la
+entrada a interrupciones), 100 instrucciones por muestra a 20 kHz son ~5,8 MHz efectivos frente a los
+2 MHz del chip real. Cerrar ese factor ~3 cambia la temporización del firmware y el sonido: movería los 16
+hashes de `golden.txt`, que el harness detecta pero no juzga.

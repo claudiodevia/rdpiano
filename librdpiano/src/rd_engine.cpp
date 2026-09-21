@@ -168,7 +168,7 @@ RdPianoEngine::RdPianoEngine(const RdRomSet *sets, const u8 *prog) : romSets(set
 
     // Todo lo caro de cambiar de parche, hecho aquí y una sola vez: los tres
     // juegos de ROM de onda descifrados en su ranura del chip (~2,9 ms cada uno,
-    // 768 KB cada uno) y las 16 páginas de parámetros (32 KB cada una). A partir
+    // 512 KB cada uno) y las 16 páginas de parámetros (32 KB cada una). A partir
     // de ahí un cambio de parche es activar una ranura y copiar una página, que
     // es lo que lo hace posible desde el hilo de audio.
     for (int s = 0; s < ROMSET_COUNT; s++)

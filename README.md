@@ -24,13 +24,18 @@ tocar por su cuenta.
 
 > ℹ️ **No son grabaciones.** RdPiano funciona por dentro como la máquina de verdad: se reconstruyó
 > pieza a pieza lo que hacía el aparato al pulsar una tecla, y cada nota se calcula igual que la
-> calculaba él. El chorus y el trémolo son la única excepción: ahí la imitación es aproximada.
+> calculaba él, efectos incluidos. El trémolo es la única excepción: ahí la imitación es aproximada.
 
 ---
 
 ## Instalación
 
 > 💻 Necesitas un Mac con macOS 11 o posterior. Da igual que sea Apple o Intel: el archivo es el mismo.
+
+```mermaid
+flowchart LR
+    a["1 · Descargar"] --> b["2 · Guardar en su carpeta"] --> c["3 · Permitir que se abra"] --> d["4 · A tocar"]
+```
 
 ### Paso 1 · Descarga el que uses
 
@@ -136,12 +141,8 @@ y vuelve a abrirlo. Logic Pro, la primera vez, tarda unos segundos en revisarlo.
 
 ## Compilar desde el código
 
-> 🧑‍💻 **Para gente con experiencia.** Si sólo quieres tocar RdPiano, no hace falta: con la
-> [instalación](#instalación) de arriba es suficiente.
-
-Quien quiera tocar el código o ir por delante de la última versión publicada tiene los pasos, los
-formatos y el mapa del repositorio en **[COMPILAR.md](COMPILAR.md)**, junto con la documentación
-técnica del proyecto.
+> 🧑‍💻 **Para gente con experiencia.** Para tocar basta con la [instalación](#instalación). Los pasos para
+> compilar, el mapa del repositorio y la documentación técnica están en **[COMPILAR.md](COMPILAR.md)**.
 
 ---
 

@@ -194,7 +194,7 @@ class RdPianoEngine
      *
      * La petición la atiende render(): baja la salida a cero en 6 ms, cambia y
      * vuelve a subir. Las repeticiones se colapsan, así que barrer el dial no
-     * encadena cambios. RT-safe: un `exchange` y nada más.
+     * encadena cambios. RT-safe: un `store` atómico y nada más.
      *
      * @param patch Parche, 0..NUM_PATCHES-1.
      */
