@@ -201,7 +201,7 @@ TEST_SUITE(engine_block_invariance)
     // bit a bit el mismo y no puede serlo: `renderBufferFrames` se redondea
     // hacia arriba y el corrector de deriva resta hasta numFrames/4, así que el
     // troceado cambia cuántas muestras genera el emulador (con algún hueco
-    // corto audible como clic; defecto conocido, docs/REFACTORIZACION.md §19).
+    // corto audible como clic; defecto conocido).
     //
     // Lo que sí se fija: misma longitud, mismo nivel, mismo rango de pendientes
     // —que es lo que rompería un estado guardado en una variable local del

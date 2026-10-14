@@ -42,8 +42,8 @@ include_directories("include")
 # library target
 #
 # Ademas del emulador, aqui viven los efectos (lsp/) y el resampler
-# (resample/): son C/C++ puro sin nada de JUCE, y desde la fase 2 el motor de
-# audio los usa (REFACTORIZACION §1). El plugin los compila desde aqui.
+# (resample/): son C/C++ puro sin nada de JUCE, y el motor de audio los usa.
+# El plugin los compila desde aqui.
 add_library(librdpiano src/mcu.cpp src/rd_board.cpp src/sound_chip.cpp src/sa_tables.cpp
     src/rom_loader.cpp src/command_port.cpp src/rd_trace.cpp
     src/lsp/spaced.cpp src/lsp/phaser.cpp
@@ -67,7 +67,7 @@ target_link_libraries(rdpiano_e2e librdpiano)
 target_include_directories(rdpiano_e2e PRIVATE test)
 
 # suite unitaria: sin emular audio, tiene que terminar en menos de un segundo.
-# Lista explicita de fuentes, sin glob (REFACTORIZACION §17.2).
+# Lista explicita de fuentes, sin glob.
 add_executable(rdpiano_tests
     test/unit/main.cpp
     test/unit/test_board.cpp

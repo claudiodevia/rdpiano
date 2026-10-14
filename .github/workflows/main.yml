@@ -7,8 +7,8 @@ on:
       - '**'
 
 # El mínimo para todo el workflow; el job `release` se sube a `contents: write`
-# por su cuenta. Sin este bloque, cada job heredaba los permisos por omisión del
-# repositorio (AUDITORIA §17).
+# por su cuenta. Sin este bloque, cada job heredaría los permisos por omisión
+# del repositorio.
 permissions:
   contents: read
 
@@ -37,8 +37,7 @@ jobs:
     steps:
     - uses: actions/checkout@v7.0.1
     # La misma red, con AddressSanitizer. El harness tarda ~40 s en vez de ~3,
-    # pero es lo que caza los desbordes que un hash idéntico no ve
-    # (REFACTORIZACION §16.2).
+    # pero es lo que caza los desbordes que un hash idéntico no ve.
     - name: "Configurar librdpiano con ASan"
       run: cmake -S librdpiano -B build/core-asan -DRDPIANO_SANITIZE=ON -DCMAKE_BUILD_TYPE=RelWithDebInfo
       shell: bash
@@ -59,9 +58,8 @@ jobs:
     - name: "Download JUCE"
       run: sh ./scripts/download-juce.sh
       shell: bash
-    # Desde la fase 3 el plugin sale del CMakeLists de la raíz, no del
-    # Projucer (REFACTORIZACION §16.3). El script sigue siendo el mismo punto
-    # de entrada; ALL son los cinco formatos —el script exige el argumento, no
+    # El plugin sale del CMakeLists de la raíz y el script es el punto de
+    # entrada; ALL son los cinco formatos —el script exige el argumento, no
     # tiene defecto.
     - name: "Build macOS"
       run: sh ./scripts/build-osx.sh ALL
@@ -75,8 +73,8 @@ jobs:
       shell: bash
     - name: "zip macOS"
       run: |
-           # Cada bundle en la raíz de su zip, como antes de la fase 3: la
-           # API CMake de JUCE los deja en un subdirectorio por formato.
+           # Cada bundle en la raíz de su zip: la API CMake de JUCE los deja
+           # en un subdirectorio por formato.
            OUT=$PWD/build/plugin/rdpiano_juce/rdpiano_juce_artefacts/Release
            (cd "$OUT/VST3" && zip -r "$OUT/rdpiano_juce.vst3.macOS.zip" rdpiano_juce.vst3)
            (cd "$OUT/AU" && zip -r "$OUT/rdpiano_juce.component.macOS.zip" rdpiano_juce.component)
@@ -113,7 +111,7 @@ jobs:
       # la que subir. Va fijada al SHA de v1.2.1, no a una etiqueta: `@latest`
       # —y también `@v1.2.1`— es un puntero mutable en un repositorio de
       # terceros, y este paso corre con permiso de escritura sobre las
-      # releases que descargan los usuarios (AUDITORIA §17). Migrar a
+      # releases que descargan los usuarios. Migrar a
       # `softprops/action-gh-release` es lo que toca, pero cambia la semántica
       # del release rodante: ésta reescribe el tag `latest` en cada ejecución
       # y aquélla no lo mueve si ya existe.

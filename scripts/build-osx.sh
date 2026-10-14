@@ -1,7 +1,6 @@
 #!/bin/sh
-# Compila el plugin desde el CMakeLists de la raíz. Desde la fase 3 no hay
-# Projucer ni .jucer: el mismo sistema de build construye el núcleo, sus
-# pruebas y el plugin (REFACTORIZACION §16.3).
+# Compila el plugin desde el CMakeLists de la raíz, el mismo sistema de build
+# que construye el núcleo y sus pruebas (no hay Projucer ni .jucer).
 #
 # Recibe el formato a compilar como primer argumento —AU, AUv3, LV2, Standalone,
 # VST3 o ALL—, porque compilar los cinco es caro y casi nunca hace falta:

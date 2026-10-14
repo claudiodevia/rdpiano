@@ -1,15 +1,13 @@
-# El plugin, con la API CMake de JUCE (REFACTORIZACION §16.3, fase 3).
+# El plugin, con la API CMake de JUCE.
 #
-# Sustituye a `rdpiano_juce.jucer` + Projucer. Los valores de aquí son los que
-# tenía el `.jucer`, uno a uno: el `.vst3`, el `.component`, el `.app` y el
-# `.appex` que salen de este fichero llevan el mismo nombre, el mismo bundle id
-# (`com.GiulioZausa.rdpiano`) y los mismos códigos de fabricante y de plugin, de
-# forma que un host que ya tenga sesiones guardadas los siga reconociendo.
+# El `.vst3`, el `.component`, el `.app` y el `.appex` que salen de este fichero
+# conservan el nombre, el bundle id (`com.GiulioZausa.rdpiano`) y los códigos de
+# fabricante y de plugin del `.jucer` original, de forma que un host que ya
+# tenga sesiones guardadas los siga reconociendo.
 #
-# Lo que cambia es de dónde sale el núcleo: el `.jucer` listaba las fuentes de
-# `librdpiano/src/` una por una y las recompilaba; aquí se enlaza el target
-# `librdpiano` que construye `librdpiano/CMakeLists.txt`. Añadir un `.cpp` al
-# núcleo ya no obliga a tocar nada de este directorio.
+# El núcleo no se recompila aquí: se enlaza el target `librdpiano` que construye
+# `librdpiano/CMakeLists.txt`. Añadir un `.cpp` al núcleo no obliga a tocar nada
+# de este directorio.
 
 # Objetivo de despliegue: macOS 11 (Big Sur).
 #
@@ -132,7 +130,7 @@ foreach(fmt IN ITEMS AU AUv3 LV2 Standalone VST3)
   endif()
 endforeach()
 
-# Ida y vuelta de presets sin abrir un DAW (REFACTORIZACION §17.7). Es una app
+# Ida y vuelta de presets sin abrir un DAW. Es una app
 # de consola que enlaza el mismo código compartido que los cinco formatos:
 # instancia el AudioProcessor de verdad y le pide getStateInformation /
 # setStateInformation. Sólo es posible desde que el plugin se construye con

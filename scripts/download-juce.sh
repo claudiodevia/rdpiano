@@ -11,10 +11,10 @@
 # toca, el script no hace nada. `--forzar` lo baja igualmente (árbol a medias,
 # tocado a mano...).
 #
-# Desde la fase 3 el plugin se construye con la API CMake de JUCE
-# (juce_add_plugin), asi que lo que hace falta del zip es el arbol de fuentes
-# completo: juce/CMakeLists.txt, juce/modules y juce/extras/Build, de donde sale
-# juceaide. El Projucer que trae el zip ya no se usa.
+# El plugin se construye con la API CMake de JUCE (juce_add_plugin), asi que
+# lo que hace falta del zip es el arbol de fuentes completo: juce/CMakeLists.txt,
+# juce/modules y juce/extras/Build, de donde sale juceaide. El Projucer que trae
+# el zip no se usa.
 #
 # La salida de curl y unzip va a logs/download-juce-<fecha>-<hora>.log; por
 # pantalla sólo pasan las etiquetas de cada paso. El andamiaje (colores, log,

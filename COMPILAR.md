@@ -40,20 +40,22 @@ se repite.
 |---|---|
 | `librdpiano/` | El emulador y la cadena de audio completa, sin dependencias externas. Aquí vive la lógica real. |
 | `rdpiano_juce/` | El plugin (VST3, AU, AUv3, LV2 y Standalone), construido con JUCE. |
-| `roms/` | Los volcados de ROM, empotrados en el binario al compilar. |
+| `roms/` | Los volcados de ROM; los que usa el plugin van empotrados en el binario al compilar. |
 | `re_stuff/` | Material de la ingeniería inversa (Verilog, desensamblados), con fines educativos. No se compila. |
-| `scripts/` | Los dos scripts de compilación, los mismos que ejecuta la CI. |
+| `scripts/` | Los dos scripts de compilación, los mismos que ejecuta la CI, y `verificar.sh`, que corre en tu máquina las mismas pruebas que la CI. |
 | `docs/` | Documentación técnica (abajo). |
 
 Todo lo generado, JUCE incluido, vive bajo `build/`: `rm -rf build` deja el árbol recién clonado.
 
-El núcleo se compila y se prueba sin JUCE (configurado así, con AddressSanitizer; la app interactiva
-`rdpiano_standalone` solo se genera si hay SDL2 y portmidi):
+Para comprobar un cambio antes de subirlo, `verificar.sh` corre en tu máquina las mismas pruebas que la CI:
 
 ```bash
-cmake -S librdpiano -B build/core && cmake --build build/core
-ctest --test-dir build/core --output-on-failure
+sh scripts/verificar.sh rapido   # solo el núcleo, sin JUCE (unos 15 s)
+sh scripts/verificar.sh          # todo: núcleo, núcleo con AddressSanitizer y plugin (necesita build/juce)
 ```
+
+Si hay SDL2 y portmidi, después se puede compilar la app interactiva del núcleo:
+`cmake --build build/core --target rdpiano_standalone`.
 
 ## Documentación técnica
 
@@ -65,5 +67,5 @@ de ese firmware.
 |---|---|
 | [ARQUITECTURA.md](docs/ARQUITECTURA.md) | Cómo está construido el sistema, con diagramas. |
 | [FIRMWARE.md](docs/FIRMWARE.md) | Qué programa interno ejecuta y por qué solo ése. |
-| [REVISION-CODIGO.md](docs/REVISION-CODIGO.md) | La revisión del código y lo que se hizo con cada hallazgo. |
+| [REVISION-CODIGO.md](docs/REVISION-CODIGO.md) | Lo que queda pendiente de la revisión del código. |
 | [CLAUDE.md](CLAUDE.md) | Trampas antes de tocar nada, cifras medidas, pruebas y convenciones. |

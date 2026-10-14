@@ -1,6 +1,6 @@
 # Arquitectura de RdPiano
 
-**Alcance:** `librdpiano/`, `rdpiano_juce/`, `roms/`, build y CI. **Árbol:** `develop` @ `db47f7b` (2026-09-21).
+**Alcance:** `librdpiano/`, `rdpiano_juce/`, `roms/`, build y CI. **Árbol:** `develop` @ `55545df` (2026-10-14).
 
 Este documento dice *cómo está construido* el sistema. Lo demás vive en su sitio:
 
@@ -8,8 +8,9 @@ Este documento dice *cómo está construido* el sistema. Lo demás vive en su si
 |---|---|
 | Trampas (leer **antes** de modificar), cifras medidas, build, convenciones | [CLAUDE.md](../CLAUDE.md) |
 | Qué firmware corre, handshake por PC, bit de sample rate, bucle de CPU | [FIRMWARE.md](FIRMWARE.md) |
-| Qué se revisó y qué se hizo con ello | [REVISION-CODIGO.md](REVISION-CODIGO.md) |
+| Lo pendiente de la revisión de código | [REVISION-CODIGO.md](REVISION-CODIGO.md) |
 | Compilar e instalar | [COMPILAR.md](../COMPILAR.md) |
+| Instalar el plugin y novedades por versión | [README.md](../README.md), [CHANGELOG.md](../CHANGELOG.md) |
 
 ## Índice
 
@@ -253,7 +254,7 @@ Escritura en el chip: `voz = offset / 0x100`, `parte = (offset % 0x100) / 0x10`,
 
 | Campo | 0 / 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8–F |
 |---|---|---|---|---|---|---|---|---|
-| Registro | pitch hi / lo | loop | dirección alta de onda | destino env. | velocidad env. | flags (van a la parte 0: son de voz) | offset env. | se descartan |
+| Registro | pitch hi / lo | loop | dirección alta de onda | destino env. | velocidad env. | flags (van a la parte 0: son de voz) | offset env. | se descartan (RD200 solo escribe ahí ceros de arranque) |
 
 Los dos hacks de `update()` (trampa 3, fijados por los 2.256 vectores de `test/vectors/ic_blocks.txt`):
 el atajo `env_value == 0 && env_dest == 0` (salta el slot y pone `sub_phase` a 0: tiene efecto funcional)
@@ -293,7 +294,7 @@ Parche = juego de ROM de onda + offset en la params ROM + tasa. Seis tablas para
 Lo caro se hace **al construir el motor** (~9 ms): los 3 juegos descifrados en su ranura del
 `SoundChip` y las 16 páginas de params (32 KB cada una) en `RdPianoEngine`. Cambiar de parche después:
 
-1. `selectRomSet()`: mover un puntero, solo si cambia el juego.
+1. `selectRomSet()`: mover un puntero, solo si cambia el juego (`decodeRomSet`/`selectRomSet` suben por `RdBoard` y `Mcu`).
 2. `selectPatchPage()`: `memcpy` de 32 KB a `params_rom[0x8000]` (banco 1).
 3. Parchear `params_rom[0x00-0x02]` = `{0x01, hi, lo}`: un puntero *banco + dirección* en `0x4000` que
    lleva al firmware al parche elegido **sin tocar el firmware**.
@@ -559,12 +560,12 @@ Después la muestra sigue la cadena de §5.2.
 
 | Suite | Qué es | Tamaño |
 |---|---|---|
-| `rdpiano_tests` | Unitaria, `librdpiano/test/unit/` | 56 suites, 522 comprobaciones, ~5,5 s |
-| `rdpiano_e2e` | Harness bit-exacto contra `golden.txt` | 16 parches, ~2,5 s |
+| `rdpiano_tests` | Unitaria, `librdpiano/test/unit/` | 56 suites, 522 comprobaciones, ~8 s |
+| `rdpiano_e2e` | Harness bit-exacto contra `golden.txt` | 16 parches, ~3 s |
 | `rdpiano_plugin_tests` | Presets, programas, buses, latencia y cola | 8 suites, 108 comprobaciones |
 
-Qué fija cada suite, la red de transitorios de `test_engine.cpp` y la regla sobre golden y vectores:
-CLAUDE.md, *Verificar cambios*. Ninguna prueba juzga el **timbre** ni la UI.
+`sh scripts/verificar.sh` corre en local lo mismo que la CI. Qué fija cada suite, la red de transitorios de
+`test_engine.cpp` y la regla sobre golden y vectores: CLAUDE.md, *Verificar cambios*. Ninguna prueba juzga el **timbre** ni la UI.
 
 ## 10. Plataforma, build y CI
 
@@ -582,7 +583,7 @@ pero solo se compila en **macOS**: C++23 (C23 en `resample/`), JUCE 9.0.1, CMake
 Bajo `build/plugin/rdpiano_juce/rdpiano_juce_artefacts/Release/`, siempre universal (`arm64;x86_64`).
 Sin firma ni notarización: el README explica el `xattr` de cuarentena. Recursos empotrados como
 `BinaryData`: el plugin es autocontenido. Scripts, destinos de `install` y versión: CLAUDE.md, *Build* y
-*Versión*.
+*Convenciones*.
 
 ```mermaid
 flowchart LR
@@ -618,7 +619,7 @@ No se compila. Rastro de la ingeniería inversa:
 
 ## 12. Puntos frágiles
 
-Decisiones que condicionan el trabajo futuro (los fallos concretos están en
+Decisiones que condicionan el trabajo futuro (lo que queda por corregir está en
 [REVISION-CODIGO.md](REVISION-CODIGO.md)):
 
 | # | Punto | Por qué pesa |
@@ -628,7 +629,7 @@ Decisiones que condicionan el trabajo futuro (los fallos concretos están en
 | 3 | Parche ↔ tasa de muestreo | Decide el ritmo de los LFO y obliga a dimensionar para 32 kHz; la tasa vive en `patchSampleRates[]` porque el bit del puerto 2 no funciona. |
 | 4 | Dos hacks en `SoundChip::update()` | Parches sobre síntomas (`investigate`); el atajo decide qué slots se procesan. |
 | 5 | Nadie juzga el timbre | Golden y vectores detectan cambios, no regresiones: hay que escuchar. |
-| 6 | Memoria por instancia ≈ 2,4 MB | `SoundChip` 1,5 MB + páginas de params 512 KB + `RdBoard` 140 KB + ERAM de SpaceD 256 KB; las LUT (320 KB) se comparten. Es el precio de cambiar de parche en µs. |
+| 6 | Memoria por instancia ≈ 3,75 MB | Fijos ≈ 2,4 MB (`SoundChip` 1,5 MB + páginas de params 512 KB + `RdBoard` 140 KB + ERAM de SpaceD 256 KB) + ~1,2 MB de búferes de `prepare()` y libresample; las LUT (320 KB) se comparten. Lo fijo es el precio de cambiar de parche en µs. |
 | 7 | Bus de entrada imprescindible | Incorrecto de libro, pero sin él Logic no carga la AU (trampa 12). |
 
 *Cuando código y documento discrepen, manda el código.*

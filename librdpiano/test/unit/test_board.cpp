@@ -403,9 +403,9 @@ TEST_SUITE(board_sound_chip_window)
 }
 
 /**
- * @brief AUDITORIA §14. Cada part ocupa 16 bytes del mapa, pero sólo tiene 8 registros: `offset % 8` plegaba
- *        +8..+F sobre +0..+7 en silencio. La red es la respuesta del propio chip —armar una voz y hashear 256
- *        muestras—, porque los registros no se pueden releer.
+ * @brief Cada part ocupa 16 bytes del mapa, pero sólo tiene 8 registros: +8..+F se descartan, no se pliegan sobre
+ *        +0..+7. La red es la respuesta del propio chip —armar una voz y hashear 256 muestras—, porque los
+ *        registros no se pueden releer.
  */
 TEST_SUITE(board_sound_chip_part_fields)
 {
@@ -464,9 +464,9 @@ TEST_SUITE(board_sound_chip_part_fields)
 }
 
 /**
- * @brief AUDITORIA §15. `reset()` reiniciaba los registros de la CPU y nada más: RAM, latch, chip de sonido y
- *        cola de comandos sobrevivían. La cola era la peor —el handshake la consume en direcciones fijas del
- *        firmware, trampa 1—, y las ROM y la página de params sí tienen que sobrevivir (trampa 8).
+ * @brief `reset()` reinicia, además de los registros de la CPU, RAM, latch, chip de sonido y cola de comandos (la
+ *        cola es la delicada: el handshake la consume en direcciones fijas del firmware, trampa 1); las ROM y la
+ *        página de params sobreviven (trampa 8).
  */
 TEST_SUITE(board_reset)
 {

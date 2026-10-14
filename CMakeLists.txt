@@ -1,13 +1,7 @@
 cmake_minimum_required(VERSION 3.22)
 
-# Un solo sistema de build (REFACTORIZACION §16.3, fase 3).
-#
-# Hasta la fase 2 había dos sin relación: `librdpiano/CMakeLists.txt` para el
-# núcleo y sus pruebas, y `rdpiano_juce.jucer` → Projucer → Xcode para el
-# plugin. Los dos compilaban las mismas fuentes por caminos distintos y con
-# flags distintos, y añadir un `.cpp` al núcleo obligaba a editar un XML con
-# `id` inventados a mano. Desde aquí se construye todo: el núcleo, sus pruebas
-# y el plugin, que enlaza `librdpiano` en vez de recompilarla.
+# Un solo sistema de build: desde aquí se construye todo, el núcleo, sus
+# pruebas y el plugin, que enlaza `librdpiano` en vez de recompilarla.
 #
 #   cmake -B build/plugin -DCMAKE_BUILD_TYPE=Release
 #   cmake --build build/plugin --target rdpiano_juce_All   # el plugin
