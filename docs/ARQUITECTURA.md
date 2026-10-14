@@ -256,7 +256,7 @@ Escritura en el chip: `voz = offset / 0x100`, `parte = (offset % 0x100) / 0x10`,
 |---|---|---|---|---|---|---|---|---|
 | Registro | pitch hi / lo | loop | dirección alta de onda | destino env. | velocidad env. | flags (van a la parte 0: son de voz) | offset env. | se descartan (RD200 solo escribe ahí ceros de arranque) |
 
-Los dos hacks de `update()` (trampa 3, fijados por los 2.256 vectores de `test/vectors/ic_blocks.txt`):
+Los dos hacks de `update()` (trampa 3; solo los vigila el golden de e2e, no los vectores de `test/vectors/ic_blocks.txt`):
 el atajo `env_value == 0 && env_dest == 0` (salta el slot y pone `sub_phase` a 0: tiene efecto funcional)
 y el silenciado `if (env_value != 0)` *"investigate"*.
 
@@ -560,12 +560,12 @@ Después la muestra sigue la cadena de §5.2.
 
 | Suite | Qué es | Tamaño |
 |---|---|---|
-| `rdpiano_tests` | Unitaria, `librdpiano/test/unit/` | 56 suites, 522 comprobaciones, ~8 s |
+| `rdpiano_tests` | Unitaria, `librdpiano/test/unit/` | 61 suites, 576 comprobaciones, ~10 s |
 | `rdpiano_e2e` | Harness bit-exacto contra `golden.txt` | 16 parches, ~3 s |
-| `rdpiano_plugin_tests` | Presets, programas, buses, latencia y cola | 8 suites, 108 comprobaciones |
+| `rdpiano_plugin_tests` | Presets, programas, buses, latencia, cola y MIDI | 11 suites, 124 comprobaciones |
 
 `sh scripts/verificar.sh` corre en local lo mismo que la CI. Qué fija cada suite, la red de transitorios de
-`test_engine.cpp` y la regla sobre golden y vectores: CLAUDE.md, *Verificar cambios*. Ninguna prueba juzga el **timbre** ni la UI.
+`test_engine_*.cpp` (con el hash `engine_golden`) y la regla sobre golden y vectores: CLAUDE.md, *Verificar cambios*. Ninguna prueba juzga el **timbre** ni la UI.
 
 ## 10. Plataforma, build y CI
 
@@ -588,9 +588,9 @@ Sin firma ni notarización: el README explica el `xattr` de cuarentena. Recursos
 ```mermaid
 flowchart LR
     push["push a cualquier rama"]
-    t1["test-core: ctest sin ASan"]
-    t2["test-core-asan: ctest con ASan"]
-    b["build-osx: ALL + plugin_state + zip"]
+    t1["test-core: verificar.sh nucleo"]
+    t2["test-core-asan: verificar.sh asan"]
+    b["build-osx: verificar.sh plugin + zip"]
     rel["release: tag latest"]
     push --> t1
     push --> t2

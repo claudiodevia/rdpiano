@@ -166,6 +166,7 @@ class RdBoard
     void reset();
 
     CommandPort &commandPort() { return command_port; }
+    const CommandPort &commandPort() const { return command_port; }
     SoundChip &soundChip() { return sound_chip; }
 
     /** @brief Sólo para las pruebas del mapa: el latch de banco no tiene otro lector. */

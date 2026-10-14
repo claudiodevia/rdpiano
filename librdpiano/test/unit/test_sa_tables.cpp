@@ -10,30 +10,19 @@
 
 #include "sa_tables.h"
 
-static u64 fnv1a(const void *data, size_t n)
-{
-    const unsigned char *b = (const unsigned char *)data;
-    u64 h = 0xcbf29ce484222325ull;
-    for (size_t i = 0; i < n; i++)
-    {
-        h ^= b[i];
-        h *= 0x100000001b3ull;
-    }
-    return h;
-}
-
 /**
  * @brief Capturados con el generador original de sound_chip.cpp.
  */
 static constexpr u64 PHASE_EXP_HASH = 0x94e2a43f3db60011ull;
 static constexpr u64 SAMPLES_EXP_HASH = 0xba26c216dad20d95ull;
 
+/** @brief Las dos tablas, byte a byte por hash. */
 TEST_SUITE(sa_tables_hashes)
 {
     const SaTables &t = sa_tables();
 
-    CHECK_HASH("phase_exp", fnv1a(t.phase_exp, sizeof t.phase_exp), PHASE_EXP_HASH);
-    CHECK_HASH("samples_exp", fnv1a(t.samples_exp, sizeof t.samples_exp), SAMPLES_EXP_HASH);
+    CHECK_HASH("phase_exp", Fnv1a::of(t.phase_exp, sizeof t.phase_exp), PHASE_EXP_HASH);
+    CHECK_HASH("samples_exp", Fnv1a::of(t.samples_exp, sizeof t.samples_exp), SAMPLES_EXP_HASH);
 }
 
 /**
@@ -43,7 +32,8 @@ TEST_SUITE(sa_tables_hashes)
 TEST_SUITE(sa_tables_shared) { CHECK(&sa_tables() == &sa_tables()); }
 
 /**
- * @brief ...y tiene que coincidir con lo que produce el generador en frío.
+ * @brief La instancia compartida coincide con lo que produce el generador en frío, y cada tabla cabe en su
+ *        ancho de bits.
  */
 TEST_SUITE(sa_tables_generator_matches)
 {

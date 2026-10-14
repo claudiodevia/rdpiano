@@ -7,78 +7,13 @@
  * una CPU de mentira.
  */
 
-#include <stdio.h>
-
-#include <string>
 #include <vector>
 
 #include "patches.h"
 #include "rd_board.h"
+#include "rom_files.h"
 #include "rom_loader.h"
 #include "unit_test.h"
-
-/**
- * @brief La ROM de programa se acota sobre un array de 0x2000. Esta suite fija la equivalencia con la máscara
- *        `& 0xdfff` de antes en el único rango que el bus puede producir: addr >= 0xc000, luego offset
- *        0..0x3fff.
- */
-TEST_SUITE(board_program_rom_mask)
-{
-    int mismatches = 0;
-    int outOfRange = 0;
-
-    for (int addr = 0xc000; addr <= 0xffff; addr++)
-    {
-        int offset = addr - 0xc000;
-        if ((offset & 0xdfff) != (offset & 0x1fff))
-            mismatches++;
-        if ((offset & 0x1fff) >= 0x2000)
-            outOfRange++;
-    }
-
-    CHECK_EQ(mismatches, 0);
-    CHECK_EQ(outOfRange, 0);
-
-    // La equivalencia es del rango, no de las máscaras: fuera de él discrepan.
-    // Si algún día el bus entrega offsets mayores, `& 0xdfff` no habría sido
-    // el equivalente inocente que parecía.
-    CHECK((0x4000 & 0xdfff) != (0x4000 & 0x1fff));
-}
-
-/**
- * @brief La página de params se direcciona con `(addr - 0x4000) | ((latch & 0b11) << 15)` sobre un array de
- *        0x20000. El OR solo es una suma si el offset no invade los bits del banco: esto lo comprueba para
- *        todo el rango y los cuatro bancos.
- */
-TEST_SUITE(board_params_bank)
-{
-    size_t maxOffset = 0;
-    size_t maxIndex = 0;
-
-    for (int latch = 0; latch < 4; latch++)
-    {
-        for (int addr = 0x4000; addr <= 0xbfff; addr++)
-        {
-            size_t offset = (size_t)(addr - 0x4000);
-            size_t index = offset | ((size_t)(latch & 0b11) << 15);
-
-            if (offset > maxOffset)
-                maxOffset = offset;
-            if (index > maxIndex)
-                maxIndex = index;
-
-            // sin solape, el OR y la suma coinciden
-            if (index != offset + ((size_t)(latch & 0b11) << 15))
-                maxIndex = 0xffffffff;
-        }
-    }
-
-    CHECK_EQ(maxOffset, 0x7fff);
-    CHECK(maxIndex < 0x20000);
-}
-
-// ---------------------------------------------------------------------------
-// El mapa de verdad, con una CPU de mentira.
 
 namespace
 {
@@ -123,20 +58,6 @@ namespace
         }
     };
 
-    std::vector<u8> read_rom(const std::string &name, size_t want)
-    {
-        std::vector<u8> buf;
-        FILE *f = fopen((g_roms_dir + "/" + name).c_str(), "rb");
-        if (!f)
-            return buf;
-        buf.resize(want);
-        size_t got = fread(buf.data(), 1, want, f);
-        fclose(f);
-        if (got != want)
-            buf.clear();
-        return buf;
-    }
-
     /**
      * @brief Todo lo que hace falta para levantar una placa: las cuatro ROM del MK-80 y el firmware.
      *
@@ -145,17 +66,16 @@ namespace
      */
     struct Fixture
     {
-        std::vector<u8> ic5, ic6, ic7, ic18, prog;
+        RomCache roms;
+        RdRomSet set;
+        const u8 *prog = nullptr;
         bool ok = false;
 
         Fixture()
         {
-            ic5 = read_rom(romSetFiles[ROMSET_MK80][ROM_IC5], WAVE_ROM_SIZE);
-            ic6 = read_rom(romSetFiles[ROMSET_MK80][ROM_IC6], WAVE_ROM_SIZE);
-            ic7 = read_rom(romSetFiles[ROMSET_MK80][ROM_IC7], WAVE_ROM_SIZE);
-            ic18 = read_rom(romSetFiles[ROMSET_MK80][ROM_IC18], WAVE_ROM_SIZE);
-            prog = read_rom(PROG_ROM_FILE, PROG_ROM_SIZE);
-            ok = !ic5.empty() && !ic6.empty() && !ic7.empty() && !ic18.empty() && !prog.empty();
+            roms.dir = g_roms_dir;
+            prog = roms.get(PROG_ROM_FILE, PROG_ROM_SIZE);
+            ok = roms.romSet(ROMSET_MK80, set) && prog != nullptr;
         }
     };
 
@@ -165,6 +85,18 @@ namespace
         return f;
     }
 
+    /** @brief Una placa recién construida con la CPU de mentira enchufada. */
+    struct BoardUnderTest
+    {
+        FakeCpu cpu;
+        RdBoard board;
+
+        explicit BoardUnderTest(const Fixture &f) : board(f.set.ic5, f.set.ic6, f.set.ic7, f.prog, f.set.ic18)
+        {
+            board.attach(&cpu);
+        }
+    };
+
 } // namespace
 
 /**
@@ -173,15 +105,10 @@ namespace
 TEST_SUITE(board_memory_map)
 {
     const Fixture &f = fixture();
-    if (!f.ok)
-    {
-        printf("    (nota: ROMs no encontradas en %s, se omite)\n", g_roms_dir.c_str());
-        return;
-    }
+    ROMS_OR_FAIL(f.ok);
 
-    FakeCpu cpu;
-    RdBoard board(f.ic5.data(), f.ic6.data(), f.ic7.data(), f.prog.data(), f.ic18.data());
-    board.attach(&cpu);
+    BoardUnderTest t(f);
+    auto &[cpu, board] = t;
 
     // RAM: 0x0020-0x0FFF. Por debajo de 0x20 el bus son registros, no memoria.
     int ramMismatches = 0;
@@ -221,17 +148,15 @@ TEST_SUITE(board_memory_map)
 TEST_SUITE(board_program_rom)
 {
     const Fixture &f = fixture();
-    if (!f.ok)
-        return;
+    ROMS_OR_FAIL(f.ok);
 
-    FakeCpu cpu;
-    RdBoard board(f.ic5.data(), f.ic6.data(), f.ic7.data(), f.prog.data(), f.ic18.data());
-    board.attach(&cpu);
+    BoardUnderTest t(f);
+    auto &[cpu, board] = t;
 
     // Lo que la placa entrega es exactamente lo que `decode_program_rom` produce
     // del dump: si el mapa se equivocara de offset, esto lo vería.
     std::vector<u8> expected(PROG_ROM_BYTES);
-    decode_program_rom(expected.data(), f.prog.data());
+    decode_program_rom(expected.data(), f.prog);
 
     int mismatches = 0;
     for (size_t i = 0; i < PROG_ROM_BYTES; i++)
@@ -258,17 +183,15 @@ TEST_SUITE(board_program_rom)
 TEST_SUITE(board_params_page)
 {
     const Fixture &f = fixture();
-    if (!f.ok)
-        return;
+    ROMS_OR_FAIL(f.ok);
 
-    FakeCpu cpu;
-    RdBoard board(f.ic5.data(), f.ic6.data(), f.ic7.data(), f.prog.data(), f.ic18.data());
-    board.attach(&cpu);
+    BoardUnderTest t(f);
+    auto &[cpu, board] = t;
 
-    // La placa arranca con el parche 0 mapeado; se compara contra la página que
+    // Con el parche 8 mapeado, se compara contra la página que
     // `decode_params_page` produce por su cuenta para el mismo offset.
     std::vector<u8> expected(PARAMS_ROM_BYTES);
-    decode_params_page(expected.data(), f.ic18.data(), patchToOffset[8]);
+    decode_params_page(expected.data(), f.set.ic18, patchToOffset[8]);
     board.selectPatch(patchToOffset[8]);
 
     int mismatches = 0;
@@ -276,8 +199,7 @@ TEST_SUITE(board_params_page)
     {
         board.write(0x2000, (u8)latch);
 
-        // Un muestreo denso, no los 128 KB: la aritmética completa ya la fija
-        // board_params_bank y aquí lo que se comprueba es el camino real.
+        // Un muestreo denso de los cuatro bancos, no los 128 KB enteros.
         for (u32 addr = 0x4000; addr <= 0xbfff; addr += 17)
         {
             size_t index = (addr - 0x4000) | ((size_t)latch << 15);
@@ -304,12 +226,10 @@ TEST_SUITE(board_params_page)
 TEST_SUITE(board_comm_ports)
 {
     const Fixture &f = fixture();
-    if (!f.ok)
-        return;
+    ROMS_OR_FAIL(f.ok);
 
-    FakeCpu cpu;
-    RdBoard board(f.ic5.data(), f.ic6.data(), f.ic7.data(), f.prog.data(), f.ic18.data());
-    board.attach(&cpu);
+    BoardUnderTest t(f);
+    auto &[cpu, board] = t;
 
     // Con la cola vacía, el puerto 1 lee 0xFF esté donde esté el PC.
     cpu.pc = 0xE12B;
@@ -381,12 +301,10 @@ TEST_SUITE(board_comm_ports)
 TEST_SUITE(board_sound_chip_window)
 {
     const Fixture &f = fixture();
-    if (!f.ok)
-        return;
+    ROMS_OR_FAIL(f.ok);
 
-    FakeCpu cpu;
-    RdBoard board(f.ic5.data(), f.ic6.data(), f.ic7.data(), f.prog.data(), f.ic18.data());
-    board.attach(&cpu);
+    BoardUnderTest t(f);
+    auto &[cpu, board] = t;
 
     u8 first = board.read(0x1000);
     int differing = 0;
@@ -410,12 +328,10 @@ TEST_SUITE(board_sound_chip_window)
 TEST_SUITE(board_sound_chip_part_fields)
 {
     const Fixture &f = fixture();
-    if (!f.ok)
-        return;
+    ROMS_OR_FAIL(f.ok);
 
-    FakeCpu cpu;
-    RdBoard board(f.ic5.data(), f.ic6.data(), f.ic7.data(), f.prog.data(), f.ic18.data());
-    board.attach(&cpu);
+    BoardUnderTest t(f);
+    auto &[cpu, board] = t;
 
     // Voz 0, part 0 en marcha, desde cero.
     auto arm = [&]() {
@@ -450,14 +366,13 @@ TEST_SUITE(board_sound_chip_part_fields)
     CHECK(armAndHash(0x0, 0x40) != armed);
     CHECK(armAndHash(0x3, 0x3f) != armed);
 
-    // La alta ya no. Con el plegado, +8 caía en +0 y +B en +3, así que estos dos
-    // habrían dado exactamente los hashes de las dos líneas anteriores.
+    // La alta no: +8 no se pliega sobre +0 ni +B sobre +3, que darían los hashes
+    // de las dos líneas anteriores.
     CHECK_HASH("+8 no escribe en +0", armAndHash(0x8, 0x40), armed);
     CHECK_HASH("+B no escribe en +3", armAndHash(0xb, 0x3f), armed);
 
-    // Y la guarda de voz: `uint8_t voiceI = offset / 0x100` truncaba, así que un
-    // offset de 0x10000 se colaba como voz 0. La ventana del bus lo enmascara a
-    // 16 bits, pero el chip es alcanzable por su cuenta.
+    // Y la guarda de voz: un offset de 0x10000 no cae en la voz 0. La ventana del
+    // bus lo enmascara a 16 bits, pero el chip es alcanzable por su cuenta.
     arm();
     board.soundChip().write(0x10000 + 0x3, 0x3f);
     CHECK_HASH("offset 0x10000 descartado", hash256(), armed);
@@ -471,12 +386,10 @@ TEST_SUITE(board_sound_chip_part_fields)
 TEST_SUITE(board_reset)
 {
     const Fixture &f = fixture();
-    if (!f.ok)
-        return;
+    ROMS_OR_FAIL(f.ok);
 
-    FakeCpu cpu;
-    RdBoard board(f.ic5.data(), f.ic6.data(), f.ic7.data(), f.prog.data(), f.ic18.data());
-    board.attach(&cpu);
+    BoardUnderTest t(f);
+    auto &[cpu, board] = t;
 
     const u8 paramsBefore = board.read(0x4000);
     const u8 progBefore = board.read(0xc000);
@@ -504,14 +417,58 @@ TEST_SUITE(board_reset)
     for (int i = 0; i < 64; i++)
         fresh.i32(board.soundChip().update());
 
-    RdBoard virgin(f.ic5.data(), f.ic6.data(), f.ic7.data(), f.prog.data(), f.ic18.data());
-    virgin.attach(&cpu);
+    BoardUnderTest virgin(f);
     Fnv1a reference;
     for (int i = 0; i < 64; i++)
-        reference.i32(virgin.soundChip().update());
+        reference.i32(virgin.board.soundChip().update());
     CHECK_HASH("chip de sonido reiniciado", fresh.h, reference.h);
 
     // Lo que no es estado sigue en pie: las dos ROM y la página ya mapeada.
     CHECK_EQ(board.read(0x4000), paramsBefore);
     CHECK_EQ(board.read(0xc000), progBefore);
+}
+
+/**
+ * @brief La página que el motor descifra al construir y mapea con selectPatchPage() es, byte a byte en los
+ *        cuatro bancos de 0x4000-0xBFFF, la que selectPatch() descifra en el acto, para los 16 parches y
+ *        arrastrando en la placa el parche anterior.
+ */
+TEST_SUITE(board_select_patch_page)
+{
+    const Fixture &f = fixture();
+    ROMS_OR_FAIL(f.ok);
+
+    RomCache roms;
+    roms.dir = g_roms_dir;
+    RdRomSet sets[ROMSET_COUNT];
+    for (int s = 0; s < ROMSET_COUNT; s++)
+        ROMS_OR_FAIL(roms.romSet(s, sets[s]));
+
+    BoardUnderTest cached(f);
+    std::vector<u8> page(PARAMS_PAGE_BYTES);
+
+    for (int patch = 0; patch < NUM_PATCHES; patch++)
+    {
+        const u8 *ic18 = sets[patchToRomSetId[patch]].ic18;
+
+        BoardUnderTest decoded(f);
+        decoded.board.selectRomSet(0, ic18);
+        decoded.board.selectPatch(patchToOffset[patch]);
+
+        // Lo mismo que hace el constructor de RdPianoEngine con cada parche.
+        decode_params_window(page.data(), ic18, patchToOffset[patch]);
+        cached.board.selectPatchPage(page.data(), patchToOffset[patch]);
+
+        int mismatches = 0;
+        for (int latch = 0; latch < 4; latch++)
+        {
+            decoded.board.write(0x2000, (u8)latch);
+            cached.board.write(0x2000, (u8)latch);
+            for (u32 addr = 0x4000; addr <= 0xbfff; addr++)
+                if (decoded.board.read((u16)addr) != cached.board.read((u16)addr))
+                    mismatches++;
+        }
+        checks.add(check_fmt("página cacheada = descifrada, parche %d", patch), mismatches == 0,
+                   check_fmt("%d bytes distintos", mismatches));
+    }
 }

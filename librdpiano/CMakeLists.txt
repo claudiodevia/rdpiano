@@ -66,20 +66,29 @@ add_executable(rdpiano_e2e test/e2e.cpp)
 target_link_libraries(rdpiano_e2e librdpiano)
 target_include_directories(rdpiano_e2e PRIVATE test)
 
-# suite unitaria: sin emular audio, tiene que terminar en menos de un segundo.
-# Lista explicita de fuentes, sin glob.
+# suite unitaria. Lista explicita de fuentes, sin glob.
 add_executable(rdpiano_tests
+    test/test_runner.cpp
     test/unit/main.cpp
     test/unit/test_board.cpp
     test/unit/test_command_port.cpp
-    test/unit/test_engine.cpp
+    test/unit/alloc_counter.cpp
+    test/unit/engine_fixture.cpp
+    test/unit/test_engine_effects.cpp
+    test/unit/test_engine_golden.cpp
+    test/unit/test_engine_host.cpp
+    test/unit/test_engine_midi.cpp
+    test/unit/test_engine_patch.cpp
     test/unit/test_lsp.cpp
+    test/unit/test_mcu.cpp
     test/unit/test_patches.cpp
     test/unit/test_resampler.cpp
     test/unit/test_rom_loader.cpp
     test/unit/test_sa_tables.cpp
     test/unit/test_sound_chip_blocks.cpp)
 target_link_libraries(rdpiano_tests librdpiano)
+# patches_plugin_resources lee el CMakeLists del plugin.
+target_compile_definitions(rdpiano_tests PRIVATE RDPIANO_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/..")
 target_include_directories(rdpiano_tests PRIVATE test test/unit)
 
 enable_testing()

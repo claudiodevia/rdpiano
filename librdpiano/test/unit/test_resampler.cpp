@@ -58,6 +58,7 @@ static void *open_for_host(int hostRate)
     return resample_open(1, minFactor, maxFactor);
 }
 
+/** @brief En régimen, la razón salida/entrada es el factor pedido, para todos los ratios del plugin. */
 TEST_SUITE(resampler_output_length)
 {
     for (const RatioCase &rc : kRatios)
@@ -101,6 +102,7 @@ TEST_SUITE(resampler_output_length)
     }
 }
 
+/** @brief Bloque vacío, de una muestra, a fondo de escala y el último: ni NaN ni Inf. */
 TEST_SUITE(resampler_finite)
 {
     // Bordes: bloque vacío, bloque de una muestra, fondo de escala y el flag de
@@ -142,6 +144,22 @@ TEST_SUITE(resampler_finite)
     }
 }
 
+/** @brief Mil aperturas y cierres no mueven el pico de memoria del proceso. */
+/** @brief Abre y cierra `cycles` handles; devuelve cuántos se pudieron abrir. */
+static int open_close_cycles(int cycles)
+{
+    int opened = 0;
+    for (int i = 0; i < cycles; i++)
+    {
+        void *h = resample_open(1, 1.0, 2.5);
+        if (!h)
+            break;
+        opened++;
+        resample_close(h);
+    }
+    return opened;
+}
+
 TEST_SUITE(resampler_no_leak)
 {
     // Cada handle con highQuality=1 reserva ~600 KB: mil sin cerrar son ~600 MB,
@@ -151,16 +169,7 @@ TEST_SUITE(resampler_no_leak)
     struct rusage before;
     getrusage(RUSAGE_SELF, &before);
 
-    int opened = 0;
-    for (int i = 0; i < 1000; i++)
-    {
-        void *h = resample_open(1, 1.0, 2.5);
-        if (!h)
-            break;
-        opened++;
-        resample_close(h);
-    }
-    CHECK_EQ(opened, 1000);
+    CHECK_EQ(open_close_cycles(1000), 1000);
 
     struct rusage after;
     getrusage(RUSAGE_SELF, &after);
@@ -170,15 +179,6 @@ TEST_SUITE(resampler_no_leak)
     CHECK_MSG(grewMB < 64.0, "el pico de RSS creció %.1f MB en 1000 ciclos", grewMB);
 #else
     // Sin una medida de pico fiable, el bucle se ejecuta igual pero no se mide.
-    int opened = 0;
-    for (int i = 0; i < 1000; i++)
-    {
-        void *h = resample_open(1, 1.0, 2.5);
-        if (!h)
-            break;
-        opened++;
-        resample_close(h);
-    }
-    CHECK_EQ(opened, 1000);
+    CHECK_EQ(open_close_cycles(1000), 1000);
 #endif
 }

@@ -37,8 +37,7 @@ static void check_bytes(CheckRun &checks, const char *name, const std::vector<u8
 }
 
 /**
- * @brief Los mensajes, uno a uno. Los bytes son los que estaban escritos a mano en PluginProcessor.cpp,
- *        e2e.cpp, standalone.cpp y sendMidiCmd.
+ * @brief Los mensajes, uno a uno, con sus bytes exactos.
  */
 TEST_SUITE(command_port_messages)
 {
@@ -163,12 +162,14 @@ TEST_SUITE(command_port_all_notes_off)
 
     // Pedal arriba primero: soltar las notas con el pedal pisado no apaga nada.
     CHECK_EQ(bytes.size(), 1 + 128 * 3);
+    if (bytes.size() != 1 + 128 * 3)
+        return;
     CHECK_EQ(bytes[0], 0x50);
 
     int badStatus = 0;
     int badVelocity = 0;
     std::vector<bool> seen(128, false);
-    for (size_t i = 1; i + 2 < bytes.size() + 1; i += 3)
+    for (size_t i = 1; i + 2 < bytes.size(); i += 3)
     {
         if (bytes[i] != 0xB0)
             badStatus++;

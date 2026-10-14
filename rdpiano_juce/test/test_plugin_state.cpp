@@ -1,10 +1,10 @@
 /**
  * @file test_plugin_state.cpp
- * @brief Presets y programas: la ida y vuelta del estado del plugin.
+ * @brief El plugin visto por el anfitrión: parámetros, presets, programas, MIDI, latencia, cola y buses.
  *
- * Habla con el `AudioProcessor` sólo por su API pública —`getParameters()` por id,
- * `getStateInformation`/`setStateInformation`, `setCurrentProgram`— y nunca por los punteros
- * concretos: así sigue valiendo, sin editarla, si cambia cómo se guarda el estado por dentro.
+ * Habla con el `AudioProcessor` por su API de JUCE —`getParameters()` por id,
+ * `getStateInformation`/`setStateInformation`, `setCurrentProgram`, `processBlock`—. Algunas suites
+ * leen aún los miembros públicos `engine` y `masterTune` para confirmar que el cambio llegó al motor.
  */
 
 #include <JuceHeader.h>
@@ -337,4 +337,92 @@ TEST_SUITE(plugin_bus_layout)
     checks.add("sin notas, salida en silencio", peak < 1e-4f, check_fmt("pico %g", (double)peak));
 
     p.releaseResources();
+}
+
+/**
+ * @brief MIDI por processBlock, como lo manda el anfitrión: un note-on suena y su posición dentro del bloque se
+ *        respeta.
+ */
+TEST_SUITE(plugin_midi_sounds)
+{
+    RdPiano_juceAudioProcessor p;
+    const int block = 512;
+    p.prepareToPlay(48000.0, block);
+
+    juce::AudioBuffer<float> buffer(2, block);
+    juce::MidiBuffer midi;
+    float peak = 0.0f;
+    for (int b = 0; b < 40; b++)
+    {
+        midi.clear();
+        if (b == 1)
+            midi.addEvent(juce::MidiMessage::noteOn(1, 60, (juce::uint8)110), 0);
+        buffer.clear();
+        p.processBlock(buffer, midi);
+        if (b == 0)
+            checks.add("silencio antes de la nota", buffer.getMagnitude(0, block) < 1e-4f,
+                       check_fmt("pico %g", (double)buffer.getMagnitude(0, block)));
+        peak = juce::jmax(peak, buffer.getMagnitude(0, block));
+    }
+    checks.add("el note-on suena", peak > 0.01f, check_fmt("pico %g", (double)peak));
+
+    p.releaseResources();
+}
+
+/**
+ * @brief Un program change MIDI cambia el parche en el motor, y el temporizador del procesador lo recoge para
+ *        que getCurrentProgram() (y con él el anfitrión y el panel) lo vean.
+ */
+TEST_SUITE(plugin_midi_program_change)
+{
+    RdPiano_juceAudioProcessor p;
+    const int block = 512;
+    p.prepareToPlay(48000.0, block);
+
+    juce::AudioBuffer<float> buffer(2, block);
+    juce::MidiBuffer midi;
+    midi.addEvent(juce::MidiMessage::programChange(1, 9), 0);
+    p.processBlock(buffer, midi);
+
+    midi.clear();
+    for (int b = 0; b < 20; b++)
+        p.processBlock(buffer, midi);
+
+    p.timerCallback();
+    CHECK_EQ(p.getCurrentProgram(), 9);
+
+    p.releaseResources();
+}
+
+/**
+ * @brief Trampa 10: el parche y la afinación viajan en el preset como propiedades, no como parámetros
+ *        automatizables.
+ */
+TEST_SUITE(plugin_patch_and_tune_not_parameters)
+{
+    RdPiano_juceAudioProcessor p;
+
+    for (juce::AudioProcessorParameter *raw : p.getParameters())
+    {
+        const juce::String name = raw->getName(64).toLowerCase();
+        auto *ranged = dynamic_cast<juce::RangedAudioParameter *>(raw);
+        const juce::String id = ranged != nullptr ? ranged->paramID.toLowerCase() : juce::String();
+        checks.add(check_fmt("\"%s\" no es parche ni afinación", name.toRawUTF8()),
+                   !id.contains("patch") && !id.contains("tune") && !name.contains("patch") && !name.contains("tune"),
+                   "el parche o la afinación se han vuelto automatizables");
+    }
+
+    // Y siguen en el preset, como atributos.
+    p.setCurrentProgram(7);
+    p.setMasterTune(1000);
+    juce::MemoryBlock state;
+    p.getStateInformation(state);
+    std::unique_ptr<juce::XmlElement> xml =
+        juce::AudioProcessor::getXmlFromBinary(state.getData(), (int)state.getSize());
+    CHECK(xml != nullptr);
+    if (xml != nullptr)
+    {
+        CHECK_EQ(xml->getIntAttribute("currentPatch", -1), 7);
+        CHECK_EQ(xml->getIntAttribute("masterTune", -1), 1000);
+    }
 }

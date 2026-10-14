@@ -12,7 +12,7 @@ construido (componentes, mapa de memoria, clases, diagramas): [docs/ARQUITECTURA
 | `rdpiano_juce/` | Plugin JUCE 9.0.1 (VST3/AU/AUv3/LV2/Standalone), solo macOS; pruebas en `test/`. |
 | `roms/` | Dumps. Los usados (3 juegos de onda + params, y `RD200_B.bin`) van empotrados como `BinaryData`. |
 | `re_stuff/` | Ingeniería inversa (Verilog, disasm). No se compila. |
-| `scripts/` | `download-juce.sh`, `build-osx.sh` (los de la CI) y `verificar.sh` (la CI en local), sobre `common.sh`. |
+| `scripts/` | `download-juce.sh`, `build-osx.sh` y `verificar.sh` (la CI llama a sus modos: lo de la CI y lo local es lo mismo), sobre `common.sh`. |
 | `ui/` | Assets del panel. |
 | `docs/` y `*.md` de la raíz | Ver *Documentación: una sola fuente*. |
 | `logs/` | `<script>-<fecha>-<hora>.log` por ejecución. Fuera de git; borrable entero. |
@@ -50,7 +50,7 @@ medido) y el switcharoo de `Mcu::setMasterTune()` (trampa 4), dos más.
 | Program change MIDI | `pushMidi()` lo intercepta → `requestPatch()` (reenviado al firmware cambiaba el número, no la página: motor mudo). Programa = parche 0–15; mayor → ignorado, en `stats.programIgnored` (con `& 0x0f` el 20 sonaba como el 4). Ventana `kPatchSettleMs` = 150 ms: el primero sale en el acto (esperar haría sonar la nota siguiente con el parche viejo) y de los que llegan con ella abierta se cobra solo el último (cada cambio apaga el firmware y redispara lo pulsado). |
 | Coste | `selectRomSet()` (un puntero) + `selectPatchPage()` (memcpy 32 KB) ≈ µs → viable en el hilo de audio; todo se descifra al construir (~9 ms, 2 MB). `prepareRomSetFor()` = no-op. |
 
-Lo fijan `engine_patch_declick`, `engine_patch_held_notes`, `engine_tune_held_notes`, `engine_patch_prepare`
+Lo fijan `engine_patch_declick`, `engine_patch_held_notes`, `engine_tune_held_notes`, `board_select_patch_page`
 (página cacheada ≡ descifrada), `engine_program_change_range` y `engine_patch_settle`.
 
 ### Efectos y salida
@@ -83,7 +83,7 @@ Lo fijan `engine_patch_declick`, `engine_patch_held_notes`, `engine_tune_held_no
 |---|---|
 | 1 | **Handshake atado al firmware RD200**: `RdBoard::read` compara el PC con `0xE12B/0xE15E/0xE168/0xE15A` → solo sirve `RD200_B.bin`. Equivalentes MKS-20 en [FIRMWARE §2](docs/FIRMWARE.md). |
 | 2 | El bit de sample rate del puerto 2 **nunca funcionó**; la tasa sale de `patchSampleRates[]` ([FIRMWARE §3](docs/FIRMWARE.md)). |
-| 3 | Dos hacks en `SoundChip::update()`: early-out `env_value==0 && env_dest==0` y silenciado condicional contra voces colgadas (`investigate`). Fijados por `test/vectors/ic_blocks.txt`. |
+| 3 | Dos hacks en `SoundChip::update()`: early-out `env_value==0 && env_dest==0` y silenciado condicional contra voces colgadas (`investigate`). **Solo los vigila el golden de e2e**: `test_sound_chip_blocks` reimplementa el silenciado en la prueba en vez de ejercitar `update()`, y ningún vector cubre el early-out. |
 | 4 | `setMasterTune()` corre el emulador (~200 muestras + `programChange(0)`, ~0,16 ms): lo corre `render()` al atender la petición, no la UI. Switcharoo 0x30 → afinación → 0x30 porque afinar parches ≠ 0 falla; esos PC apagan voces y pedal → declick y devolución. |
 | 5 | `mcu_ops.h` y `mame_utils.h` derivan de MAME (BSD-3): no reescribir por estilo, mantener atribución. |
 | 6 | `re_stuff/verilog/` es, según su README, *"probably most of them wrong"*: investigación, no verdad. |
@@ -109,17 +109,17 @@ sh scripts/build-osx.sh ALL   # cinco formatos universales, generador Xcode
 
 | Tema | Regla |
 |---|---|
-| Scripts | POSIX `sh`; incluyen `scripts/common.sh` con `.` (paleta, log, `paso`, `cmd`, `fatal`, `fin`, trap que llama a `limpiar()` si existe; `download-juce.sh` borra ahí zip y temporal). La CI invoca `sh ./scripts/…`. CMake/Xcode **solo al log**; en pantalla una etiqueta por paso y al final tiempo, avisos *distintos* (en universal salen doblados) y ruta; fallo → últimas 40 líneas y mismo estado. Color solo en terminal (`NO_COLOR`/`TERM=dumb` lo quitan, `FORCE_COLOR=1` lo impone). 10 logs por script (`LOGS_QUE_QUEDAN`). |
-| Sin repetir trabajo | `download-juce.sh` no baja si `build/juce` ya es la versión (`project(JUCE VERSION …)` de su raíz; `--forzar` baja igual). `build-osx.sh` solo configura si la caché no sirve (no existe, otro generador o arquitecturas, sin JUCE o sin plugin); el proyecto Xcode lo regenera CMake al cambiar un `CMakeLists`. ~3,4 s por invocación sin cambios. |
+| Scripts | POSIX `sh`; incluyen `scripts/common.sh` con `.` (paleta, log, `paso`, `cmd`, `fatal`, `fin`, `minusculas`, `exigir_juce`, trap de salida —también con INT/TERM, que `dash` no pasa por EXIT— que llama a `limpiar()` si existe; `download-juce.sh` borra ahí zip y temporal). La CI invoca `sh ./scripts/…`. CMake/Xcode **solo al log**; en pantalla una etiqueta por paso y al final tiempo, avisos *distintos* (en universal salen doblados) y ruta; fallo → últimas 40 líneas y mismo estado. Color solo en terminal (`NO_COLOR`/`TERM=dumb` lo quitan, `FORCE_COLOR=1` lo impone). 10 logs por script (`LOGS_QUE_QUEDAN`). |
+| Sin repetir trabajo | `download-juce.sh` no baja si `build/juce` ya es la versión (`project(JUCE VERSION …)` de su raíz; `--forzar` baja igual) y comprueba el zip contra `SHA256=` (el resumen de GitHub; cambiarlo con `VERSION`). `build-osx.sh` solo configura si la caché no sirve (no existe, otro generador o arquitecturas, sin JUCE o sin plugin) o hay un `CMakeLists` más nuevo que ella: CMake regenera el proyecto Xcode al compilar, pero xcodebuild ya cargó el viejo y no ve un fuente recién añadido. ~3,4 s por invocación sin cambios. |
 | Universal siempre | `arm64;x86_64`; `universal` = no-op. Sin modo nativo: no ahorra nada en ejecución (macOS carga una rebanada, mismo código, sin flags por arquitectura) y no carga bajo Rosetta. |
 | `install` | `build-osx.sh AU install`: `ditto` sobre el destino ya borrado (in situ deja restos), un `sudo -v`. AU → `/Library/Audio/Plug-Ins/Components`, VST3 → `…/VST3`, LV2 → `…/LV2`, Standalone → `/Applications`; AUv3 va dentro del `.app` (`XCODE_EMBED_APP_EXTENSIONS`). Sin VST2 (JUCE 9): `/Library/Audio/Plug-Ins/VST` no se toca. Sin la palabra, nada fuera de `build/` (lo que hace la CI). |
 | Xcode | A propósito (AUv3 solo existe con él). Deployment target 11.0, pasado a `juceaide` por `MACOSX_DEPLOYMENT_TARGET` (invocación anidada sin caché). |
 | Fuentes | `.cpp` nuevo en el núcleo = una línea en `librdpiano/CMakeLists.txt` (el plugin enlaza ese target). |
 | ASan | `RDPIANO_SANITIZE`: ON por defecto al configurar `librdpiano/` suelto (intencional), OFF desde la raíz. CI y `verificar.sh` lo fijan: `build/core` sin, `build/core-asan` con. |
-| Standalone SDL | `rdpiano_standalone` (`test/standalone.cpp`), solo con SDL2 + portmidi: `cmake --build build/core --target rdpiano_standalone`. |
+| Standalone SDL | `rdpiano_standalone [--roms DIR]` (`test/standalone.cpp`: parche 0 a 20 kHz, mismo `boot()` que el plugin), solo con SDL2 + portmidi; `verificar.sh` lo compila si CMake los encuentra, y la CI los instala. |
 
-CI (`.github/workflows/main.yml`), en cada push: `ctest` del núcleo sin y con ASan, y build macOS +
-`rdpiano_plugin_tests`; en `master`, si pasan los tres, release rodante con tag `latest`.
+CI (`.github/workflows/main.yml`), en cada push, un trabajo por modo de `verificar.sh`: `nucleo`, `asan` y
+`plugin` (con `logs/` como artefacto si fallan); en `master`, si pasan los tres, release rodante con tag `latest`.
 
 ## Verificar cambios
 
@@ -128,16 +128,17 @@ la CI, en sus mismos directorios; se detiene en el primer fallo).
 
 ```bash
 sh scripts/verificar.sh          # núcleo, núcleo con ASan y plugin (cinco formatos + pruebas); necesita build/juce
-sh scripts/verificar.sh rapido   # solo núcleo sin ASan (unit + e2e), ~15 s: para iterar
+sh scripts/verificar.sh rapido   # solo núcleo sin ASan (unit + e2e), ~15 s: para iterar (= nucleo)
+sh scripts/verificar.sh asan     # o plugin: un solo trabajo de la CI
 ctest --test-dir build/core -R unit --output-on-failure   # una suite suelta, ya compilado
 ```
 
 | Suite | Qué fija |
 |---|---|
 | **e2e** (`librdpiano/test/e2e.cpp`) | Headless, ~40× tiempo real: 16 parches en ~3 s (`--patch N` ~0,2 s). Arranque silencioso, nota, acorde, extinción tras note-off (voces colgadas), polifonía 16, pico y **hash bit-exacto por parche** contra `test/golden.txt`. Lo mueven `sound_chip.cpp`, `unscramble_*` y el MCU; no `lsp/`, `rd_engine.cpp` ni el plugin (mide el emulador desnudo). |
-| **Unitaria** (`librdpiano/test/unit/`) | 56 suites, 522 checks, ~8 s; incluye `test_sound_chip_blocks` (2.256 vectores) y `test_lsp` (impulso congelado). Suite nueva = `TEST_SUITE(nombre)` + una línea en el CMakeLists; andamiaje propio (`test/check.h`, sin dependencias). La prueba se escribe **antes** del refactor y pasa sin editarla. |
-| `test_engine.cpp` | Simulador de host (bloques irregulares, 22–96 kHz, cambios de parche en caliente, extremos) y lo único que verifica **cero reservas en `render()`** (`operator new` global + `stats.resamplerOpens`, porque libresample usa `malloc`). Red de transitorios: los `engine_*` citados arriba (`engine_tune_held_notes`: acorde y pedal sobreviven al afinado, sin salto ni golpe), más `engine_effect_tail` (efecto encendido en silencio → silencio), `engine_effect_bypass_ramp`, `engine_program_change`, `engine_volume_ramp`, `engine_latency`, `engine_lfo_rate` (periodo del LFO del chorus por autocorrelación de la diferencia wet-dry) y `engine_tremolo` (lo mismo sobre wet/dry por canal: periodo, oposición de fase, profundidad, ritmo del host). |
-| **Plugin** (`rdpiano_juce/test/`) | 8 suites, 108 checks: presets ida y vuelta, fábrica, programas, preset corrupto, latencia, cola, buses. |
+| **Unitaria** (`librdpiano/test/unit/`) | 61 suites, 576 checks, ~10 s; incluye `test_sound_chip_blocks` (2.256 vectores), `test_lsp` (impulso congelado), `test_mcu` (traducción del MIDI y tiempos de `boot()` y del switcharoo, por la cola de comandos) y `board_select_patch_page`. Suite nueva = `TEST_SUITE(nombre)` + una línea en el CMakeLists; andamiaje propio (`test/check.h`, `test/rom_files.h`, `test/test_runner.h`, sin dependencias). La prueba se escribe **antes** del refactor y pasa sin editarla. |
+| `test_engine_*.cpp` | Simulador de host sobre `engine_fixture.h` (bloques irregulares, 22–96 kHz, cambios de parche en caliente, extremos), partido en `host`, `midi`, `patch`, `effects` y `golden`. **`engine_golden`**: hash bit-exacto de la salida del motor entero ante un guion fijo (tres juegos de ROM, afinación, ráfaga de program change, pedal, efectos, trémolo y volumen moviéndose) a 44,1 y 48 kHz con bloques regulares e irregulares; es la red de cualquier refactor de `rd_engine.cpp`. `alloc_counter.cpp` sustituye todas las formas de `operator new` y es, con `stats.resamplerOpens` (libresample usa `malloc`), lo único que verifica **cero reservas en `render()`**. Red de transitorios: los `engine_*` citados arriba (`engine_tune_held_notes`: acorde y pedal sobreviven al afinado, sin salto ni golpe; `engine_patch_pedal_only_not_restored`), más `engine_effect_tail` (efecto encendido en silencio → silencio), `engine_effect_bypass_ramp`, `engine_program_change`, `engine_volume_ramp`, `engine_latency`, `engine_prepare_release_cycle` (`prepare()` idempotente y `release()`→`prepare()` ≡ motor nuevo), `engine_lfo_rate` (periodo del LFO del chorus por autocorrelación de la diferencia wet-dry) y `engine_tremolo` (lo mismo sobre wet/dry por canal: periodo, oposición de fase, profundidad, ritmo del host). Umbrales con nombre y su valor en dBFS en `engine_fixture.h`. |
+| **Plugin** (`rdpiano_juce/test/`) | 11 suites, 124 checks: presets ida y vuelta, fábrica, programas, preset corrupto, latencia, cola, buses, MIDI por `processBlock`, program change MIDI recogido por el timer y trampa 10. |
 
 - **Golden y vectores no se regeneran para poner algo en verde.** Cambio de audio intencionado: `--wav-dir DIR`,
   escuchar, y solo entonces `--write-golden`. Golden movido + vectores en verde = cambio en el orden de

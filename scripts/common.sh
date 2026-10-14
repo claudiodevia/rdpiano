@@ -54,6 +54,10 @@ log_abrir()
     : > "$LOG"
     INICIO=$(date +%s)
     trap al_salir EXIT
+    # Algunos `sh` (dash) no pasan por EXIT al recibir una señal: salir desde su
+    # trap sí, y así Ctrl-C también llama a `limpiar`.
+    trap 'exit 130' INT
+    trap 'exit 143' TERM
 }
 
 # El log se traga la salida de las herramientas, así que un fallo sin contexto
@@ -139,4 +143,17 @@ fin()
 ruta()
 {
     printf '%s %s%s%s\n' "$1" "$C_CIAN" "$2" "$C_OFF"
+}
+
+# Argumentos sin distinguir mayúsculas de minúsculas.
+minusculas()
+{
+    echo "$1" | tr '[:upper:]' '[:lower:]'
+}
+
+# Para con un mensaje si JUCE no está en build/juce.
+exigir_juce()
+{
+    [ -f "$ROOT/build/juce/CMakeLists.txt" ] ||
+        fatal "JUCE no está en build/juce. Ejecuta scripts/download-juce.sh${1:+ $1}"
 }

@@ -17,11 +17,13 @@
 #include "unit_test.h"
 
 /**
- * @brief SpaceD lleva 256 KB de ERAM: en la pila no cabe.
+ * @brief Respuesta de un efecto a un impulso o a un barrido, intercalando L y R.
+ *
+ * El efecto va en el montón: SpaceD lleva 256 KB de ERAM y en la pila no cabe.
  */
-static std::vector<float> impulse_response_spaced(int32_t rate, int32_t depth, int n, bool sweep)
+template <typename Fx> static std::vector<float> impulse_response(int32_t rate, int32_t depth, int n, bool sweep)
 {
-    auto fx = std::make_unique<SpaceD>();
+    auto fx = std::make_unique<Fx>();
     fx->reset();
     fx->rate = rate;
     fx->depth = depth;
@@ -49,32 +51,20 @@ static std::vector<float> impulse_response_spaced(int32_t rate, int32_t depth, i
     return out;
 }
 
-static std::vector<float> impulse_response_phaser(int32_t rate, int32_t depth, int n, bool sweep)
+/** @brief La respuesta produce algo y se queda dentro del bus de 24 bits. */
+static void check_in_bus_range(CheckRun &checks, const std::vector<float> &v)
 {
-    auto fx = std::make_unique<Phaser>();
-    fx->reset();
-    fx->rate = rate;
-    fx->depth = depth;
-
-    std::vector<float> out;
-    out.reserve(n * 2);
-
-    for (int i = 0; i < n; i++)
+    bool nonZero = false;
+    bool inRange = true;
+    for (float x : v)
     {
-        int32_t in;
-        if (sweep)
-            in = (int32_t)(((int64_t)i * 0x7fffff * 2 / n) - 0x7fffff);
-        else
-            in = (i == 0) ? 0x400000 : 0;
-
-        fx->audioInL = in;
-        fx->audioInR = in;
-        fx->process();
-        out.push_back((float)fx->audioOutL);
-        out.push_back((float)fx->audioOutR);
+        if (x != 0.0f)
+            nonZero = true;
+        if (x < -8388608.0f || x > 8388607.0f)
+            inRange = false;
     }
-
-    return out;
+    CHECK(nonZero);
+    CHECK(inRange);
 }
 
 static unsigned long long hash_of(const std::vector<float> &v)
@@ -86,7 +76,8 @@ static unsigned long long hash_of(const std::vector<float> &v)
 }
 
 /**
- * @brief ---------------------------------------------------------------- tablas
+ * @brief Las tablas de rate y profundidad: 128 entradas, rate igual en los dos efectos, no decrecientes, y
+ *        spaceDDepth() recorta el índice.
  */
 TEST_SUITE(lsp_tables)
 {
@@ -127,73 +118,53 @@ TEST_SUITE(lsp_tables)
 }
 
 /**
- * @brief ---------------------------------------------------------------- SpaceD
+ * @brief SpaceD: respuesta al impulso (de fábrica y con los ajustes del plugin) y a un barrido, por hash
+ *        capturado del código original; determinista y dentro del bus de 24 bits.
  */
 TEST_SUITE(lsp_spaced)
 {
-    // Hashes capturados del código original. No se regeneran para poner algo en
-    // verde.
     const int N = 2048;
 
-    std::vector<float> impulseDefault = impulse_response_spaced(spaceDRateTable[8], spaceDDepthTable[0x7f], N, false);
+    std::vector<float> impulseDefault = impulse_response<SpaceD>(spaceDRateTable[8], spaceDDepthTable[0x7f], N, false);
     CHECK_HASH("spaced-impulso-por-defecto", hash_of(impulseDefault), 0x2fc294a596910eb9ull);
 
-    // Los valores que pone el plugin con chorusRate=5 y chorusDepth=14.
+    // Los valores que el motor calcula para chorusRate=5 (periodo de 450 ms) y
+    // chorusDepth=14, copiados a mano de rd_engine.cpp: si cambia allí la tabla
+    // o la fórmula, esto no se entera (engine_golden sí).
     std::vector<float> impulsePlugin =
-        impulse_response_spaced(spaceDRateFromMs(1000.0f / 450 / 4.0f), spaceDDepth(14 / 15.0f), N, false);
+        impulse_response<SpaceD>(spaceDRateFromMs(1000.0f / 450 / 4.0f), spaceDDepth(14 / 15.0f), N, false);
     CHECK_HASH("spaced-impulso-plugin", hash_of(impulsePlugin), 0x5c472a9f73a283f7ull);
 
-    std::vector<float> sweep = impulse_response_spaced(spaceDRateTable[64], spaceDDepthTable[64], N, true);
+    std::vector<float> sweep = impulse_response<SpaceD>(spaceDRateTable[64], spaceDDepthTable[64], N, true);
     CHECK_HASH("spaced-barrido", hash_of(sweep), 0x6fd4d203d0542847ull);
 
     // Determinista: dos instancias reseteadas dan exactamente lo mismo.
-    std::vector<float> again = impulse_response_spaced(spaceDRateTable[8], spaceDDepthTable[0x7f], N, false);
+    std::vector<float> again = impulse_response<SpaceD>(spaceDRateTable[8], spaceDDepthTable[0x7f], N, false);
     CHECK_EQ(hash_of(again), hash_of(impulseDefault));
 
-    // El impulso tiene que producir algo, y quedarse dentro del bus de 24 bits.
-    bool nonZero = false;
-    bool inRange = true;
-    for (float x : sweep)
-    {
-        if (x != 0.0f)
-            nonZero = true;
-        if (x < -8388608.0f || x > 8388607.0f)
-            inRange = false;
-    }
-    CHECK(nonZero);
-    CHECK(inRange);
+    check_in_bus_range(checks, sweep);
 }
 
 /**
- * @brief ---------------------------------------------------------------- Phaser
+ * @brief Phaser: lo mismo que lsp_spaced.
  */
 TEST_SUITE(lsp_phaser)
 {
     const int N = 2048;
 
-    std::vector<float> impulseDefault = impulse_response_phaser(phaserRateTable[16], phaserDepthTable[64], N, false);
+    std::vector<float> impulseDefault = impulse_response<Phaser>(phaserRateTable[16], phaserDepthTable[64], N, false);
     CHECK_HASH("phaser-impulso-por-defecto", hash_of(impulseDefault), 0xb4b1594bb74b9afbull);
 
     // Los valores que pone el plugin con efxPhaserRate=0.4 y Depth=0.8.
     std::vector<float> impulsePlugin =
-        impulse_response_phaser(phaserRateTable[(int)(0.4f * 0x7f)], phaserDepthTable[(int)(0.8f * 0x7f)], N, false);
+        impulse_response<Phaser>(phaserRateTable[(int)(0.4f * 0x7f)], phaserDepthTable[(int)(0.8f * 0x7f)], N, false);
     CHECK_HASH("phaser-impulso-plugin", hash_of(impulsePlugin), 0xd9f8cef230ceea54ull);
 
-    std::vector<float> sweep = impulse_response_phaser(phaserRateTable[100], phaserDepthTable[127], N, true);
+    std::vector<float> sweep = impulse_response<Phaser>(phaserRateTable[100], phaserDepthTable[127], N, true);
     CHECK_HASH("phaser-barrido", hash_of(sweep), 0x5c71e1d554c6bdc9ull);
 
-    std::vector<float> again = impulse_response_phaser(phaserRateTable[16], phaserDepthTable[64], N, false);
+    std::vector<float> again = impulse_response<Phaser>(phaserRateTable[16], phaserDepthTable[64], N, false);
     CHECK_EQ(hash_of(again), hash_of(impulseDefault));
 
-    bool nonZero = false;
-    bool inRange = true;
-    for (float x : sweep)
-    {
-        if (x != 0.0f)
-            nonZero = true;
-        if (x < -8388608.0f || x > 8388607.0f)
-            inRange = false;
-    }
-    CHECK(nonZero);
-    CHECK(inRange);
+    check_in_bus_range(checks, sweep);
 }

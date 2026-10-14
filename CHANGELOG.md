@@ -2,6 +2,25 @@
 
 Cambios de cada versión publicada de RdPiano. La más nueva, arriba.
 
+## Sin publicar
+
+El sonido y el manejo del plugin no cambian respecto a la 1.0.2.
+
+### Por dentro
+
+- Más pruebas automáticas: ahora comprueban también que la cadena de sonido
+  completa —efectos, cambios de sonido y de afinación incluidos— sigue dando
+  exactamente el mismo resultado, así que un cambio futuro no puede alterar el
+  sonido sin que se note.
+- La herramienta para escuchar el emulador sin plugin arranca como el plugin
+  y suena como él.
+- La descarga de lo necesario para compilar se comprueba, para que no se cuele
+  un archivo dañado o alterado.
+
+### Documentación
+
+- La documentación técnica está reorganizada y es más breve.
+
 ## 1.0.2 — 12 de septiembre de 2026
 
 ### Sonido

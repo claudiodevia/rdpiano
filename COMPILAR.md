@@ -51,11 +51,13 @@ Para comprobar un cambio antes de subirlo, `verificar.sh` corre en tu máquina l
 
 ```bash
 sh scripts/verificar.sh rapido   # solo el núcleo, sin JUCE (unos 15 s)
+sh scripts/verificar.sh asan     # o plugin: uno solo de los tres trabajos de la CI
 sh scripts/verificar.sh          # todo: núcleo, núcleo con AddressSanitizer y plugin (necesita build/juce)
 ```
 
-Si hay SDL2 y portmidi, después se puede compilar la app interactiva del núcleo:
-`cmake --build build/core --target rdpiano_standalone`.
+Si hay SDL2 y portmidi (`brew install sdl2 portmidi`), `verificar.sh` compila además la app interactiva del
+núcleo, que toca el parche 0 con una entrada MIDI virtual llamada «RdPiano»:
+`build/core/rdpiano_standalone --roms roms`.
 
 ## Documentación técnica
 

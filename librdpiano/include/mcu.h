@@ -153,6 +153,9 @@ class Mcu : public RdBoardCpu
      */
     void reset();
 
+    /** @brief Lo que espera en la cola a que el firmware lo recoja. Solo lectura: para las pruebas del protocolo. */
+    const CommandPort &commandPort() const { return board.commandPort(); }
+
     u32 programCounter() const override { return m_pc.d; }
     void setInputLine(int line, int state) override { execute_set_input(line, state); }
     u8 readCpuRegister(u16 addr) override;

@@ -142,6 +142,7 @@ juce_add_console_app(rdpiano_plugin_tests
 juce_generate_juce_header(rdpiano_plugin_tests)
 
 target_sources(rdpiano_plugin_tests PRIVATE
+  ../librdpiano/test/test_runner.cpp
   test/main.cpp
   test/test_plugin_state.cpp)
 
@@ -152,4 +153,4 @@ target_link_libraries(rdpiano_plugin_tests PRIVATE rdpiano_juce)
 
 target_compile_features(rdpiano_plugin_tests PRIVATE cxx_std_23)
 
-add_test(NAME plugin_state COMMAND rdpiano_plugin_tests)
+add_test(NAME plugin COMMAND rdpiano_plugin_tests)

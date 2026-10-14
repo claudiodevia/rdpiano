@@ -14,38 +14,9 @@
 #include <vector>
 
 #include "patches.h"
+#include "rom_files.h"
 #include "rom_loader.h"
 #include "unit_test.h"
-
-static u64 fnv1a(const void *data, size_t n)
-{
-    const unsigned char *b = (const unsigned char *)data;
-    u64 h = 0xcbf29ce484222325ull;
-    for (size_t i = 0; i < n; i++)
-    {
-        h ^= b[i];
-        h *= 0x100000001b3ull;
-    }
-    return h;
-}
-
-/**
- * @brief Lee una ROM entera. Devuelve vacío si no está: las suites de más abajo lo tratan como "no se puede
- *        comprobar", no como fallo — de que exista ya se queja patches_rom_files.
- */
-static std::vector<u8> read_rom(const std::string &name, size_t want)
-{
-    std::vector<u8> buf;
-    FILE *f = fopen((g_roms_dir + "/" + name).c_str(), "rb");
-    if (!f)
-        return buf;
-    buf.resize(want);
-    size_t got = fread(buf.data(), 1, want, f);
-    fclose(f);
-    if (got != want)
-        buf.clear();
-    return buf;
-}
 
 // ---------------------------------------------------------------------------
 // Las permutaciones son cableado del PCB: barajan bits, no los pierden. Luego
@@ -76,6 +47,10 @@ template <typename F> static void check_bijection(CheckRun &checks, const char *
     checks.add(std::string(name) + " sin colisiones", collisions == 0, check_fmt("%zu colisión(es)", collisions));
 }
 
+/**
+ * @brief Las cinco permutaciones son biyectivas en su rango, y las identidades y coincidencias entre ellas que
+ *        el resto del código da por hechas siguen siéndolo.
+ */
 TEST_SUITE(rom_loader_bijections)
 {
     check_bijection(checks, "addr_cpub", 0x4000, unscramble_addr_cpub);
@@ -108,9 +83,8 @@ TEST_SUITE(rom_loader_bijections)
 }
 
 // ---------------------------------------------------------------------------
-// Hash del params_rom resultante para los 16 offsets de la tabla de parches.
-// Capturados con el `loadSounds` monolítico: son los que autorizan a partirlo
-// en loadRomSet()/selectPatch().
+// Hash del params_rom resultante para los 16 offsets de la tabla de parches,
+// capturados del descifrado de referencia.
 
 static constexpr u64 PARAMS_ROM_HASHES[NUM_PATCHES] = {
     0x4a0c7db560b285cbull, //  0 MKS-20: Piano 1
@@ -136,6 +110,10 @@ static constexpr u64 PARAMS_ROM_HASHES[NUM_PATCHES] = {
  */
 static constexpr u64 PROGRAM_ROM_HASH = 0x32e8a60dd3121a8eull;
 
+/**
+ * @brief La página de params de cada parche, byte a byte por hash, con la cabecera que redirige al firmware
+ *        y su destino dentro de la ventana de 0x4000.
+ */
 TEST_SUITE(rom_loader_params_pages)
 {
     std::vector<u8> out(PARAMS_ROM_BYTES);
@@ -143,16 +121,14 @@ TEST_SUITE(rom_loader_params_pages)
     for (int patch = 0; patch < NUM_PATCHES; patch++)
     {
         const char *name = romSetFiles[patchToRomSetId[patch]][ROM_IC18];
-        std::vector<u8> src = read_rom(name, WAVE_ROM_SIZE);
-        if (src.empty())
-            continue;
+        std::vector<u8> src = read_rom(g_roms_dir, name, WAVE_ROM_SIZE);
+        ROMS_OR_FAIL(!src.empty());
 
         decode_params_page(out.data(), src.data(), patchToOffset[patch]);
 
-        CHECK_HASH(patchNames[patch], fnv1a(out.data(), out.size()), PARAMS_ROM_HASHES[patch]);
+        CHECK_HASH(patchNames[patch], Fnv1a::of(out.data(), out.size()), PARAMS_ROM_HASHES[patch]);
 
-        // Los bytes 0x00-0x02 redirigen al firmware al parche elegido. Hasta ahora
-        // era un efecto lateral que nadie comprobaba.
+        // Los bytes 0x00-0x02 redirigen al firmware al parche elegido.
         size_t target = params_patch_target(patchToOffset[patch]);
         checks.add(std::string("cabecera ") + patchNames[patch],
                    out[0] == 0x01 && out[1] == ((target >> 8) & 0xff) && out[2] == (target & 0xff),
@@ -165,28 +141,27 @@ TEST_SUITE(rom_loader_params_pages)
     }
 }
 
+/** @brief La ROM de programa descifrada, por hash. */
 TEST_SUITE(rom_loader_program_rom)
 {
-    std::vector<u8> src = read_rom(PROG_ROM_FILE, PROG_ROM_SIZE);
-    if (src.empty())
-        return;
+    std::vector<u8> src = read_rom(g_roms_dir, PROG_ROM_FILE, PROG_ROM_SIZE);
+    ROMS_OR_FAIL(!src.empty());
 
     std::vector<u8> out(PROG_ROM_BYTES);
     decode_program_rom(out.data(), src.data());
 
-    CHECK_HASH("program_rom", fnv1a(out.data(), out.size()), PROGRAM_ROM_HASH);
+    CHECK_HASH("program_rom", Fnv1a::of(out.data(), out.size()), PROGRAM_ROM_HASH);
 }
 
 /**
- * @brief Partir el trabajo caro (ROM SET) del barato (PARCHE) no puede cambiar un byte del resultado, ni
- *        siquiera arrastrando estado de un parche al siguiente.
+ * @brief decode_params_page() no depende de lo que hubiera en el destino, y dos parches de la misma página
+ *        de 32 KB solo difieren en la cabecera.
  */
 TEST_SUITE(rom_loader_select_patch_is_stateless)
 {
     const char *name = romSetFiles[ROMSET_MKS20_A][ROM_IC18];
-    std::vector<u8> src = read_rom(name, WAVE_ROM_SIZE);
-    if (src.empty())
-        return;
+    std::vector<u8> src = read_rom(g_roms_dir, name, WAVE_ROM_SIZE);
+    ROMS_OR_FAIL(!src.empty());
 
     std::vector<u8> fresh(PARAMS_ROM_BYTES);
     std::vector<u8> reused(PARAMS_ROM_BYTES, 0x5a);
@@ -204,8 +179,7 @@ TEST_SUITE(rom_loader_select_patch_is_stateless)
     CHECK_EQ(diffs, 0);
 
     // Dos parches del mismo ROM set y de la misma página de 32 KB solo se
-    // diferencian en la cabecera: es exactamente el trabajo que selectPatch()
-    // ahorra frente a recargar el ROM set entero.
+    // diferencian en la cabecera.
     decode_params_page(fresh.data(), src.data(), 0x000000);
     decode_params_page(reused.data(), src.data(), 0x003c20);
 
