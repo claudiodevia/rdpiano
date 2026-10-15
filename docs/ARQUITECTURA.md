@@ -37,8 +37,8 @@ reimplementación *gate-level* de los tres chips de síntesis (IC19, IC9, IC8).
 
 Dos reglas que gobiernan todo lo demás:
 
-- **No hay `noteOn()`.** Un Note On se traduce a bytes del protocolo interno CPU-A → CPU-B, se encola, y
-  la CPU emulada tiene que ejecutar hasta que el firmware lo consuma y escriba en el chip de sonido.
+- **Un note-on no toca el chip.** `Mcu::noteOn()` lo traduce a bytes del protocolo interno CPU-A → CPU-B y
+  los encola; la CPU emulada tiene que ejecutar hasta que el firmware lo consuma y escriba en el chip de sonido.
   Asignación y robo de voces, curvas de velocidad y pedal son decisiones del firmware, no de RdPiano.
 - **El reloj maestro es el audio.** No hay bucle de CPU aparte: cada muestra, `Mcu::generate_next_sample()`
   saca una muestra del chip y ejecuta 100 instrucciones (62 en los parches de 32 kHz).
@@ -89,7 +89,9 @@ Dependencias no obvias:
 
 - `mcu_ops.h` no es una cabecera autónoma: se incluye a mitad de `mcu.cpp` porque sus ~250 handlers usan
   las macros (`PC`, `EAD`, `SET_NZ8`, `RM`, `WM`…) definidas justo antes. Derivado de MAME (trampa 5).
-- `rd_engine.cpp` incluye `resample/libresample.h` (C, `extern "C"`); ninguna cabecera del núcleo lo expone.
+- `rd_engine.h` solo declara la fachada: el estado vive en `RdPianoEngine::Impl` (`rd_engine.cpp`) y sus
+  piezas en `librdpiano/src/engine/`, que no son cabeceras públicas; así `lsp/`, `RdBiquad` y
+  `resample/libresample.h` (C, `extern "C"`, solo en `rate_converter.cpp`) no llegan al plugin.
 
 ## 3. Clases
 
@@ -103,17 +105,24 @@ classDiagram
         +pushMidi(frame, status, d1, d2)
         +requestPatch(patch)
         +requestMasterTune(tune)
+        -Impl* impl
+    }
+    class Impl {
         -serviceRequests(n)
+        -applyPatch(p)
+        -finishChange()
         -sendTracked(status, d1, d2)
-        -heldVelocity
-        -declickGain
+        -synthesise(emuFrames)
     }
     class Mcu {
-        +generate_next_sample(rate32) s32
+        +nextSample() s32
         +boot(tune, rate32)
-        +sendMidiCmd(cmd, d1, d2)
+        +noteOn(note, vel)
+        +noteOff(note)
+        +sustain(down)
+        +activatePatch(slot, page, offset)
+        +setSampleRate(hz)
         +setMasterTune(tune)
-        +reloadPatch()
         -execute_run()
     }
     class RdBoardCpu {
@@ -150,11 +159,21 @@ classDiagram
     class libresample {
         <<C>>
     }
-    RdPianoEngine *-- Mcu
-    RdPianoEngine *-- SpaceD
-    RdPianoEngine *-- Phaser
-    RdPianoEngine *-- RdBiquad : eqL y eqR
-    RdPianoEngine ..> libresample : resampleL y resampleR
+    RdPianoEngine *-- Impl
+    Impl *-- Mcu
+    Impl *-- PatchBank
+    Impl *-- MidiQueue
+    Impl *-- HeldNotes
+    Impl *-- RetriggerMeter
+    Impl *-- ChangeScheduler
+    Impl *-- EffectsChain
+    Impl *-- RateConverter
+    Impl *-- OutputStage
+    EffectsChain *-- SpaceD
+    EffectsChain *-- Phaser
+    OutputStage *-- MidEq
+    MidEq *-- RdBiquad : L y R
+    RateConverter ..> libresample : L y R
     RdBoardCpu <|.. Mcu
     Mcu *-- RdBoard
     RdBoard o-- RdBoardCpu : cpu
@@ -162,6 +181,20 @@ classDiagram
     RdBoard *-- CommandPort
     SoundChip ..> SaTables : LUT compartidas
 ```
+
+Las piezas del motor (`librdpiano/src/engine/`), cada una con un solo trabajo; `Impl` las orquesta y es
+lo único que sabe en qué orden van:
+
+| Pieza | Qué guarda | Hilo |
+|---|---|---|
+| `PatchBank` | Los tres juegos de onda descifrados en sus ranuras y las 16 páginas de params. | Construcción |
+| `MidiQueue` | Los eventos del bloque, 512 como mucho. | Render |
+| `HeldNotes` | El espejo de teclas y pedal, y su devolución al firmware. | Render |
+| `RetriggerMeter` | Nivel del ataque y actual, en RMS²: con cuánta fuerza reentra lo devuelto. | Render |
+| `ChangeScheduler` | Peticiones (las únicas atómicas), ventana de asentamiento y declick. | Cualquiera → render |
+| `EffectsChain` | SpaceD y Phaser con su mezcla en rampa, a la tasa del emulador. | Render |
+| `RateConverter` | Búferes, remuestreadores y corrección de deriva. | `prepare()` → render |
+| `OutputStage` | Ganancia de parche, declick, trémolo y `MidEq`, a la tasa del host. | Render |
 
 `Mcu` es lo que hay **dentro** del chip (instrucciones, registros, temporizador, interrupciones);
 `RdBoard`, lo **soldado al bus**. `RdBoardCpu` es todo lo que la placa necesita de la CPU: el PC (lo mira
@@ -291,16 +324,20 @@ Parche = juego de ROM de onda + offset en la params ROM + tasa. Seis tablas para
 | 6 | MKS-20 E-Piano 1 | MKS20_B | 20 | 14 | MK-80 Clavi | MK80 | **32** |
 | 7 | MKS-20 E-Piano 2 | MKS20_B | **32** | 15 | MK-80 Vibraphone | MK80 | 20 |
 
-Lo caro se hace **al construir el motor** (~9 ms): los 3 juegos descifrados en su ranura del
-`SoundChip` y las 16 páginas de params (32 KB cada una) en `RdPianoEngine`. Cambiar de parche después:
+Lo caro se hace **al construir el motor** (~6 ms): `PatchBank` descifra los juegos de onda que faltan en
+su ranura del `SoundChip` (la 0 la deja el constructor de `Mcu`, con el juego del parche 0) y las 16
+páginas de params (32 KB cada una). Cambiar de parche después es `PatchBank::activate()` →
+`Mcu::activatePatch()`:
 
-1. `selectRomSet()`: mover un puntero, solo si cambia el juego (`decodeRomSet`/`selectRomSet` suben por `RdBoard` y `Mcu`).
-2. `selectPatchPage()`: `memcpy` de 32 KB a `params_rom[0x8000]` (banco 1).
-3. Parchear `params_rom[0x00-0x02]` = `{0x01, hi, lo}`: un puntero *banco + dirección* en `0x4000` que
-   lleva al firmware al parche elegido **sin tocar el firmware**.
+1. `selectWaveSet()`: mover un puntero.
+2. `selectPatchPage()`: `memcpy` de 32 KB a `params_rom[0x8000]` (banco 1), y parchear
+   `params_rom[0x00-0x02]` = `{0x01, hi, lo}`: un puntero *banco + dirección* en `0x4000` que lleva al
+   firmware al parche elegido **sin tocar el firmware**.
+3. `reloadPatch()`: el program change que hace releer la página.
 
-Total: microsegundos, viable desde el hilo de audio. `loadRomSet()` + `selectPatch()` (= `loadSounds()`)
-siguen para quien no precalcula; `prepareRomSetFor()` es un no-op de compatibilidad.
+Y `setSampleRate()`, que fija las 100 o 62 instrucciones por muestra. Total: microsegundos, viable desde el
+hilo de audio. `loadRomSet()` + `selectPatch()` (= `loadSounds()`) siguen para el harness, que no
+precalcula.
 
 ## 5. `RdPianoEngine`
 
@@ -318,17 +355,21 @@ sequenceDiagram
     P->>E: pushMidi(frame, ...) por evento
     P->>E: render(L, R, n)
     E->>E: serviceRequests(n): parche y afinación pendientes
-    E->>E: framesForBlock(): muestras del emulador con corrección de deriva
+    E->>E: RateConverter::plan(): muestras del emulador con corrección de deriva
     loop synthesise(), a sourceRate
         E->>M: sendTracked() de los eventos que tocan
-        E->>M: generate_next_sample(mode32)
+        E->>M: nextSample()
         M-->>E: s32 mono
-        E->>E: SpaceD y Phaser, siempre, con mezcla en rampa
+        E->>E: RetriggerMeter, y EffectsChain siempre, con mezcla en rampa
     end
-    E->>R: resampleBlock(): a hostRate
-    E->>E: outputStage(): ganancia, declick, trémolo, EQ
-    E->>M: sendTracked() de los eventos que quedaron al final
+    E->>R: RateConverter::process(): a hostRate
+    E->>E: OutputStage: ganancia, declick, trémolo, EQ
+    E->>M: flushMidi(): los eventos que quedaron al final
 ```
+
+Un bloque que no se puede rendir (vacío, mayor que el preparado, o con menos de 2 muestras del emulador o más de las que caben) sale
+en silencio, pero su MIDI llega igual al firmware: si no, un note-off perdido dejaría la tecla pulsada en
+el espejo y el siguiente cambio la resucitaría (`engine_abort_delivers_midi`).
 
 ### 5.2 Cadena de audio
 
@@ -377,7 +418,7 @@ palabras (256 KB) para las líneas largas. Variables `accA_370` = pasos del micr
 porque el emulador solo corre a 20 o 32 kHz. Los dos handles se abren en `prepare()` para todo el rango
 de factores (`hostRate/32000 … hostRate/20000`) y no se reabren al cambiar de parche (`resample_open()`
 ≈ 600 KB y 2,5 ms; lo vigila `stats.resamplerOpens`). La deriva se corrige por bloque en
-`framesForBlock()` cuando el error acumulado pasa de `numFrames/4`.
+`RateConverter::plan()` cuando el error acumulado pasa de `numFrames/4`.
 
 ### 5.3 Cambios que apagan el firmware
 
@@ -411,11 +452,11 @@ sequenceDiagram
     participant M as Mcu y firmware
     UI->>E: requestPatch(p)
     Note over E: serviceRequests: ventana de asentamiento cerrada, declickPatch = p
-    E->>E: outputStage baja a 0 en 6 ms
+    E->>E: OutputStage baja a 0 en 6 ms
     opt afinación pendiente
         E->>M: applyMasterTune(t): switcharoo
     end
-    E->>M: applyPatch(p): selectRomSet, selectPatchPage, reloadPatch
+    E->>M: applyPatch(p): PatchBank::activate, Mcu::activatePatch
     Note over M: voces apagadas, pedal suelto
     E->>M: finishChange: pedal, luego teclas con velocidad corregida
     E->>E: sube en 15 ms, u 80 ms si reentró algo
@@ -435,10 +476,10 @@ sequenceDiagram
     Note over F: afinar un parche distinto del 0 falla sin esto
 ```
 
-**Espejo y reentrada.** `sendTracked()`, único camino de salida MIDI, apunta `heldVelocity[128]` y
-`sustainDown`, y suelta una tecla antes de volver a pulsarla (trampa 14). `restoreHeldNotes()` devuelve
-el pedal y **solo** las teclas aún pulsadas, con la velocidad rebajada según cuánto decayó la salida
-cruda (`onsetSq` → `levelSq`, en RMS²). Constantes y resultados medidos: CLAUDE.md, *Cambio de parche y
+**Espejo y reentrada.** `sendTracked()`, único camino de salida MIDI, decodifica una vez
+(`KeyEvent::decode()`), apunta en `HeldNotes` y suelta una tecla antes de volver a pulsarla (trampa 14).
+`HeldNotes::restore()` devuelve el pedal y **solo** las teclas aún pulsadas, con la velocidad rebajada
+según cuánto decayó la salida cruda (`RetriggerMeter`: `onsetSq` → `levelSq`, en RMS²). Constantes y resultados medidos: CLAUDE.md, *Cambio de parche y
 de afinación*.
 
 **Program change MIDI**: `pushMidi()` lo convierte en `requestPatch()`; nunca llega al firmware.
@@ -516,14 +557,14 @@ flowchart LR
         dial["sliderDragEnded, setCurrentProgram, setMasterTune"]
         timer["timerCallback a 10 Hz"]
     end
-    subgraph at["Atómicos"]
+    subgraph at["Atómicos de ChangeScheduler"]
         req["patchRequest, tuneRequest"]
         latest["latestPatch, latestTune"]
     end
     subgraph audio["Hilo de audio: render()"]
         pm["pushMidi: program change"]
         sr["serviceRequests()"]
-        rest["synthesise, resample, outputStage"]
+        rest["synthesise, RateConverter, OutputStage"]
     end
     dial -- "store" --> req
     dial -- "store" --> latest
@@ -541,7 +582,7 @@ flowchart LR
 | Intención ≠ realidad | `patch()`/`masterTune()` = lo pedido (lo que enseña la UI); `activePatch()`/`activeMasterTune()` = lo que suena. Sin eso el panel parpadea. |
 | Vías síncronas | `setPatch()`/`setMasterTune()`/`allNotesOff()` con `render()` vivo = carrera. |
 | `prepare()` | Atiende la petición pendiente **antes** de `boot()` (trampa 8); fija `engine_prepare_pending_change`. |
-| Diagnóstico | `RdEngineStats`: contadores no atómicos; el núcleo no imprime en el hilo de audio. |
+| Diagnóstico | `RdEngineStats`: contadores atómicos (`relaxed`), legibles desde cualquier hilo; el núcleo no imprime en el hilo de audio. |
 
 ## 8. Vida de una nota
 
@@ -572,7 +613,7 @@ Después la muestra sigue la cadena de §5.2.
 
 | Suite | Qué es | Tamaño |
 |---|---|---|
-| `rdpiano_tests` | Unitaria, `librdpiano/test/unit/` | 61 suites, 576 comprobaciones, ~10 s |
+| `rdpiano_tests` | Unitaria, `librdpiano/test/unit/` | 64 suites, 587 comprobaciones, ~10 s |
 | `rdpiano_e2e` | Harness bit-exacto contra `golden.txt` | 16 parches, ~3 s |
 | `rdpiano_plugin_tests` | Presets, programas, buses, latencia, cola, MIDI, gestos y texto del display | 18 suites, 255 comprobaciones |
 

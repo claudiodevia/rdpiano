@@ -48,6 +48,9 @@ add_library(librdpiano src/mcu.cpp src/rd_board.cpp src/sound_chip.cpp src/sa_ta
     src/rom_loader.cpp src/command_port.cpp src/rd_trace.cpp
     src/lsp/spaced.cpp src/lsp/phaser.cpp
     src/rd_engine.cpp
+    src/engine/change_scheduler.cpp src/engine/effects_chain.cpp src/engine/held_notes.cpp
+    src/engine/output_stage.cpp src/engine/patch_bank.cpp src/engine/rate_converter.cpp
+    src/engine/rd_biquad.cpp src/engine/retrigger_meter.cpp
     src/resample/resample.c src/resample/filterkit.c src/resample/resamplesubs.c)
 # `include/` es PUBLIC: quien enlaza librdpiano —el plugin desde
 # `rdpiano_juce/`, sin ir más lejos— no tiene por qué saber dónde vive el
@@ -73,6 +76,7 @@ add_executable(rdpiano_tests
     test/unit/test_board.cpp
     test/unit/test_command_port.cpp
     test/unit/alloc_counter.cpp
+    test/unit/test_biquad.cpp
     test/unit/engine_fixture.cpp
     test/unit/test_engine_effects.cpp
     test/unit/test_engine_golden.cpp
@@ -89,7 +93,8 @@ add_executable(rdpiano_tests
 target_link_libraries(rdpiano_tests librdpiano)
 # patches_plugin_resources lee el CMakeLists del plugin.
 target_compile_definitions(rdpiano_tests PRIVATE RDPIANO_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/..")
-target_include_directories(rdpiano_tests PRIVATE test test/unit)
+# `src` por las piezas internas del motor (`engine/`), que se prueban sueltas.
+target_include_directories(rdpiano_tests PRIVATE test test/unit src)
 
 enable_testing()
 add_test(NAME unit COMMAND rdpiano_tests --roms ${CMAKE_CURRENT_SOURCE_DIR}/../roms

@@ -579,6 +579,12 @@ void Mcu::sendMidiCmd(u8 cmd, u8 data1, u8 data2)
     }
 }
 
+void Mcu::noteOn(u8 note, u8 velocity) { board.commandPort().noteOn(note, velocity); }
+
+void Mcu::noteOff(u8 note) { board.commandPort().noteOff(note); }
+
+void Mcu::sustain(bool down) { board.commandPort().sustain(down); }
+
 void Mcu::boot(int16_t masterTune, bool warmupRate32)
 {
     reset();
@@ -627,6 +633,15 @@ void Mcu::decodeRomSet(unsigned slot, const u8 *temp_ic5, const u8 *temp_ic6, co
 void Mcu::selectRomSet(unsigned slot, const u8 *temp_paramsrom) { board.selectRomSet(slot, temp_paramsrom); }
 
 void Mcu::selectPatchPage(const u8 *page, size_t from_addr) { board.selectPatchPage(page, from_addr); }
+
+void Mcu::selectWaveSet(unsigned slot) { board.soundChip().select_samples(slot); }
+
+void Mcu::activatePatch(unsigned slot, const u8 *page, size_t from_addr)
+{
+    selectWaveSet(slot);
+    selectPatchPage(page, from_addr);
+    reloadPatch();
+}
 
 void Mcu::loadSounds(const u8 *temp_ic5, const u8 *temp_ic6, const u8 *temp_ic7, const u8 *temp_paramsrom,
                      size_t from_addr)

@@ -240,3 +240,37 @@ TEST_SUITE(engine_repeated_note)
         }
     }
 }
+
+/**
+ * @brief El MIDI de un bloque que no se puede rendir llega igual al firmware: un note-off en él apaga la nota y
+ *        el siguiente cambio de parche no la resucita.
+ */
+TEST_SUITE(engine_abort_delivers_midi)
+{
+    const int BLOCK = 256;
+    auto e = make_engine(48000.0, BLOCK);
+    REQUIRE_ENGINE(e);
+    e->params.chorusEnabled = false;
+
+    note_on(e.get(), 60, 100);
+    Stereo ataque;
+    render_into(e.get(), ataque, BLOCK, 16);
+
+    // Un bloque de una muestra a 48 kHz son 0,4 muestras del emulador: se aborta.
+    const unsigned long abortadosAntes = e->stats.tooFewFrames;
+    note_off(e.get(), 60);
+    std::vector<float> l(1, 0.0f), r(1, 0.0f);
+    e->render(l.data(), r.data(), 1);
+    checks.add("bloque-abortado", e->stats.tooFewFrames - abortadosAntes == 1, "el bloque de una muestra se rindió");
+
+    Stereo cola;
+    render_into(e.get(), cola, BLOCK, (int)(48000.0 * 1.5 / BLOCK));
+
+    // Con el note-off perdido, el espejo seguiría con la tecla pulsada y el cambio la redispararía.
+    e->setPatch(2);
+    Stereo tras;
+    render_into(e.get(), tras, BLOCK, (int)(48000.0 * 0.3 / BLOCK));
+    const double nivel = rms(tras.l, 0, tras.l.size());
+    checks.add("note-off-abortado-no-resucita", nivel < kSilenceLevel,
+               check_fmt("rms %.5f tras el cambio de parche", nivel));
+}

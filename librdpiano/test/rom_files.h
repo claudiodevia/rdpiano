@@ -89,7 +89,7 @@ struct RomCache
         set.ic5 = get(romSetFiles[id][ROM_IC5], WAVE_ROM_SIZE);
         set.ic6 = get(romSetFiles[id][ROM_IC6], WAVE_ROM_SIZE);
         set.ic7 = get(romSetFiles[id][ROM_IC7], WAVE_ROM_SIZE);
-        set.ic18 = get(romSetFiles[id][ROM_IC18], WAVE_ROM_SIZE);
+        set.ic18 = get(romSetFiles[id][ROM_IC18], PARAMS_ROM_SIZE);
         return set.ic5 && set.ic6 && set.ic7 && set.ic18;
     }
 

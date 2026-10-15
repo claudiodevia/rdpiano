@@ -9,7 +9,7 @@ Revisar todo a la vez deja la revisión en la superficie; cada pasada de abajo t
 hallazgos, sus lotes de cambios y su verificación.
 
 **Relación con [docs/REVISION-CODIGO.md](docs/REVISION-CODIGO.md):** lo que ya figura allí (§1 IRQ por
-instrucción, §2 motor, §3 `--bench` y suite de `RdBiquad`) **no se repite aquí**; sigue abierto y se cita por
+instrucción, §2 comentarios del emulador, §3 `--bench` y trampa 3) **no se repite aquí**; sigue abierto y se cita por
 su sección. Al cerrar cada pasada, lo que quede pendiente de ella se pasa a REVISION-CODIGO.md y su sección de
 este archivo se borra: este plan es temporal, aquel es la fuente única de lo pendiente.
 
@@ -22,9 +22,9 @@ este archivo se borra: este plan es temporal, aquel es la fuente única de lo pe
 
 | # | Pasada | Por qué en este orden | Riesgo de audio |
 |---|---|---|---|
-| 1 | Pruebas y scripts — **hecha** (2026-10-14; lo que quedó, en REVISION-CODIGO.md §3.3 y §3.4) | Pone la red que necesitan las demás: hash del motor (`engine_golden`), suite de `Mcu` (`test_mcu.cpp`), `board_select_patch_page`. | Ninguno |
+| 1 | Pruebas y scripts — **hecha** (2026-10-14; lo que quedó, en REVISION-CODIGO.md §3.2 y §3.3) | Pone la red que necesitan las demás: hash del motor (`engine_golden`), suite de `Mcu` (`test_mcu.cpp`), `board_select_patch_page`. | Ninguno |
 | 2 | Plugin — **hecha** (2026-10-14; lo que quedó, en REVISION-CODIGO.md §4) | Independiente del núcleo; tiene fallos reales y locales. | Ninguno (sí de comportamiento ante el host: gestos) |
-| 3 | [Motor](#pasada-3--motor-rd_engine-patchesh) | El refactor grande (partir `RdPianoEngine`); exige el hash `engine_golden` de la pasada 1. | Bajo, con `engine_golden` |
+| 3 | Motor — **hecha** (2026-10-14; lo que quedó, en REVISION-CODIGO.md §5) | El refactor grande (partir `RdPianoEngine`); exige el hash `engine_golden` de la pasada 1. | Bajo, con `engine_golden` |
 | 4 | [Emulador](#pasada-4--emulador-mcu-rd_board-command_port-sound_chip-sa_-rom_loader) | La de más riesgo tímbrico; va la última, con todo lo demás estable. | **Alto** en los lotes marcados |
 
 ### Reglas comunes a todas las pasadas
@@ -49,137 +49,6 @@ al final de cada uno y verificar.sh completo al final de la pasada. Lo marcado A
 no lo apliques: avísame. No hagas commit. Al terminar, mueve lo pendiente a docs/REVISION-CODIGO.md,
 borra la sección de la pasada de este archivo y dime qué tocaste, lote por lote.
 ```
-
----
-
-## Pasada 3 — Motor (`rd_engine.*`, `patches.h`)
-
-**Alcance:** `librdpiano/include/rd_engine.h`, `librdpiano/src/rd_engine.cpp`, `librdpiano/include/patches.h`;
-las firmas nuevas de `Mcu` que pida la partición, sin tocar su implementación interna.
-**Prerrequisito:** `engine_golden` (pasada 1). Sin él, ningún cambio de orden en coma flotante se detecta.
-**Abierto en REVISION-CODIGO.md §2** (no se repite): `inUsed` compartido, `resamplerOpens += 2`,
-`dryL`/`dryR`, `powf` doble, `offsets_in_range`, `RdEngineStats` no atómico. Se resuelven dentro de los lotes.
-
-### Fallos
-
-| Dónde | Problema | Arreglo |
-|---|---|---|
-| `rd_engine.cpp:652` | **Comprobado.** `renderBufferFrames > 20000` sobra frente a `emuCapacity`, que puede pasar de 20000: parche de 32 kHz con host a 22,05 kHz y bloque de 16384 (o 44,1 kHz y 32768) pide 23 778 muestras → bloque abortado en silencio y `tooManyFrames++` aunque el búfer cabe. | Quitar `> 20000`; caso nuevo en `engine_edge_blocks`/`engine_host_rates`. Lote propio. |
-| `rd_engine.cpp:614-618` | **Comprobado.** `abortBlock` vacía la cola MIDI: un note-off o pedal arriba de ese bloque se pierde; la nota queda en firmware y espejo, y el siguiente cambio de parche la resucita. | Entregar la cola por `sendTracked` también al abortar (la `CommandQueue` es acotada y cuenta lo que descarta); corregir su doc (:606-608). |
-| `rd_engine.h:39` | **Comprobado.** El contrato de hilo de `RdEngineParams` es falso: dice "el hilo de UI escribe", y el plugin escribe en `processBlock` (`syncParamsToEngine`, `PluginProcessor.cpp:172, 228`). Quien siga el doc tendrá una carrera. | "Se escribe en el hilo de render(), entre bloques". |
-| `rd_engine.h:259-271` | `pushMidi` se anuncia "RT-safe" pero no es seguro entre hilos (`midiCount` es `int`). | "Llamar desde el hilo de render(), antes de render()". |
-
-### Cohesión: partición de `RdPianoEngine`
-
-Hoy (`rd_engine.h:288-407`) tiene unos 45 campos privados y ocho responsabilidades. Propuesta: structs internos
-en `librdpiano/src/engine/` (por valor; `render()` sigue sin reservas; las atómicas solo en `ChangeScheduler`).
-
-| Pieza | Campos | Métodos |
-|---|---|---|
-| `PatchBank` | `romSets`, `paramPages`, bucle de descifrado del constructor | `page(p)`, `activate(Mcu&, from, to)` (select + page + reload) |
-| `MidiQueue` | `midiQueue`, `midiCount`, `kMidiQueueSize` | `push() → bool`, `clear()`, `size()`, `operator[]` |
-| `HeldNotes` | `heldVelocity[128]`, `sustainDown` | `track() → bool noteOn`, `isHeld(n)`, `clear()`, `restore(Mcu&, deltaVel)` |
-| `RetriggerMeter` | `levelSq`, `onsetSq`, `levelSmooth`, `onsetHold`, `kLevelTauMs`, `kOnsetWindowMs`, `kDbPerVelocityUnit`, `kMaxRetriggerAttenDb` | `setSourceRate`, `reset`, `startOnset`, `feed(s32)` inline, `velocityDrop()` |
-| `ChangeScheduler` | `patchRequest`, `tuneRequest`, `latest*`, `settle*`, `declick*`, `kNoTuneRequest`, `kChangeFade*`, `kPatchSettleMs` | `request`, `requestTune`, `prepare(hostRate)`, `takePending`, `cancelPatch`, `cancelTune`, `service(…) → bool`, `finish(retriggered)`, `nextGain()` inline |
-| `EffectsChain` | `spaceD`, `phaser`, `chorusMix`, `efxMix`, `effectMixStep`, `chorusRateToMsPeriod`, `kEmu*Shift` | `reset`, `setSourceRate`, `snapTo`, `beginBlock`, `process(s32, s32&, s32&)` inline |
-| `RateConverter` | `resampleL/R`, `emuL/R`, `outL/R`, capacidades, `samplesError`, `latencyFrames`, `kWorstSourceRate` | `open`, `close`, `plan() → emuFrames`, `process`, `latency()` (resuelve `inUsedL/R` y `resamplerOpens`) |
-| `OutputStage` | `outputGainSmoothed`, `tremoloPhase`, `MidEq` | `prepare`, `process(…)` conservando `out * gain * declick` en ese orden |
-
-En `RdPianoEngine` queda la orquestación: `prepare`, `release`, `render`, `applyPatch`, `applyMasterTune`,
-`finishChange` (afinar primero, cambiar después), `sendTracked`, `pushMidi`.
-
-Acoplamiento con el emulador que la partición corrige:
-
-- `rd_engine.cpp:166-175` (+ `rd_board.cpp:16`, `sound_chip.cpp:20`): la ranura 0 se descifra **tres veces**
-  al construir (~5,8 ms de ~9). Empezar el bucle en `s=1` con
-  `static_assert(ROMSET_COUNT <= SoundChip::NUM_WAVE_SLOTS)`, sin cambiar el camino del harness.
-- `rd_engine.cpp:185, 339`: `selectRomSet(slot, ic18)` pasa una ROM de params que el motor nunca usa →
-  `Mcu::selectWaveSet(slot)`.
-- `rd_engine.cpp:335-344, 177-180`: el motor arma `selectRomSet` → `selectPatchPage` → `reloadPatch()` y
-  conoce el orden obligatorio → `Mcu::activatePatch(slot, page, offset)`.
-- `rd_engine.cpp:673, 713`: `mode32khz = sourceRate == 32000` traduce la tasa a "62 o 100" →
-  `Mcu::setSampleRate(hz)`; el `false` de `boot` sigue visible (trampa 7).
-- `rd_engine.cpp:368-385` frente a `mcu.cpp:553-580`: dos decodificadores MIDI que deben coincidir;
-  `restoreHeldNotes` emite MIDI crudo (:417, :439) → `Mcu::noteOn/noteOff/sustain`; `sendMidiCmd` queda para
-  e2e.
-- `rd_engine.cpp:377-379`: `trackMidi` abre además la ventana de ataque del medidor → devolver "es note-on" y
-  que el motor llame a `meter.startOnset()`.
-- Opcional, último: pimpl para sacar `lsp/` y `RdBiquad` de la cabecera pública (`rd_engine.h:22-23, 294-297`).
-
-### Refactorizaciones
-
-- `prepare()` 111 líneas (:219-329) → `openResamplers`, `absorbPendingRequests` (con el comentario de la
-  trampa 8 como su doc), `resetChangeState`, `resetDsp`.
-- `synthesise()` 112 líneas (:671-782) → `effects.beginBlock`, `meter.feed`, efecto inline copiando las
-  expresiones literalmente. **Solo con `engine_golden`.**
-- Duplicados: `effectMixStep` y `levelSmooth` (:290/347, :307/351) → `onSourceRateChanged(rate)`; vaciado del
-  espejo (:303-305, :556-558) → `clearHeldNotes()`; `kOutputScaling * patchOutputGain[currentPatch]`
-  (:317, :838) → `patchGainTarget()`; `(int)(ms * 0.001f * rate)` (:297, :378) → `ms_to_frames()` en `float`;
-  `clamp_index`/`clamp_step` (:94-120) → `std::clamp`; el bucle de limpieza de `resampleBlock` (:796-800)
-  repite `silence()`.
-- `static` sueltos (:15-132), pi dos veces (:47, :50) → espacio anónimo, `constexpr`, `kTwoPi`.
-- Tasas cableadas (:92, 230, 247-248, 673) → `kMinPatchRate`/`kMaxPatchRate` en `patches.h`.
-- `spaceD.audioOutL/R` como acumulador de toda la cadena (:744-776) → locales `s32 outL, outR` (verificado:
-  `process()` solo escribe `audioOut`).
-- Números sin nombre, **solo nombrar, no cambiar**: `/4` de `spaceDRateFromMs(1000.0f / periodMs / 4.0f)`
-  (:681; el argumento son Hz/4, no ms), `/15.0f` del chorus frente a `/14.0f` del trémolo (:682, :829), `0x7f`
-  de tabla (:684-685 → `std::size(…) - 1`), nibbles MIDI, `64` del CC del pedal, `127` (:370-384, 396-397,
-  417, 439, 570).
-- Deriva calculada en `framesForBlock` y acumulada en `resampleBlock` por un parámetro de salida (:626-661,
-  :790-814, :896-905) → `RateConverter::plan()`/`commit()`.
-- `prepareRomSetFor` (`rd_engine.h:161-170`, `.cpp:333`) es un no-op que el plugin no usa → quitar la API y
-  reescribir `engine_patch_prepare` (lote propio: edita una prueba).
-- `patches.h:138` `WAVE_ROM_SIZE` duplica `WAVE_ROM_BYTES` (`rom_loader.h:44`) y se usa para cargar la IC18
-  (`test_engine.cpp:96`, `e2e.cpp:196, 409`, `test_board.cpp:156`) → `PARAMS_ROM_BYTES`; cierra la entrada
-  `offsets_in_range` de §2.
-
-### Doxygen
-
-- Contratos de hilo incompletos: `activePatch()`, `activeMasterTune()` y getters (`rd_engine.h:189-190,
-  229-230, 281-283`) → "solo en el hilo de render() o con el motor parado"; `sourceSampleRate()` sin doc (cambia
-  con el parche); `requestPatch` (:193-201) omite la ventana de 150 ms.
-- Campos públicos sin `///<`: `rd_engine.h:47, 51, 55, 64-66, 77-78, 285-286` (`params` y `stats`, justo los que
-  llevan contrato de hilo); "en Hz/2" (:52) → "Hz = valor / 2".
-- Docs de privados en la definición del `.cpp` → a la declaración: `finishChange` :354-361,
-  `restoreHeldNotes` :403-413, `serviceRequests` :474-477, `abortBlock` :603-613, `framesForBlock` :620-625,
-  `synthesise` :663-670, `resampleBlock` :784-789, `outputStage` :816-821. Los `///` de grupo
-  (`rd_engine.h:321-335, 343, 354, 365, 372, 377, 389, 394`) se pegan al primer miembro → `///@{ … ///@}` o
-  `///<`.
-- Narran: `prepareRomSetFor` (:161-170), `declick_shape` (cpp:106-109), `serviceRequests` (cpp:474),
-  `rd_engine.h:398-399`. El coste de `resample_open` está en `rd_engine.h:125-127` y `cpp:243-246`: un sitio.
-- Helpers sin doc: `clamp_index`, `clamp_step`, `silence` (:94, :113, :594).
-
-### Comentarios interlineados
-
-- Historia: :502-504, :563-569 (duplica `rd_engine.h:262-264`), :675-680 (basta "Deliberado: lo fija
-  `engine_lfo_rate`"), :728-733, :824-828.
-- Duplican la cabecera o `patches.h`: :695-698, :715-718, :833-837, :841-844, :450 y :543.
-- Desaparecen al nombrar helpers: :288-289, 301-302, 312-313, 349-350, 377, 554-555, 877-878, 887-888, 908-910.
-- Trampa 14 (:389-395) → "Trampa 14 de CLAUDE.md; lo fija `engine_repeated_note`".
-
-### Lotes
-
-0. Confirmar que `engine_golden` (pasada 1) existe y pasa. Debe pasar **sin editarlo** en todos los lotes.
-1. Fallos de doc de hilos (`RdEngineParams`, `pushMidi`, getters).
-2. Mecánicos: espacio anónimo, `constexpr`, helpers deduplicados, nombres de constantes, locales en vez de
-   `spaceD.audioOut*`, las seis entradas de REVISION §2.
-3. `RdBiquad` + `MidEq` a `rd_biquad.h/.cpp` y la suite pendiente de REVISION §3.2.
-4. `MidiQueue`.
-5. `HeldNotes` + `RetriggerMeter` (separar `startOnset` de `trackMidi`).
-6. `ChangeScheduler`.
-7. `RateConverter` (resuelve `inUsed` y `resamplerOpens`). En lote aparte: quitar el tope 20000 con su caso
-   de prueba nuevo.
-8. `EffectsChain`.
-9. `OutputStage`.
-10. `PatchBank` + `Mcu::activatePatch`/`selectWaveSet`/`setSampleRate`/`noteOn…`; descifrado triple. **e2e
-    sin moverse.**
-11. `abortBlock` entrega MIDI; quitar `prepareRomSetFor` y rehacer `engine_patch_prepare`.
-12. Doxygen y comentarios restantes. Actualizar ARQUITECTURA (diagrama de clases del motor).
-13. Opcional: pimpl.
-
-**Diferido:** unificar el volumen (aplicado a tasa del emulador, `cpp:775-777`) con la ganancia de parche
-(tras el remuestreador, `cpp:853-855`). No es bit a bit igual: solo con escucha y `engine_golden` rebaselinado
-a propósito. Recomendación: dejarlo como está.
 
 ---
 
@@ -217,8 +86,8 @@ y sus `.cpp`.
 - `mcu.h:19-159`: `Mcu` es CPU + protocolo con tiempos (`boot`, `setMasterTune`, traducción MIDI) + fachada
   de ROM (6 reenvíos, `mcu.cpp:615-636`) → una `RdMachine` que posea `RdBoard` y `Mcu` con fachada y
   protocolo; `Mcu` solo CPU. Cambia la API (motor, e2e, standalone, pruebas); golden quieto si se conserva el
-  orden. **Coordinar con el lote 10 de la pasada 3**, que añade métodos a `Mcu`: si se hace `RdMachine`, esos
-  métodos nacen ahí.
+  orden. La pasada 3 añadió a `Mcu` lo que usa el motor (`noteOn`/`noteOff`/`sustain`, `selectWaveSet`,
+  `activatePatch`, `setSampleRate`/`nextSample`): si se hace `RdMachine`, pasan ahí.
 - Visibilidad: `op_func`, `execute_one`, `execute_set_input`, `execute_run` y los cuatro `override` de
   `RdBoardCpu` (`mcu.h:32-45, 156-159`) → privados; `loadRomSet`, `selectPatch` (`mcu.h:102, 108`) solo los
   usa `loadSounds` → e2e; `SoundChip::load_samples` (`sound_chip.h:91`) solo el constructor.
@@ -292,7 +161,7 @@ y sus `.cpp`.
 4. `sa_tables` partida en dos funciones; `HACK:` del término inerte.
 5. `command_port` con aritmética entera, **después** de su tabla exhaustiva.
 6. **ALTO RIESGO**: permutaciones de la wave ROM a `rom_loader.h`; `sat14_add`/`exp_lookup` en `sa_blocks.h`;
-   `part_contribution()` compartido con `test_sound_chip_blocks` (cierra REVISION-CODIGO.md §3.3). Golden y
+   `part_contribution()` compartido con `test_sound_chip_blocks` (cierra REVISION-CODIGO.md §3.2). Golden y
    vectores deben quedar idénticos.
 7. **ALTO RIESGO**: `RdBoard::pollLines()` junto con REVISION §1, medido con `--bench` (§3.1).
 8. Handshake RD200 como datos (`FirmwareHandshake`).

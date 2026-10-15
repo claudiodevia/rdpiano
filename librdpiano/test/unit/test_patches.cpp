@@ -29,9 +29,10 @@ TEST_SUITE(patches_rom_files)
             long len = rom_file_size(g_roms_dir, name);
 
             checks.add(std::string("existe ") + name, len >= 0, check_fmt("no se encuentra en %s", g_roms_dir.c_str()));
+            const size_t expected = chip == ROM_IC18 ? PARAMS_ROM_SIZE : WAVE_ROM_SIZE;
             if (len >= 0)
-                checks.add(std::string("tamaño ") + name, (size_t)len == WAVE_ROM_SIZE,
-                           check_fmt("%ld bytes, esperados %zu", len, WAVE_ROM_SIZE));
+                checks.add(std::string("tamaño ") + name, (size_t)len == expected,
+                           check_fmt("%ld bytes, esperados %zu", len, expected));
         }
     }
 

@@ -1,8 +1,8 @@
 # Revisión de código — lo pendiente
 
 **Alcance:** `librdpiano/` (núcleo, motor y pruebas) y `rdpiano_juce/` (plugin y panel).
-**Al día:** 2026-10-14, `develop` @ `919aa06` más las pasadas 1 (pruebas y scripts) y 2 (plugin) de
-PLAN-REVISION.md: todo lo que figura aquí sigue abierto en el código.
+**Al día:** 2026-10-14, `develop` @ `1870b79` más la pasada 3 (motor) de PLAN-REVISION.md, después de las
+pasadas 1 (pruebas y scripts) y 2 (plugin): todo lo que figura aquí sigue abierto en el código.
 **Excluidos del juicio de estilo:** `mcu_ops.h`, `mame_utils.h`, `lsp/`, `resample/` y `re_stuff/`
 (trampa 5 de CLAUDE.md).
 
@@ -45,16 +45,10 @@ lleva la mayoría de los accesos: **no tocar ese orden**.
 
 ---
 
-## 2. Sin riesgo: el motor
+## 2. Sin riesgo: comentarios del emulador
 
 | Dónde | Qué falta |
 |---|---|
-| `rd_engine.cpp`, `resampleBlock()` | Los dos canales comparten `inUsed`: el segundo pisa al primero y el retorno del derecho se descarta. Hoy es inocuo porque los remuestreadores son simétricos, pero si se rompiera saldría como **desfase entre canales**. Usar `inUsedL`/`inUsedR` y un `RD_TRACE` si difieren. |
-| `rd_engine.cpp`, `prepare()` | `stats.resamplerOpens += 2` se suma aunque `resample_open()` devuelva `nullptr`. El contador vigila en `engine_no_alloc_in_render` (`test_engine_host.cpp`) que no se abran remuestreadores fuera de `prepare()`: debe contar aperturas de verdad. |
-| `rd_engine.cpp`, `synthesise()` | `dryL` y `dryR` salen de la misma expresión sobre la misma muestra mono: una variable basta. |
-| `rd_engine.cpp`, `prepare()` | `powf(10.0f, kMidEqGainDb * 0.05f)` calculado dos veces seguidas, una por canal. |
-| `patches.h`, `offsets_in_range()` | Compara `patchToOffset[i]` con `WAVE_ROM_SIZE`, pero los offsets son de la **ROM de parámetros**; funciona porque las dos miden 0x20000. Debe mirar contra una constante de la params ROM. |
-| `rd_engine.h`, `RdEngineStats` | `unsigned long` que escribe el hilo de audio y puede leer la UI. `std::atomic<unsigned long>` con `relaxed` cuesta cero y quita el UB formal. |
 | `sa_tables.cpp`, `sa_tables()` | Falta decir que el `new` del *magic static* **no se libera a propósito** (singleton de proceso) y que LeakSanitizer no lo denuncia porque sigue alcanzable. Una línea, para que nadie lo "arregle" con un destructor. |
 | `sound_chip.cpp`, `SoundChip::read()` | Falta la línea que diga si el chip devuelve de verdad un único registro en todo el rango o si es un agujero conocido. |
 
@@ -68,11 +62,7 @@ No hay medida de rendimiento en el árbol: el perfil se hace a mano con `sample`
 sesiones no se pueden comparar. Una bandera que imprima muestras emuladas por segundo daría una cifra
 comparable entre commits. Es el requisito previo de §1.
 
-### 3.2 Suite para el EQ medio
-
-`RdBiquad` es el único bloque de la cadena sin suite propia; sólo lo cubren de refilón los hashes.
-
-### 3.3 La trampa 3 no la fijan los vectores
+### 3.2 La trampa 3 no la fijan los vectores
 
 `sound_chip_blocks_vectors` reimplementa el silenciado `investigate` (`part.env_value != 0 ? sample : 0`) en
 la prueba en vez de ejercitar `SoundChip::update()`, y ningún vector cubre el early-out
@@ -80,12 +70,10 @@ la prueba en vez de ejercitar `SoundChip::update()`, y ningún vector cubre el e
 `part_contribution()` compartido por `update()` y la suite; toca el bucle caliente, así que va con el lote 6
 (alto riesgo) de la pasada 4.
 
-### 3.4 Restos de la pasada 1
+### 3.3 Restos de la pasada 1
 
 | Dónde | Qué falta |
 |---|---|
-| `test_lsp.cpp`, `lsp_spaced` | El impulso "del plugin" copia a mano el periodo de 450 ms de `chorusRateToMsPeriod[5]` y la fórmula de `rd_engine.cpp`: si cambian, esta suite no se entera (`engine_golden` sí). Se cierra cuando la pasada 3 saque la tabla de `rd_engine.cpp`. |
-| `test_engine_patch.cpp`, `engine_patch_prepare` | Compara `prepareRomSetFor()`, que es un no-op, con nada. Se reescribe o se borra al quitar esa API (pasada 3, lote 11); lo que decía fijar lo fija ya `board_select_patch_page`. |
 | `mcu.h`, `commandPort() const` | Acceso de solo lectura a la cola, añadido para `test_mcu.cpp`. Si la pasada 4 crea `RdMachine`, el acceso nace ahí. |
 | `rdpiano_standalone` | Arranca ya con `boot()` y lee las ROM de `patches.h`, pero solo sabe el parche 0 a 20 kHz y nadie lo ha escuchado tras el cambio. La CI lo compila desde que instala SDL2 y portmidi; un `--patch N` (con la tasa de `patchSampleRates[]`) lo haría útil para juzgar los 16 timbres. |
 | `core-asan` | Sin `-fsanitize=undefined -fno-sanitize-recover`: puede saltar en el código de MAME y pedir supresiones. |
@@ -102,5 +90,17 @@ la prueba en vez de ejercitar `SoundChip::update()`, y ningún vector cubre el e
 | Dial en modo parámetro | Los 15 pasos se reparten ahora el recorrido por igual (`panel::stepFromDial`); antes el último solo se alcanzaba en el tope y la ida y vuelta podía caer un paso abajo por redondeo. Cambia el tacto: confirmarlo a mano. |
 | Fader con automatización | `SliderParameterAttachment` atiende los cambios del hilo de audio con `triggerAsyncUpdate()`, que puede tomar un cerrojo al publicar el mensaje: es el camino estándar de JUCE (lo hacen todos sus attachments), pero es la misma clase de llamada que se quitó de `parameterChanged()`. Si molesta, el fader puede volver al temporizador a costa de moverse a 10 Hz. |
 | Dibujo del panel | Sin prueba: en la pasada se comparó píxel a píxel con un arnés temporal (`createComponentSnapshot` del editor en ocho estados, con `ScopedJuceInitialiser_GUI`) que no quedó en el árbol porque no está probado en la CI sin pantalla. Único cambio visible: el sprite del dial se mueve 1 px en algunas posiciones (ángulo `1,5·π` en vez de `3.14/2 + 3.14`). |
-| `patches.h`, `patchNames` | El Doxygen dice "tal como lo enseña el display": es el nombre de programa del host; el display lo parte por los dos puntos (`PanelDisplay.cpp`). Una línea del núcleo, fuera del alcance de la pasada 2. |
 | `lcd/` | `Lcd.h`, `Lcd.cpp` y `lcd_font.h` siguen con finales de línea CRLF, a diferencia del resto del árbol: normalizarlos en commit aislado. |
+
+---
+
+## 5. Restos de la pasada 3: el motor
+
+| Dónde | Qué falta |
+|---|---|
+| Volumen frente a ganancia de parche | `volume` se aplica a la tasa del emulador (`synthesise()`) y `patchOutputGain` tras el remuestreador (`OutputStage`). Unificarlos no es bit a bit igual: mueve `engine_golden` y solo se haría escuchando. Recomendación: dejarlo. |
+| `EffectsChain::kChorusDepthDivisor` | La profundidad del chorus se divide por 15 y la del trémolo por 14: con el dial a tope el chorus se queda en 14/15. Puede ser un error de transcripción, pero cambiarlo es audio: solo escuchando y moviendo `engine_golden` a propósito. |
+| `Mcu`, constructor | Descifra la ranura 0 dos veces: `SoundChip` en su constructor y `RdBoard::loadRomSet()` otra vez (~1,2 ms cada una). `PatchBank` ya no añade la tercera. Es de la pasada 4 (el camino del harness). |
+| Cifras de coste | Los Doxygen de `Mcu::loadRomSet()` y `RdBoard::decodeRomSet()` dicen ~2,9 ms por juego de onda; medido ahora (Apple Silicon, Release), ~1,2 ms, y construir el motor entero ~6,2 ms. Pasada 4. |
+| `Mcu::sendMidiCmd()` | Queda solo para e2e y el standalone SDL; el motor decodifica una vez (`KeyEvent::decode()`) y llama a `noteOn`/`noteOff`/`sustain`. Las dos decodificaciones deben coincidir hasta que la pasada 4 decida si `sendMidiCmd()` se apoya en ellas. |
+| `RdBoard::selectRomSet()` | El motor ya no la usa (`Mcu::selectWaveSet()` cambia solo la onda), así que `params_rom_src` se queda con la IC18 del parche 0. Inocuo: el motor mapea páginas ya descifradas y nunca llama a `selectPatch()`. |

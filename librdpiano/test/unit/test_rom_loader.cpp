@@ -121,7 +121,7 @@ TEST_SUITE(rom_loader_params_pages)
     for (int patch = 0; patch < NUM_PATCHES; patch++)
     {
         const char *name = romSetFiles[patchToRomSetId[patch]][ROM_IC18];
-        std::vector<u8> src = read_rom(g_roms_dir, name, WAVE_ROM_SIZE);
+        std::vector<u8> src = read_rom(g_roms_dir, name, PARAMS_ROM_SIZE);
         ROMS_OR_FAIL(!src.empty());
 
         decode_params_page(out.data(), src.data(), patchToOffset[patch]);
@@ -160,7 +160,7 @@ TEST_SUITE(rom_loader_program_rom)
 TEST_SUITE(rom_loader_select_patch_is_stateless)
 {
     const char *name = romSetFiles[ROMSET_MKS20_A][ROM_IC18];
-    std::vector<u8> src = read_rom(g_roms_dir, name, WAVE_ROM_SIZE);
+    std::vector<u8> src = read_rom(g_roms_dir, name, PARAMS_ROM_SIZE);
     ROMS_OR_FAIL(!src.empty());
 
     std::vector<u8> fresh(PARAMS_ROM_BYTES);

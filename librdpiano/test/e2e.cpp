@@ -165,7 +165,7 @@ static PatchResult run_patch(int patch, RomBank &roms, std::vector<float> *wav)
     const u8 *ic5 = roms.get(set[ROM_IC5], WAVE_ROM_SIZE);
     const u8 *ic6 = roms.get(set[ROM_IC6], WAVE_ROM_SIZE);
     const u8 *ic7 = roms.get(set[ROM_IC7], WAVE_ROM_SIZE);
-    const u8 *ic18 = roms.get(set[ROM_IC18], WAVE_ROM_SIZE);
+    const u8 *ic18 = roms.get(set[ROM_IC18], PARAMS_ROM_SIZE);
     const u8 *prog = roms.get(PROG_ROM_FILE, PROG_ROM_SIZE);
 
     const int rate = patchSampleRates[patch];
@@ -379,7 +379,7 @@ static int run_headroom(RomBank &roms)
         sets[s].ic5 = roms.get(romSetFiles[s][ROM_IC5], WAVE_ROM_SIZE);
         sets[s].ic6 = roms.get(romSetFiles[s][ROM_IC6], WAVE_ROM_SIZE);
         sets[s].ic7 = roms.get(romSetFiles[s][ROM_IC7], WAVE_ROM_SIZE);
-        sets[s].ic18 = roms.get(romSetFiles[s][ROM_IC18], WAVE_ROM_SIZE);
+        sets[s].ic18 = roms.get(romSetFiles[s][ROM_IC18], PARAMS_ROM_SIZE);
     }
     const u8 *prog = roms.get(PROG_ROM_FILE, PROG_ROM_SIZE);
 

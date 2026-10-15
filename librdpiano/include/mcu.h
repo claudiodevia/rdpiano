@@ -88,6 +88,15 @@ class Mcu : public RdBoardCpu
      */
     void sendMidiCmd(u8 cmd, u8 data1, u8 data2);
 
+    /** @brief Note-on al firmware, sin decodificar MIDI. */
+    void noteOn(u8 note, u8 velocity);
+
+    /** @brief Note-off al firmware, sin decodificar MIDI. */
+    void noteOff(u8 note);
+
+    /** @brief Pedal de sostenido abajo o arriba. */
+    void sustain(bool down);
+
     /**
      * @brief Carga un juego de ROM entero (~2,9 ms; hay tres juegos).
      *
@@ -135,6 +144,30 @@ class Mcu : public RdBoardCpu
     void selectPatchPage(const u8 *page, size_t from_addr);
 
     /**
+     * @brief Activa un juego de onda ya descifrado, en O(1); la ROM de parámetros no cambia.
+     * @param slot Ranura ya poblada por decodeRomSet().
+     */
+    void selectWaveSet(unsigned slot);
+
+    /**
+     * @brief Pone un parche ya descifrado: juego de onda, página de parámetros y relectura del firmware, en ese orden.
+     * @param slot Ranura de onda ya poblada por decodeRomSet().
+     * @param page Página de PARAMS_PAGE_BYTES ya descifrada.
+     * @param from_addr Offset del parche, para el remapeo del banco.
+     */
+    void activatePatch(unsigned slot, const u8 *page, size_t from_addr);
+
+    /**
+     * @brief Fija el ritmo de la CPU de nextSample(): la tasa del parche, 20000 o 32000 Hz.
+     *
+     * Es configuración, como la página mapeada: reset() no la toca.
+     */
+    void setSampleRate(int hz) { sampleRate32 = hz == 32000; }
+
+    /** @brief generate_next_sample() al ritmo de setSampleRate(). */
+    s32 nextSample() { return generate_next_sample(sampleRate32); }
+
+    /**
      * @brief loadRomSet() + selectPatch(): hace el trabajo caro siempre.
      * @param temp_ic5 ROM de onda IC5.
      * @param temp_ic6 ROM de onda IC6.
@@ -163,6 +196,8 @@ class Mcu : public RdBoardCpu
 
   private:
     RdBoard board;
+
+    bool sampleRate32 = false; ///< Lo fija setSampleRate().
 
     /// `read_byte`/`write_byte` son los nombres que usan las macros RM/WM del
     /// core de MAME: reenvío de una línea para no tocar mcu_ops.h.

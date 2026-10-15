@@ -12,8 +12,10 @@
 #include <memory>
 #include <vector>
 
+#include "engine/effects_chain.h"
 #include "lsp/phaser.h"
 #include "lsp/spaced.h"
+#include "rd_engine.h"
 #include "unit_test.h"
 
 /**
@@ -128,11 +130,10 @@ TEST_SUITE(lsp_spaced)
     std::vector<float> impulseDefault = impulse_response<SpaceD>(spaceDRateTable[8], spaceDDepthTable[0x7f], N, false);
     CHECK_HASH("spaced-impulso-por-defecto", hash_of(impulseDefault), 0x2fc294a596910eb9ull);
 
-    // Los valores que el motor calcula para chorusRate=5 (periodo de 450 ms) y
-    // chorusDepth=14, copiados a mano de rd_engine.cpp: si cambia allí la tabla
-    // o la fórmula, esto no se entera (engine_golden sí).
-    std::vector<float> impulsePlugin =
-        impulse_response<SpaceD>(spaceDRateFromMs(1000.0f / 450 / 4.0f), spaceDDepth(14 / 15.0f), N, false);
+    // Los ajustes de fábrica del plugin, por el mismo camino que el motor.
+    const RdEngineParams defaults;
+    std::vector<float> impulsePlugin = impulse_response<SpaceD>(
+        EffectsChain::chorusRate(defaults.chorusRate), EffectsChain::chorusDepth(defaults.chorusDepth), N, false);
     CHECK_HASH("spaced-impulso-plugin", hash_of(impulsePlugin), 0x5c472a9f73a283f7ull);
 
     std::vector<float> sweep = impulse_response<SpaceD>(spaceDRateTable[64], spaceDDepthTable[64], N, true);

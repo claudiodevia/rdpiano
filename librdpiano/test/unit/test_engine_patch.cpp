@@ -61,37 +61,28 @@ TEST_SUITE(engine_patch_change)
 }
 
 /**
- * @brief Llamar a prepareRomSetFor() antes de setPatch() no cambia nada: la misma secuencia de parches da el
- *        mismo audio, muestra a muestra. prepareRomSetFor() es un no-op; que la página cacheada sea la
- *        descifrada lo fija board_select_patch_page.
+ * @brief Dos motores nuevos con la misma secuencia de parches, que cruza los tres juegos de ROM y vuelve, dan
+ *        el mismo audio muestra a muestra: nada del cambio de parche depende de estado fuera del motor. Que la
+ *        página cacheada sea la descifrada lo fija board_select_patch_page.
  */
-TEST_SUITE(engine_patch_prepare)
+TEST_SUITE(engine_patch_sequence)
 {
     const int BLOCK = 256;
 
-    // Cruza los tres juegos de ROM y vuelve: 0 y 2 comparten juego (preparar
-    // ahí no tiene nada que hacer), 3 y 8 lo cambian.
+    // 0 y 2 comparten juego; 3, 8 y la vuelta a 0 lo cambian.
     const int sequence[] = {0, 2, 3, 8, 11, 0};
 
-    Stereo direct, split;
+    Stereo runs[2];
 
-    for (int pass = 0; pass < 2; pass++)
+    for (Stereo &out : runs)
     {
         auto e = make_engine(48000.0, BLOCK);
         REQUIRE_ENGINE(e);
 
-        Stereo &out = pass == 0 ? direct : split;
         std::vector<float> l(BLOCK, 0.0f), r(BLOCK, 0.0f);
 
         for (int patch : sequence)
         {
-            if (pass == 1)
-            {
-                // Repetido a propósito: preparar dos veces, o preparar el juego
-                // que ya está puesto, tiene que ser inocuo.
-                e->prepareRomSetFor(patch);
-                e->prepareRomSetFor(patch);
-            }
             e->setPatch(patch);
 
             note_on(e.get(), 60, 100);
@@ -108,20 +99,22 @@ TEST_SUITE(engine_patch_prepare)
         }
     }
 
-    checks.add("preparar-misma-longitud", direct.l.size() == split.l.size() && !direct.l.empty(),
-               check_fmt("%zu vs %zu", direct.l.size(), split.l.size()));
+    const Stereo &first = runs[0];
+    const Stereo &second = runs[1];
+    checks.add("secuencia-misma-longitud", first.l.size() == second.l.size() && !first.l.empty(),
+               check_fmt("%zu vs %zu", first.l.size(), second.l.size()));
 
-    if (direct.l.size() == split.l.size())
+    if (first.l.size() == second.l.size())
     {
         size_t diff = 0;
-        for (size_t i = 0; i < direct.l.size(); i++)
-            if (direct.l[i] != split.l[i] || direct.r[i] != split.r[i])
+        for (size_t i = 0; i < first.l.size(); i++)
+            if (first.l[i] != second.l[i] || first.r[i] != second.r[i])
                 diff++;
 
-        checks.add("preparar-bit-exacto", diff == 0, check_fmt("%zu muestras distintas de %zu", diff, direct.l.size()));
+        checks.add("secuencia-bit-exacta", diff == 0, check_fmt("%zu muestras distintas de %zu", diff, first.l.size()));
     }
 
-    checks.add("preparar-suena", rms(direct.l, 0, direct.l.size()) > kAudibleRms, "la secuencia salió muda");
+    checks.add("secuencia-suena", rms(first.l, 0, first.l.size()) > kAudibleRms, "la secuencia salió muda");
 }
 
 /**

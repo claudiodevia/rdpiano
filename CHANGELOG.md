@@ -19,11 +19,18 @@ El sonido no cambia respecto a la 1.0.2.
 - El DAW también se entera cuando el sonido se cambia desde el panel.
 - Un proyecto guardado con una afinación dañada ya no se abre con el
   instrumento muy desafinado hacia el lado contrario.
+- Una nota que se suelta justo cuando el DAW pide un trozo de audio diminuto ya
+  no se queda pulsada por dentro, y no vuelve a sonar al cambiar de sonido.
+- Con el DAW a frecuencias de muestreo bajas y trozos de audio muy grandes, el
+  clave, los dos clavis, el E-Piano 2 y el Contemporary ya no salen mudos.
 
 ### Por dentro
 
 - El panel está reorganizado por piezas y su pantalla tiene pruebas
   automáticas propias. Se ve igual que antes.
+- El motor de sonido está reorganizado por piezas, cada una con una sola tarea,
+  y suena exactamente igual que antes. Abrir el instrumento es algo más rápido.
+- El ecualizador de la salida tiene pruebas automáticas propias.
 
 - Más pruebas automáticas: ahora comprueban también que la cadena de sonido
   completa —efectos, cambios de sonido y de afinación incluidos— sigue dando

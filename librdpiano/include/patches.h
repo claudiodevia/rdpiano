@@ -25,7 +25,7 @@ enum RomSetId
 
 inline constexpr int NUM_PATCHES = 16; ///< Parches que trae el firmware.
 
-/** @brief Nombre de cada parche, tal como lo enseña el display. */
+/** @brief Nombre de programa de cada parche para el host; el display lo parte por los dos puntos. */
 inline constexpr const char *patchNames[NUM_PATCHES] = {
     "MKS-20: Piano 1",   "MKS-20: Piano 2",    "MKS-20: Piano 3",   "MKS-20: Harpsichord",
     "MKS-20: Clavi",     "MKS-20: Vibraphone", "MKS-20: E-Piano 1", "MKS-20: E-Piano 2",
@@ -62,12 +62,14 @@ inline constexpr size_t patchToOffset[NUM_PATCHES] = {
     0x0199f0, // Vibraphone
 };
 
-/** @brief Tasa a la que corre el emulador en cada parche, en Hz. */
-inline constexpr int patchSampleRates[NUM_PATCHES] = {
-    // MKS-20
-    20000, 20000, 20000, 32000, 32000, 20000, 20000, 32000,
-    // MK80
-    20000, 20000, 20000, 32000, 20000, 20000, 32000, 20000};
+inline constexpr int MIN_PATCH_RATE = 20000; ///< Tasa del emulador más baja de los 16 parches, en Hz.
+inline constexpr int MAX_PATCH_RATE = 32000; ///< Tasa del emulador más alta de los 16 parches, en Hz.
+
+/** @brief Tasa a la que corre el emulador en cada parche, en Hz: MIN_PATCH_RATE o MAX_PATCH_RATE. */
+inline constexpr int patchSampleRates[NUM_PATCHES] = {// MKS-20
+                                                      20000, 20000, 20000, 32000, 32000, 20000, 20000, 32000,
+                                                      // MK80
+                                                      20000, 20000, 20000, 32000, 20000, 20000, 32000, 20000};
 
 /// Pico al que se normalizan los 16 parches: +6 dBFS. Detrás NO hay limitador y
 /// el chorus de fábrica añade hasta +4,8 dB, así que el peor caso de toda la
@@ -135,8 +137,9 @@ inline constexpr const char *romSetFiles[ROMSET_COUNT][ROM_CHIP_COUNT] = {
 /// Ver docs/FIRMWARE.md.
 inline constexpr const char *PROG_ROM_FILE = "RD200_B.bin";
 
-inline constexpr size_t WAVE_ROM_SIZE = 0x20000; ///< Tamaño de una ROM de onda.
-inline constexpr size_t PROG_ROM_SIZE = 0x2000;  ///< Tamaño de la ROM de programa.
+inline constexpr size_t WAVE_ROM_SIZE = 0x20000;   ///< Tamaño del fichero de una ROM de onda (IC5-IC7).
+inline constexpr size_t PARAMS_ROM_SIZE = 0x20000; ///< Tamaño del fichero de la ROM de parámetros (IC18).
+inline constexpr size_t PROG_ROM_SIZE = 0x2000;    ///< Tamaño del fichero de la ROM de programa.
 
 /**
  * @brief Coherencia de las tablas paralelas, comprobada en compilación.
@@ -152,7 +155,7 @@ namespace patches_detail
     constexpr bool offsets_in_range()
     {
         for (int i = 0; i < NUM_PATCHES; i++)
-            if (patchToOffset[i] >= WAVE_ROM_SIZE)
+            if (patchToOffset[i] >= PARAMS_ROM_SIZE)
                 return false;
         return true;
     }
@@ -168,7 +171,7 @@ namespace patches_detail
     constexpr bool sample_rates_known()
     {
         for (int i = 0; i < NUM_PATCHES; i++)
-            if (patchSampleRates[i] != 20000 && patchSampleRates[i] != 32000)
+            if (patchSampleRates[i] != MIN_PATCH_RATE && patchSampleRates[i] != MAX_PATCH_RATE)
                 return false;
         return true;
     }

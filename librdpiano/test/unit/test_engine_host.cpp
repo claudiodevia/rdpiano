@@ -115,6 +115,7 @@ TEST_SUITE(engine_block_invariance)
 /**
  * @brief Bloques de 0, 1, 2 y 7 muestras y mayores que el preparado —JUCE no garantiza que
  *        `maximumExpectedSamplesPerBlock` lo sea—: salida finita, y un numFrames negativo no escribe nada.
+ *        Un bloque que pide al emulador más de 20000 muestras se rinde si cabe en el búfer.
  */
 TEST_SUITE(engine_edge_blocks)
 {
@@ -144,6 +145,18 @@ TEST_SUITE(engine_edge_blocks)
     // sitio: lo vigila ASan, no un CHECK.
     std::vector<float> l(16, 0.0f), r(16, 0.0f);
     e->render(l.data(), r.data(), -1);
+
+    // Un bloque que pide más de 20000 muestras al emulador y cabe en su búfer:
+    // parche de 32 kHz con el host a 22,05 kHz y bloques de 16384 son 23 778.
+    const int BIG = 16384;
+    auto big = make_engine(22050.0, BIG, 3);
+    REQUIRE_ENGINE(big);
+    note_on(big.get(), 60, 100);
+    Stereo out;
+    render_into(big.get(), out, BIG, 2);
+    checks.add("bloque-grande-se-rinde", big->stats.tooManyFrames.load() == 0,
+               check_fmt("%lu bloques abortados", big->stats.tooManyFrames.load()));
+    checks.add("bloque-grande-suena", rms(out.l, 0, out.l.size()) > kAudibleRms, "salió muda");
 }
 
 /**
@@ -181,8 +194,10 @@ TEST_SUITE(engine_host_rates)
             CHECK_MSG(level > kAudibleRms, "%.0f Hz parche %d: rms %.3g", hostRate, patch, level);
 
             // Y sin quedarse sin muestras: ni bloques vacíos ni desbordes.
-            CHECK_MSG(e->stats.tooFewFrames == 0, "%.0f Hz parche %d: %lu", hostRate, patch, e->stats.tooFewFrames);
-            CHECK_MSG(e->stats.tooManyFrames == 0, "%.0f Hz parche %d: %lu", hostRate, patch, e->stats.tooManyFrames);
+            CHECK_MSG(e->stats.tooFewFrames == 0, "%.0f Hz parche %d: %lu", hostRate, patch,
+                      e->stats.tooFewFrames.load());
+            CHECK_MSG(e->stats.tooManyFrames == 0, "%.0f Hz parche %d: %lu", hostRate, patch,
+                      e->stats.tooManyFrames.load());
         }
     }
 }
