@@ -38,10 +38,11 @@ constexpr u32 unscramble_addr_wave(u32 i)
 /** @brief Dato de una ROM de onda: van sin permutar. */
 constexpr u8 unscramble_data_wave(u8 d) { return bitswap<8>(d, 7, 6, 5, 4, 3, 2, 1, 0); }
 
-inline constexpr size_t PROG_ROM_BYTES = 0x2000;    ///< ROM de programa ya descifrada.
-inline constexpr size_t PARAMS_ROM_BYTES = 0x20000; ///< Espacio de params del bus.
-inline constexpr size_t PARAMS_PAGE_BYTES = 0x8000; ///< Ventana de params que ve la CPU.
-inline constexpr size_t WAVE_ROM_BYTES = 0x20000;   ///< Una ROM de onda ya descifrada.
+inline constexpr size_t PROG_ROM_BYTES = 0x2000;     ///< ROM de programa ya descifrada.
+inline constexpr size_t PARAMS_ROM_BYTES = 0x20000;  ///< Espacio de params del bus.
+inline constexpr size_t PARAMS_PAGE_BYTES = 0x8000;  ///< Ventana de params que ve la CPU.
+inline constexpr size_t WAVE_ROM_BYTES = 0x20000;    ///< Una ROM de onda ya descifrada.
+inline constexpr size_t PARAMS_PAGE_OFFSET = 0x8000; ///< Dónde va la página descifrada dentro del espacio de params.
 
 /**
  * @brief Descifra la ROM de programa entera.
@@ -49,13 +50,6 @@ inline constexpr size_t WAVE_ROM_BYTES = 0x20000;   ///< Una ROM de onda ya desc
  * @param src ROM tal como viene del dump.
  */
 void decode_program_rom(u8 *dst, const u8 *src);
-
-/**
- * @brief Descifra una ROM de onda entera.
- * @param dst Destino de WAVE_ROM_BYTES.
- * @param src ROM tal como viene del dump.
- */
-void decode_wave_rom(u8 *dst, const u8 *src);
 
 /**
  * @brief Descifra la página de 32 KB alineada que contiene `from_addr`.
@@ -73,8 +67,8 @@ void decode_params_window(u8 *dst, const u8 *src, size_t from_addr);
 /**
  * @brief Deja el espacio de params como lo espera el bus para un parche.
  *
- * Todo a 0xff, la página descifrada mapeada en 0x8000, y los bytes 0x00-0x02
- * parcheados para redirigir al firmware al parche elegido.
+ * Todo a 0xff, la página descifrada mapeada en PARAMS_PAGE_OFFSET y la
+ * cabecera de write_params_header().
  *
  * @param dst Destino de PARAMS_ROM_BYTES.
  * @param src ROM de parámetros sin descifrar.
@@ -88,5 +82,12 @@ void decode_params_page(u8 *dst, const u8 *src, size_t from_addr);
  * @return Dirección del bus a la que redirigir al firmware.
  */
 constexpr size_t params_patch_target(size_t from_addr) { return (from_addr - (from_addr >> 15 << 15)) + 0x4000; }
+
+/**
+ * @brief Parchea los bytes 0x00-0x02 del espacio de params para redirigir al firmware al parche.
+ * @param dst Espacio de params de PARAMS_ROM_BYTES.
+ * @param from_addr Offset del parche dentro de la ROM.
+ */
+void write_params_header(u8 *dst, size_t from_addr);
 
 #endif

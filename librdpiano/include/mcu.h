@@ -1,3 +1,6 @@
+// license:BSD-3-Clause
+// copyright-holders:Aaron Giles
+
 #ifndef MCU_H
 #define MCU_H
 
@@ -22,34 +25,19 @@ class Mcu : public RdBoardCpu
     Mcu(const u8 *temp_ic5, const u8 *temp_ic6, const u8 *temp_ic7, const u8 *temp_progrom, const u8 *temp_paramsrom);
     ~Mcu();
 
-    /// 1,2 MB de estado: una copia accidental daría un emulador divergente en
-    /// silencio.
+    /// ~150 KB de estado más las tablas de onda en el montón: una copia accidental
+    /// daría un emulador divergente en silencio.
     Mcu(const Mcu &) = delete;
     Mcu &operator=(const Mcu &) = delete;
     Mcu(Mcu &&) = delete;
     Mcu &operator=(Mcu &&) = delete;
 
-    typedef void (Mcu::*op_func)();
-
-    /** @brief Ejecuta una instrucción. */
-    void execute_one();
-
-    /**
-     * @brief Fija el estado de una línea de interrupción y atiende lo que toque.
-     * @param irqline Una de M6800_IRQ_LINE / M6801_TIN_LINE…
-     * @param state ASSERT_LINE o CLEAR_LINE.
-     */
-    void execute_set_input(int irqline, int state);
-
-    /** @brief Ejecuta instrucciones hasta que toca la siguiente muestra. */
-    void execute_run();
-
     /**
      * @brief Corre la CPU lo que dura una muestra y devuelve lo que suene.
-     * @param sampleRate32 true para el ritmo de los parches de 32 kHz (62 ciclos por muestra en vez de 100).
+     * @param sampleRate32 true para el ritmo de los parches de 32 kHz (62 instrucciones por muestra en vez de 100).
      * @return La muestra del chip de sonido.
      */
-    s32 generate_next_sample(bool sampleRate32 = false);
+    s32 generate_next_sample(bool sampleRate32);
 
     /**
      * @brief Handshake de arranque completo.
@@ -96,25 +84,6 @@ class Mcu : public RdBoardCpu
 
     /** @brief Pedal de sostenido abajo o arriba. */
     void sustain(bool down);
-
-    /**
-     * @brief Carga un juego de ROM entero (~2,9 ms; hay tres juegos).
-     *
-     * Las ROM tienen que sobrevivir al Mcu: se guarda el puntero de la params
-     * para remapear la página en selectPatch().
-     *
-     * @param temp_ic5 ROM de onda IC5.
-     * @param temp_ic6 ROM de onda IC6.
-     * @param temp_ic7 ROM de onda IC7.
-     * @param temp_paramsrom ROM de parámetros sin descifrar.
-     */
-    void loadRomSet(const u8 *temp_ic5, const u8 *temp_ic6, const u8 *temp_ic7, const u8 *temp_paramsrom);
-
-    /**
-     * @brief Mapea la página de un parche (~0,03 ms; hay dieciséis).
-     * @param from_addr Offset del parche dentro de la ROM de parámetros.
-     */
-    void selectPatch(size_t from_addr);
 
     /**
      * @brief Descifra un juego de ROM en la ranura que se le diga.
@@ -189,15 +158,58 @@ class Mcu : public RdBoardCpu
     /** @brief Lo que espera en la cola a que el firmware lo recoja. Solo lectura: para las pruebas del protocolo. */
     const CommandPort &commandPort() const { return board.commandPort(); }
 
+  private:
+    static constexpr size_t kInstructionsPerSample20k = 100;     ///< Instrucciones por muestra a 20 kHz.
+    static constexpr size_t kInstructionsPerSample32k = 62;      ///< Instrucciones por muestra a 32 kHz.
+    static constexpr size_t kResetWarmupInstructions = 1024 * 8; ///< Lo que corre reset() antes de aceptar comandos.
+    static constexpr size_t kBootWarmupSamples = 1024; ///< Margen de boot() entre afinar y recargar el parche.
+    static constexpr size_t kTuneSettleSamples = 100;  ///< Cada una de las dos esperas de setMasterTune().
+
+    RdBoard board;
+
+    bool sampleRate32 = false; ///< Lo fija setSampleRate().
+
+    /** @brief generate_next_sample() `samples` veces, descartando la salida. */
+    void runSamples(size_t samples, bool rate32);
+
+    typedef void (Mcu::*op_func)();
+
+    /** @brief Ejecuta una instrucción. */
+    void execute_one();
+
+    /**
+     * @brief Fija el estado de una línea de interrupción y atiende lo que toque.
+     * @param irqline Una de M6800_IRQ_LINE / M6801_TIN_LINE…
+     * @param state ASSERT_LINE o CLEAR_LINE.
+     */
+    void execute_set_input(int irqline, int state);
+
+    /** @brief Atiende las líneas de interrupción y ejecuta una sola instrucción. */
+    void execute_run();
+
+    /**
+     * @brief Carga un juego de ROM entero (~2,9 ms; hay tres juegos).
+     *
+     * Las ROM tienen que sobrevivir al Mcu: se guarda el puntero de la params
+     * para remapear la página en selectPatch().
+     *
+     * @param temp_ic5 ROM de onda IC5.
+     * @param temp_ic6 ROM de onda IC6.
+     * @param temp_ic7 ROM de onda IC7.
+     * @param temp_paramsrom ROM de parámetros sin descifrar.
+     */
+    void loadRomSet(const u8 *temp_ic5, const u8 *temp_ic6, const u8 *temp_ic7, const u8 *temp_paramsrom);
+
+    /**
+     * @brief Mapea la página de un parche (~0,03 ms; hay dieciséis).
+     * @param from_addr Offset del parche dentro de la ROM de parámetros.
+     */
+    void selectPatch(size_t from_addr);
+
     u32 programCounter() const override { return m_pc.d; }
     void setInputLine(int line, int state) override { execute_set_input(line, state); }
     u8 readCpuRegister(u16 addr) override;
     void writeCpuRegister(u16 addr, u8 data) override;
-
-  private:
-    RdBoard board;
-
-    bool sampleRate32 = false; ///< Lo fija setSampleRate().
 
     /// `read_byte`/`write_byte` son los nombres que usan las macros RM/WM del
     /// core de MAME: reenvío de una línea para no tocar mcu_ops.h.
@@ -216,17 +228,17 @@ class Mcu : public RdBoardCpu
     void WM16(u32 Addr, PAIR *p);
     void enter_interrupt(const char *message, u16 irq_vector);
 
-    PAIR m_ppc = {};         ///< Contador de programa anterior.
-    PAIR m_pc = {};          ///< Contador de programa.
-    PAIR m_s = {};           ///< Puntero de pila.
-    PAIR m_x = {};           ///< Registro índice.
-    PAIR m_d = {};           ///< Acumuladores.
-    PAIR m_ea = {};          ///< Dirección efectiva (variable temporal).
-    u8 m_cc = 0;             ///< Códigos de condición.
-    u8 m_wai_state = 0;      ///< Estado del opcode WAI (o del SLP).
-    u8 m_nmi_state = 0;      ///< Estado de la línea NMI.
-    u8 m_nmi_pending = 0;    ///< NMI pendiente.
-    u8 m_irq_state[5] = {0}; ///< Estado de las líneas [IRQ1, TIN, IS3, …].
+    PAIR m_ppc = {};                      ///< Contador de programa anterior.
+    PAIR m_pc = {};                       ///< Contador de programa.
+    PAIR m_s = {};                        ///< Puntero de pila.
+    PAIR m_x = {};                        ///< Registro índice.
+    PAIR m_d = {};                        ///< Acumuladores.
+    PAIR m_ea = {};                       ///< Dirección efectiva (variable temporal).
+    u8 m_cc = 0;                          ///< Códigos de condición.
+    u8 m_wai_state = 0;                   ///< Estado del opcode WAI (o del SLP).
+    u8 m_nmi_state = 0;                   ///< Estado de la línea NMI.
+    u8 m_nmi_pending = 0;                 ///< NMI pendiente.
+    u8 m_irq_state[M6801_LINE_MAX] = {0}; ///< Estado de las líneas [IRQ1, TIN, IS3, STBY].
 
     u8 m_tcsr = 0;           ///< Timer Control and Status Register.
     PAIR m_counter = {};     ///< Contador libre.

@@ -8,8 +8,7 @@ Este documento dice *cómo está construido* el sistema. Lo demás vive en su si
 |---|---|
 | Trampas (leer **antes** de modificar), cifras medidas, build, convenciones | [CLAUDE.md](../CLAUDE.md) |
 | Qué firmware corre, handshake por PC, bit de sample rate, bucle de CPU | [FIRMWARE.md](FIRMWARE.md) |
-| Lo pendiente de la revisión de código | [REVISION-CODIGO.md](REVISION-CODIGO.md) |
-| Compilar e instalar | [COMPILAR.md](../COMPILAR.md) |
+| Compilar e instalar | [COMPILAR.md](COMPILAR.md) |
 | Instalar el plugin y novedades por versión | [README.md](../README.md), [CHANGELOG.md](../CHANGELOG.md) |
 
 ## Índice
@@ -224,7 +223,7 @@ por instrucción). El orden de las ramas y las máscaras son del hardware: el go
 | Fuente | Vector | Se dispara cuando |
 |---|---|---|
 | ICI (captura de entrada) | `0xFFF6` | La cola de comandos no está vacía → `M6801_TIN_LINE` |
-| IRQ1 | `0xFFF8` | `SoundChip::m_irq_triggered`: acabó un segmento de envolvente |
+| IRQ1 | `0xFFF8` | `SoundChip::irqPending()`: acabó un segmento de envolvente |
 | NMI / RESET | `0xFFFC` / `0xFFFE` | NMI no se usa; RESET en `Mcu::reset()` |
 
 `execute_run()` sondea las líneas y ejecuta **una instrucción**; `generate_next_sample()` lo llama 100
@@ -613,7 +612,7 @@ Después la muestra sigue la cadena de §5.2.
 
 | Suite | Qué es | Tamaño |
 |---|---|---|
-| `rdpiano_tests` | Unitaria, `librdpiano/test/unit/` | 64 suites, 587 comprobaciones, ~10 s |
+| `rdpiano_tests` | Unitaria, `librdpiano/test/unit/` | 66 suites, 590 comprobaciones, ~10 s |
 | `rdpiano_e2e` | Harness bit-exacto contra `golden.txt` | 16 parches, ~3 s |
 | `rdpiano_plugin_tests` | Presets, programas, buses, latencia, cola, MIDI, gestos y texto del display | 18 suites, 255 comprobaciones |
 
@@ -672,8 +671,7 @@ No se compila. Rastro de la ingeniería inversa:
 
 ## 12. Puntos frágiles
 
-Decisiones que condicionan el trabajo futuro (lo que queda por corregir está en
-[REVISION-CODIGO.md](REVISION-CODIGO.md)):
+Decisiones que condicionan el trabajo futuro:
 
 | # | Punto | Por qué pesa |
 |---|---|---|

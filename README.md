@@ -10,7 +10,7 @@
 [![Formatos](https://img.shields.io/badge/formatos-VST3%20%7C%20AU%20%7C%20AUv3%20%7C%20LV2%20%7C%20Standalone-orange)](#instalación)
 [![Licencia GPLv3](https://img.shields.io/badge/licencia-GPLv3-blue)](LICENSE)
 
-[Instalación](#instalación) · [Características](#características) · [Vídeo](#así-se-ve-y-así-suena) · [Compilar](COMPILAR.md)
+[Instalación](#instalación) · [Características](#características) · [Vídeo](#así-se-ve-y-así-suena) · [Compilar](docs/COMPILAR.md)
 
 </div>
 
@@ -142,7 +142,7 @@ y vuelve a abrirlo. Logic Pro, la primera vez, tarda unos segundos en revisarlo.
 ## Compilar desde el código
 
 > 🧑‍💻 **Para gente con experiencia.** Para tocar basta con la [instalación](#instalación). Los pasos para
-> compilar, el mapa del repositorio y la documentación técnica están en **[COMPILAR.md](COMPILAR.md)**.
+> compilar, el mapa del repositorio y la documentación técnica están en **[COMPILAR.md](docs/COMPILAR.md)**.
 
 ---
 

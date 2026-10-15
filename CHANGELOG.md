@@ -2,7 +2,7 @@
 
 Cambios de cada versión publicada de RdPiano. La más nueva, arriba.
 
-## Sin publicar
+## 1.0.3 — 15 de octubre de 2026
 
 El sonido no cambia respecto a la 1.0.2.
 
@@ -30,8 +30,10 @@ El sonido no cambia respecto a la 1.0.2.
   automáticas propias. Se ve igual que antes.
 - El motor de sonido está reorganizado por piezas, cada una con una sola tarea,
   y suena exactamente igual que antes. Abrir el instrumento es algo más rápido.
-- El ecualizador de la salida tiene pruebas automáticas propias.
-
+- El emulador del piano original está ordenado y mejor explicado por dentro, y
+  suena exactamente igual que antes.
+- El ecualizador de la salida y la afinación tienen pruebas automáticas
+  propias; la de la afinación comprueba uno por uno todos sus valores posibles.
 - Más pruebas automáticas: ahora comprueban también que la cadena de sonido
   completa —efectos, cambios de sonido y de afinación incluidos— sigue dando
   exactamente el mismo resultado, así que un cambio futuro no puede alterar el

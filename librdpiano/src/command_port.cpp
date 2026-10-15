@@ -1,7 +1,5 @@
 #include "../include/command_port.h"
 
-#include <math.h>
-
 /**
  * @file command_port.cpp
  * @brief Codificación del master tune; el resto del protocolo es inline en la cabecera.
@@ -9,16 +7,14 @@
 
 MasterTuneBytes encode_master_tune(int16_t tune)
 {
-    // `magnitude` en vez de `abs()` para no depender de qué sobrecarga entra por
-    // la cabecera: para un int16 el valor es el mismo, incluido -32768.
-    int magnitude = tune < 0 ? -(int)tune : (int)tune;
+    const int magnitude = tune < 0 ? -(int)tune : (int)tune;
+
+    int lsb = magnitude * 16 / 32767 * 4;
+    if (lsb > 0x3c)
+        lsb = 0x3c;
 
     MasterTuneBytes out;
     out.msb = tune < 0 ? 0x7f : 0x00;
-    out.lsb = (int8_t)(floor(magnitude / 32767.0 * 16.0) * 4) & 0xff;
-    if (out.lsb > 0x3c)
-        out.lsb = 0x3c;
-    if (tune < 0)
-        out.lsb = 0x48 + out.lsb;
+    out.lsb = (u8)(tune < 0 ? 0x48 + lsb : lsb);
     return out;
 }

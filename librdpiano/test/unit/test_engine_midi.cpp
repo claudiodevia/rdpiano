@@ -274,3 +274,29 @@ TEST_SUITE(engine_abort_delivers_midi)
     checks.add("note-off-abortado-no-resucita", nivel < kSilenceLevel,
                check_fmt("rms %.5f tras el cambio de parche", nivel));
 }
+
+/**
+ * @brief Lo que no cabe en la cola de comandos del firmware se cuenta en `stats.commandBytesDropped`, y el uso
+ *        normal no descarta nada.
+ */
+TEST_SUITE(engine_command_overflow)
+{
+    const int BLOCK = 256;
+    auto e = make_engine(48000.0, BLOCK);
+    REQUIRE_ENGINE(e);
+
+    Stereo out;
+    for (int n = 0; n < 16; n++)
+        note_on(e.get(), 48 + n, 100);
+    render_into(e.get(), out, BLOCK, 8);
+    checks.add("acorde-no-descarta", e->stats.commandBytesDropped == 0,
+               check_fmt("%lu bytes descartados", (unsigned long)e->stats.commandBytesDropped));
+
+    // 400 note-on en el mismo frame: más de 1024 bytes antes de que el firmware lea uno (cada tecla repetida
+    // manda además su note-off).
+    for (int i = 0; i < 400; i++)
+        note_on(e.get(), i % 128, 100);
+    render_into(e.get(), out, BLOCK, 1);
+    checks.add("rafaga-se-cuenta", e->stats.commandBytesDropped > 0,
+               check_fmt("%lu bytes descartados", (unsigned long)e->stats.commandBytesDropped));
+}

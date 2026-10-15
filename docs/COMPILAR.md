@@ -1,7 +1,7 @@
 # Compilar RdPiano desde el código
 
 > 🧑‍💻 **Esta página es para gente con experiencia.** Para tocar no necesitas nada de esto: descarga el
-> plugin ya compilado siguiendo la [instalación del README](README.md#instalación).
+> plugin ya compilado siguiendo la [instalación del README](../README.md#instalación).
 
 Requiere macOS con Xcode.
 
@@ -23,14 +23,14 @@ flowchart LR
 | Argumento | Qué hace |
 |---|---|
 | `ALL` o un formato: `AU`, `AUv3`, `LV2`, `Standalone`, `VST3` | Compila eso, siempre universal (arm64 y x86_64), en `build/plugin/rdpiano_juce/rdpiano_juce_artefacts/Release/` |
-| `install` (opcional, detrás) | Además hace por ti el [paso 2 de la instalación](README.md#paso-2--guárdalo-en-su-carpeta): copia cada formato a su carpeta, reemplazando lo que hubiera, y pide la contraseña una sola vez. AUv3 viaja dentro de la aplicación |
+| `install` (opcional, detrás) | Además hace por ti el [paso 2 de la instalación](../README.md#paso-2--guárdalo-en-su-carpeta): copia cada formato a su carpeta, reemplazando lo que hubiera, y pide la contraseña una sola vez. AUv3 viaja dentro de la aplicación |
 
 ```bash
 sh scripts/build-osx.sh AU install    # compila el .component y lo instala
 ```
 
 Sin `install` no se escribe nada fuera de `build/`. Lo que compilas tú no queda en cuarentena: el
-[paso 3](README.md#paso-3--dile-al-mac-que-puede-abrirlo) sobra. Por pantalla sale una etiqueta por paso
+[paso 3](../README.md#paso-3--dile-al-mac-que-puede-abrirlo) sobra. Por pantalla sale una etiqueta por paso
 y, al final, el tiempo y la ruta de los productos; la salida de CMake y Xcode va a `logs/`. Lo ya hecho no
 se repite.
 
@@ -67,7 +67,6 @@ de ese firmware.
 
 | Documento | Qué cuenta |
 |---|---|
-| [ARQUITECTURA.md](docs/ARQUITECTURA.md) | Cómo está construido el sistema, con diagramas. |
-| [FIRMWARE.md](docs/FIRMWARE.md) | Qué programa interno ejecuta y por qué solo ése. |
-| [REVISION-CODIGO.md](docs/REVISION-CODIGO.md) | Lo que queda pendiente de la revisión del código. |
-| [CLAUDE.md](CLAUDE.md) | Trampas antes de tocar nada, cifras medidas, pruebas y convenciones. |
+| [ARQUITECTURA.md](ARQUITECTURA.md) | Cómo está construido el sistema, con diagramas. |
+| [FIRMWARE.md](FIRMWARE.md) | Qué programa interno ejecuta y por qué solo ése. |
+| [CLAUDE.md](../CLAUDE.md) | Trampas antes de tocar nada, cifras medidas, pruebas y convenciones. |

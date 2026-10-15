@@ -65,12 +65,13 @@ struct RdEngineParams
  */
 struct RdEngineStats
 {
-    std::atomic<unsigned long> tooFewFrames{0};   ///< El bloque pedía menos de 2 muestras.
-    std::atomic<unsigned long> tooManyFrames{0};  ///< No cabían en el búfer del emulador.
-    std::atomic<unsigned long> blockTooLarge{0};  ///< numFrames por encima del preparado.
-    std::atomic<unsigned long> clicks{0};         ///< El remuestreador no consumió nada.
-    std::atomic<unsigned long> midiDropped{0};    ///< La cola de eventos se llenó.
-    std::atomic<unsigned long> programIgnored{0}; ///< Program change fuera de los 16 parches.
+    std::atomic<unsigned long> tooFewFrames{0};        ///< El bloque pedía menos de 2 muestras.
+    std::atomic<unsigned long> tooManyFrames{0};       ///< No cabían en el búfer del emulador.
+    std::atomic<unsigned long> blockTooLarge{0};       ///< numFrames por encima del preparado.
+    std::atomic<unsigned long> clicks{0};              ///< El remuestreador no consumió nada.
+    std::atomic<unsigned long> midiDropped{0};         ///< La cola de eventos se llenó.
+    std::atomic<unsigned long> programIgnored{0};      ///< Program change fuera de los 16 parches.
+    std::atomic<unsigned long> commandBytesDropped{0}; ///< Bytes que no cupieron en la cola del firmware.
 
     /// resample_open() con éxito. Solo prepare() abre: libresample reserva con
     /// malloc, que `operator new` no ve, así que esto es lo que vigilan las pruebas.

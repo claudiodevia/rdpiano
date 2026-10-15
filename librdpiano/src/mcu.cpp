@@ -1,3 +1,6 @@
+// license:BSD-3-Clause
+// copyright-holders:Aaron Giles
+
 #include "../include/mcu.h"
 
 #include "../include/rd_trace.h"
@@ -307,6 +310,7 @@ const Mcu::op_func Mcu::hd63701_insn[0x100] = {
     &Mcu::eorb_ex, &Mcu::adcb_ex, &Mcu::orb_ex,  &Mcu::addb_ex, &Mcu::ldd_ex,  &Mcu::std_ex,
     &Mcu::ldx_ex,  &Mcu::stx_ex};
 
+// clang-format off
 #define XX 4 // illegal opcode unknown cycle count
 const u8 Mcu::cycles_63701[256] = {
     /* 0  1  2  3  4  5  6  7  8  9  A  B  C  D  E  F */
@@ -326,11 +330,19 @@ const u8 Mcu::cycles_63701[256] = {
     /*D*/ 3,  3,  3,  4,  3,  3,  3, 3,  3, 3, 3, 3,  4,  4,  4,  4,
     /*E*/ 4,  4,  4,  5,  4,  4,  4, 4,  4, 4, 4, 4,  5,  5,  5,  5,
     /*F*/ 4,  4,  4,  5,  4,  4,  4, 4,  4, 4, 4, 4,  5,  5,  5,  5};
+// clang-format on
 
 #define TCSR_IEDG 0x02
 #define TCSR_EICI 0x10
 #define TCSR_ICF 0x80
 #define CT m_counter.w.l
+
+namespace
+{
+    constexpr u16 kRegTcsr = 0x08;    ///< Timer Control and Status Register.
+    constexpr u16 kRegIcrHigh = 0x0d; ///< Captura de entrada, byte alto según el datasheet.
+    constexpr u16 kRegIcrLow = 0x0e;  ///< Captura de entrada, byte bajo según el datasheet.
+} // namespace
 
 // Las permutaciones de pines de las ROM viven en rom_loader.h.
 
@@ -364,8 +376,7 @@ void Mcu::reset()
     SEI; /* IRQ disabled */
     PCD = RM16(0xfffe);
 
-    // We need to run the CPU for a bit before being able to send commands to it
-    for (size_t i = 0; i < 1024 * 8; i++)
+    for (size_t i = 0; i < kResetWarmupInstructions; i++)
         execute_one();
 }
 
@@ -472,8 +483,8 @@ void Mcu::execute_run()
     if (!board.commandPort().queue().empty())
         execute_set_input(M6801_TIN_LINE, ASSERT_LINE);
 
-    if (board.soundChip().m_irq_triggered)
-        execute_set_input(0, ASSERT_LINE);
+    if (board.soundChip().irqPending())
+        execute_set_input(M6800_IRQ_LINE, ASSERT_LINE);
     check_irq_lines();
 
     // Una instrucción por llamada: el reloj maestro es el audio, no la CPU.
@@ -507,18 +518,17 @@ void Mcu::tcsr_w(u8 data)
 
 u8 Mcu::readCpuRegister(u16 addr)
 {
-    // tcsr
-    if (addr == 0x0008)
+    if (addr == kRegTcsr)
         return tcsr_r();
 
-    // captura de entrada
-    if (addr == 0x000d)
+    // Alto y bajo invertidos respecto al datasheet, como en el core de MAME: el golden lo congela.
+    if (addr == kRegIcrHigh)
     {
         if (!(m_pending_tcsr & TCSR_ICF))
             m_tcsr &= ~TCSR_ICF;
         return (m_input_capture >> 0) & 0xff;
     }
-    if (addr == 0x000e)
+    if (addr == kRegIcrLow)
         return (m_input_capture >> 8) & 0xff;
 
     RD_TRACE("%04x: unk device read %04x\n", PCD, addr);
@@ -527,8 +537,7 @@ u8 Mcu::readCpuRegister(u16 addr)
 
 void Mcu::writeCpuRegister(u16 addr, u8 data)
 {
-    // tcsr
-    if (addr == 0x0008)
+    if (addr == kRegTcsr)
     {
         tcsr_w(data);
         return;
@@ -541,23 +550,27 @@ s32 Mcu::generate_next_sample(bool sampleRate32)
 {
     s32 sample = board.soundChip().update();
 
-    // 20kHz sample rate, 2000kHz CPU clock
-    for (size_t cycle = 0; cycle < (sampleRate32 ? 62 : 100); cycle++)
-    {
+    const size_t instructions = sampleRate32 ? kInstructionsPerSample32k : kInstructionsPerSample20k;
+    for (size_t i = 0; i < instructions; i++)
         execute_run();
-    }
 
     return sample;
 }
 
+void Mcu::runSamples(size_t samples, bool rate32)
+{
+    for (size_t i = 0; i < samples; i++)
+        generate_next_sample(rate32);
+}
+
 void Mcu::sendMidiCmd(u8 cmd, u8 data1, u8 data2)
 {
-    uint8_t command = cmd >> 4;
+    u8 command = cmd >> 4;
 
     // program change
     if (command == 0xC)
     {
-        board.commandPort().programChange(data1 & 0xF);
+        board.commandPort().programChange(data1);
     }
 
     // note off
@@ -592,8 +605,7 @@ void Mcu::boot(int16_t masterTune, bool warmupRate32)
     board.commandPort().programChange(0);
     board.commandPort().masterTune(masterTune);
 
-    for (size_t sample = 0; sample < 1024; sample++)
-        generate_next_sample(warmupRate32);
+    runSamples(kBootWarmupSamples, warmupRate32);
 
     board.commandPort().reloadPatch();
 }
@@ -606,12 +618,10 @@ void Mcu::setMasterTune(int16_t tune)
     // parches distintos del 0 no funciona. Corre el emulador, así que el
     // llamante tiene que serializarlo con el hilo de audio.
     board.commandPort().programChange(0);
-    for (size_t cycle = 0; cycle < 100; cycle++)
-        generate_next_sample();
+    runSamples(kTuneSettleSamples, false);
 
     board.commandPort().masterTune(tune);
-    for (size_t cycle = 0; cycle < 100; cycle++)
-        generate_next_sample();
+    runSamples(kTuneSettleSamples, false);
 
     board.commandPort().programChange(0);
 }

@@ -12,21 +12,23 @@
 
 namespace
 {
+#ifdef RDPIANO_TRACE
+    /** @brief El destino mientras nadie instale otro. */
+    void stderr_sink(const char *message) { fputs(message, stderr); }
+
+    RdTraceSink g_sink = stderr_sink;
+#else
     RdTraceSink g_sink = nullptr;
-    bool g_sink_set = false;
+#endif
 } // namespace
 
-void rdpiano_set_trace_sink(RdTraceSink sink)
-{
-    g_sink = sink;
-    g_sink_set = true;
-}
+void rdpiano_set_trace_sink(RdTraceSink sink) { g_sink = sink; }
 
 #ifdef RDPIANO_TRACE
 
 void rdpiano_trace(const char *fmt, ...)
 {
-    if (g_sink_set && g_sink == nullptr)
+    if (g_sink == nullptr)
         return;
 
     char buf[512];
@@ -35,10 +37,7 @@ void rdpiano_trace(const char *fmt, ...)
     vsnprintf(buf, sizeof buf, fmt, ap);
     va_end(ap);
 
-    if (g_sink)
-        g_sink(buf);
-    else
-        fputs(buf, stderr);
+    g_sink(buf);
 }
 
 #endif

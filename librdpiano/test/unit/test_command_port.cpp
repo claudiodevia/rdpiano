@@ -129,6 +129,39 @@ TEST_SUITE(command_port_master_tune)
 }
 
 /**
+ * @brief La codificación del master tune, los 65.536 valores del int16 contra la tabla de pasos medida: la
+ *        afinación es audio, y esta red es la que deja cambiar la aritmética sin mover un byte.
+ */
+TEST_SUITE(command_port_master_tune_exhaustive)
+{
+    // Primera magnitud de cada paso de 4 (0x00..0x3c); la 32767 y la 32768 caen en el tope.
+    const int stepStart[16] = {0,     2048,  4096,  6144,  8192,  10240, 12288, 14336,
+                               16384, 18432, 20480, 22528, 24576, 26624, 28672, 30720};
+
+    int mismatches = 0;
+    int firstBad = 0;
+    for (int t = -32768; t <= 32767; t++)
+    {
+        const int magnitude = t < 0 ? -t : t;
+        int step = 0;
+        while (step + 1 < 16 && magnitude >= stepStart[step + 1])
+            step++;
+
+        const u8 msb = t < 0 ? 0x7f : 0x00;
+        const u8 lsb = (u8)(step * 4 + (t < 0 ? 0x48 : 0x00));
+
+        const MasterTuneBytes got = encode_master_tune((int16_t)t);
+        if (got.msb != msb || got.lsb != lsb)
+        {
+            if (mismatches == 0)
+                firstBad = t;
+            mismatches++;
+        }
+    }
+    checks.add("tabla-exhaustiva", mismatches == 0, check_fmt("%d distintos, el primero en %d", mismatches, firstBad));
+}
+
+/**
  * @brief El arranque: esto fija la secuencia de bytes; que las dos capas la ejecuten —y no la reimplementen—
  *        es cosa de Mcu::boot().
  */

@@ -43,6 +43,9 @@ class RdPianoEngine::Impl
     void pushMidi(int frame, u8 status, u8 data1, u8 data2);
     void render(float *left, float *right, int numFrames);
 
+    /** @brief El bloque entero de render(), sin publicar el contador de la cola del firmware. */
+    void renderBlock(float *left, float *right, int numFrames);
+
     const RdEngineParams &params;
     RdEngineStats &stats;
 
@@ -335,6 +338,12 @@ int RdPianoEngine::Impl::synthesise(int emuFrames)
 }
 
 void RdPianoEngine::Impl::render(float *left, float *right, int numFrames)
+{
+    renderBlock(left, right, numFrames);
+    stats.commandBytesDropped.store(mcu.commandPort().queue().dropped(), std::memory_order_relaxed);
+}
+
+void RdPianoEngine::Impl::renderBlock(float *left, float *right, int numFrames)
 {
     serviceRequests(numFrames);
 
