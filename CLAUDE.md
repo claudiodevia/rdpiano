@@ -67,15 +67,18 @@ Lo fijan `engine_patch_declick`, `engine_patch_held_notes`, `engine_tune_held_no
 
 ### Plugin
 
-`PluginParams.h` (10 parámetros, fábrica desde `RdEngineParams`), `PluginProcessor` (APVTS, presets),
-`PluginEditor` (`ButtonSpec`×17, `ModeSpec`×8).
+`PluginParams.h` (10 parámetros, fábrica desde `RdEngineParams`), `PluginProcessor` (APVTS, programas; el
+motor es miembro privado), `PluginState` (parche y afinación en el preset), `PluginEditor` (`ButtonSpec`×17) y
+las piezas del panel: `PanelLayout.h` (coordenadas del arte), `PanelDisplay` (texto del display y mapeos del
+dial, puro), `PanelButton`, `PanelLookAndFeel` (dial y fader) y `lcd/`.
 
 | Tema | Regla |
 |---|---|
-| Timer 10 Hz | Recoge el parche que cambie el motor solo (program change MIDI) para espejo, preset y panel. |
+| Timer 10 Hz | Único paso del hilo de audio a la interfaz: recoge el parche que cambie el motor solo (program change MIDI) → `updateHostDisplay()` y panel, y los cambios de parámetro que marcó `parameterChanged()` (corre en el hilo de audio con automatización: ahí no se puede `sendChangeMessage()`). Parche y afinación se leen del motor (`patch()`/`masterTune()`): sin espejos. |
+| Gestos | Todo cambio desde el panel llega al host dentro de un gesto (si no, touch/latch no lo graban): fader por `SliderParameterAttachment`, conmutadores por `setParamValue()` (gesto completo), dial en modo parámetro con begin/end en `sliderDragStarted/Ended`. Fija `plugin_param_gesture`. |
 | Diales parche/afinación | Aplican **al soltar** (`sliderDragEnded`); arrastrando solo enseñan nombre o Hz. |
-| Tamaño fijo | `setResizeLimits` con mín = máx → **Logic escala la ventana él mismo**; el arte escala por `sfC`. Con `setResizable` Logic deja de escalar y el wrapper AU solo acepta cambios de dentro (`EditorCompHolder::resizeHostWindow()`) → haría falta un asa dibujada. Probado y revertido el 2026-09-11. |
-| Repintado | El fondo solo si se movió el fader; cada control se repinta solo; las tres hojas de arte se decodifican una vez en el constructor (nada de `ImageCache` en `paint()`); el display es una `juce::Image` rehecha solo al cambiar texto, escala o tamaño. |
+| Tamaño fijo | `setResizeLimits` con mín = máx → **Logic escala la ventana él mismo**; el arte escala por `artScale()` (`PanelLayout.h`: todo en px del fondo de 6140×1503; `toUi()` trunca como `setBounds` con `float`, redondear movería un píxel). Con `setResizable` Logic deja de escalar y el wrapper AU solo acepta cambios de dentro (`EditorCompHolder::resizeHostWindow()`) → haría falta un asa dibujada. Probado y revertido el 2026-09-11. |
+| Repintado | Cada control se repinta solo (el tirador del fader lo dibuja `FaderLookAndFeel`) y el fondo, solo bajo lo repintado; las tres hojas de arte se decodifican una vez en el constructor (nada de `ImageCache` en `paint()`); el display es una `juce::Image` rehecha solo al cambiar texto o tamaño, con la unidad de celda sacada del ancho (los 17 caracteres lo llenan). |
 
 ## Trampas — leer antes de modificar
 
@@ -138,12 +141,12 @@ ctest --test-dir build/core -R unit --output-on-failure   # una suite suelta, ya
 | **e2e** (`librdpiano/test/e2e.cpp`) | Headless, ~40× tiempo real: 16 parches en ~3 s (`--patch N` ~0,2 s). Arranque silencioso, nota, acorde, extinción tras note-off (voces colgadas), polifonía 16, pico y **hash bit-exacto por parche** contra `test/golden.txt`. Lo mueven `sound_chip.cpp`, `unscramble_*` y el MCU; no `lsp/`, `rd_engine.cpp` ni el plugin (mide el emulador desnudo). |
 | **Unitaria** (`librdpiano/test/unit/`) | 61 suites, 576 checks, ~10 s; incluye `test_sound_chip_blocks` (2.256 vectores), `test_lsp` (impulso congelado), `test_mcu` (traducción del MIDI y tiempos de `boot()` y del switcharoo, por la cola de comandos) y `board_select_patch_page`. Suite nueva = `TEST_SUITE(nombre)` + una línea en el CMakeLists; andamiaje propio (`test/check.h`, `test/rom_files.h`, `test/test_runner.h`, sin dependencias). La prueba se escribe **antes** del refactor y pasa sin editarla. |
 | `test_engine_*.cpp` | Simulador de host sobre `engine_fixture.h` (bloques irregulares, 22–96 kHz, cambios de parche en caliente, extremos), partido en `host`, `midi`, `patch`, `effects` y `golden`. **`engine_golden`**: hash bit-exacto de la salida del motor entero ante un guion fijo (tres juegos de ROM, afinación, ráfaga de program change, pedal, efectos, trémolo y volumen moviéndose) a 44,1 y 48 kHz con bloques regulares e irregulares; es la red de cualquier refactor de `rd_engine.cpp`. `alloc_counter.cpp` sustituye todas las formas de `operator new` y es, con `stats.resamplerOpens` (libresample usa `malloc`), lo único que verifica **cero reservas en `render()`**. Red de transitorios: los `engine_*` citados arriba (`engine_tune_held_notes`: acorde y pedal sobreviven al afinado, sin salto ni golpe; `engine_patch_pedal_only_not_restored`), más `engine_effect_tail` (efecto encendido en silencio → silencio), `engine_effect_bypass_ramp`, `engine_program_change`, `engine_volume_ramp`, `engine_latency`, `engine_prepare_release_cycle` (`prepare()` idempotente y `release()`→`prepare()` ≡ motor nuevo), `engine_lfo_rate` (periodo del LFO del chorus por autocorrelación de la diferencia wet-dry) y `engine_tremolo` (lo mismo sobre wet/dry por canal: periodo, oposición de fase, profundidad, ritmo del host). Umbrales con nombre y su valor en dBFS en `engine_fixture.h`. |
-| **Plugin** (`rdpiano_juce/test/`) | 11 suites, 124 checks: presets ida y vuelta, fábrica, programas, preset corrupto, latencia, cola, buses, MIDI por `processBlock`, program change MIDI recogido por el timer y trampa 10. |
+| **Plugin** (`rdpiano_juce/test/`) | 18 suites, 255 checks: presets ida y vuelta, fábrica, programas, preset corrupto (con afinación fuera del int16), `PluginState` sin procesador, latencia, cola, buses, MIDI por `processBlock`, program change MIDI recogido por el timer, volver al parche anterior antes del timer, gestos de automatización y trampa 10; `test_panel_display.cpp`, el texto del display y los mapeos del dial sin abrir ventana. |
 
 - **Golden y vectores no se regeneran para poner algo en verde.** Cambio de audio intencionado: `--wav-dir DIR`,
   escuchar, y solo entonces `--write-golden`. Golden movido + vectores en verde = cambio en el orden de
   evaluación del bucle → revertir.
-- Sin cubrir: la UI y sobre todo el **timbre** (los hashes detectan, no juzgan): de oído con `rdpiano_standalone`
+- Sin cubrir: el dibujo del panel (su texto sí, `plugin_display_*`) y sobre todo el **timbre** (los hashes detectan, no juzgan): de oído con `rdpiano_standalone`
   o el plugin en un DAW. Un cambio en `sound_chip.cpp` que mueva el hash es de **alto riesgo tímbrico:
   decírselo al usuario**.
 

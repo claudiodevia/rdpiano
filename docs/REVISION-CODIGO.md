@@ -1,8 +1,8 @@
 # Revisión de código — lo pendiente
 
 **Alcance:** `librdpiano/` (núcleo, motor y pruebas) y `rdpiano_juce/` (plugin y panel).
-**Al día:** 2026-10-14, `develop` @ `919aa06` más la pasada 1 de PLAN-REVISION.md (pruebas y scripts): todo lo
-que figura aquí sigue abierto en el código.
+**Al día:** 2026-10-14, `develop` @ `919aa06` más las pasadas 1 (pruebas y scripts) y 2 (plugin) de
+PLAN-REVISION.md: todo lo que figura aquí sigue abierto en el código.
 **Excluidos del juicio de estilo:** `mcu_ops.h`, `mame_utils.h`, `lsp/`, `resample/` y `re_stuff/`
 (trampa 5 de CLAUDE.md).
 
@@ -86,8 +86,21 @@ la prueba en vez de ejercitar `SoundChip::update()`, y ningún vector cubre el e
 |---|---|
 | `test_lsp.cpp`, `lsp_spaced` | El impulso "del plugin" copia a mano el periodo de 450 ms de `chorusRateToMsPeriod[5]` y la fórmula de `rd_engine.cpp`: si cambian, esta suite no se entera (`engine_golden` sí). Se cierra cuando la pasada 3 saque la tabla de `rd_engine.cpp`. |
 | `test_engine_patch.cpp`, `engine_patch_prepare` | Compara `prepareRomSetFor()`, que es un no-op, con nada. Se reescribe o se borra al quitar esa API (pasada 3, lote 11); lo que decía fijar lo fija ya `board_select_patch_page`. |
-| `test_plugin_state.cpp` | Varias suites leen los miembros públicos `engine` y `masterTune` del procesador; al hacerlos privados (pasada 2, lote 2) pasan a sus getters. |
 | `mcu.h`, `commandPort() const` | Acceso de solo lectura a la cola, añadido para `test_mcu.cpp`. Si la pasada 4 crea `RdMachine`, el acceso nace ahí. |
 | `rdpiano_standalone` | Arranca ya con `boot()` y lee las ROM de `patches.h`, pero solo sabe el parche 0 a 20 kHz y nadie lo ha escuchado tras el cambio. La CI lo compila desde que instala SDL2 y portmidi; un `--patch N` (con la tasa de `patchSampleRates[]`) lo haría útil para juzgar los 16 timbres. |
 | `core-asan` | Sin `-fsanitize=undefined -fno-sanitize-recover`: puede saltar en el código de MAME y pedir supresiones. |
 | `engine_golden` | Hashes de los bits `float` capturados en Apple Silicon, iguales en Release y en RelWithDebInfo con ASan. La CI solo corre arm64; en x86_64 (Rosetta) no se han comprobado. |
+
+---
+
+## 4. Restos de la pasada 2: el plugin
+
+| Dónde | Qué falta |
+|---|---|
+| Logic, gestos | Fader, conmutadores y dial en modo parámetro abren y cierran gesto (`plugin_param_gesture` lo fija para `setParamValue()`), pero nadie ha grabado automatización en modo touch o latch con el plugin instalado. Hasta probarlo en Logic (y a ser posible en Live) el arreglo no está confirmado. |
+| Logic, el resto | Instalar (`build-osx.sh AU install`, pide contraseña) y probar carga, presets, dial, display y automatización: el panel solo se ha comparado con capturas fuera de la ventana. |
+| Dial en modo parámetro | Los 15 pasos se reparten ahora el recorrido por igual (`panel::stepFromDial`); antes el último solo se alcanzaba en el tope y la ida y vuelta podía caer un paso abajo por redondeo. Cambia el tacto: confirmarlo a mano. |
+| Fader con automatización | `SliderParameterAttachment` atiende los cambios del hilo de audio con `triggerAsyncUpdate()`, que puede tomar un cerrojo al publicar el mensaje: es el camino estándar de JUCE (lo hacen todos sus attachments), pero es la misma clase de llamada que se quitó de `parameterChanged()`. Si molesta, el fader puede volver al temporizador a costa de moverse a 10 Hz. |
+| Dibujo del panel | Sin prueba: en la pasada se comparó píxel a píxel con un arnés temporal (`createComponentSnapshot` del editor en ocho estados, con `ScopedJuceInitialiser_GUI`) que no quedó en el árbol porque no está probado en la CI sin pantalla. Único cambio visible: el sprite del dial se mueve 1 px en algunas posiciones (ángulo `1,5·π` en vez de `3.14/2 + 3.14`). |
+| `patches.h`, `patchNames` | El Doxygen dice "tal como lo enseña el display": es el nombre de programa del host; el display lo parte por los dos puntos (`PanelDisplay.cpp`). Una línea del núcleo, fuera del alcance de la pasada 2. |
+| `lcd/` | `Lcd.h`, `Lcd.cpp` y `lcd_font.h` siguen con finales de línea CRLF, a diferencia del resto del árbol: normalizarlos en commit aislado. |

@@ -50,7 +50,7 @@ flowchart LR
     host["Host: DAW o Standalone"]
     subgraph plugin["rdpiano_juce: conoce JUCE"]
         proc["PluginProcessor"]
-        ed["PluginEditor + lcd/"]
+        ed["PluginEditor + Panel* + lcd/"]
         bin["BinaryData: ROMs y PNG"]
     end
     subgraph core["librdpiano: sin JUCE ni stdio"]
@@ -459,7 +459,7 @@ sequenceDiagram
 
 ## 6. Plugin
 
-Tres archivos y dos tablas; todo lo que no es JUCE está en el núcleo.
+Procesador, preset y panel; todo lo que no es JUCE está en el núcleo.
 
 **Parámetros** — tabla única en [PluginParams.h](../rdpiano_juce/Source/PluginParams.h), valores de fábrica
 sacados literalmente de `RdEngineParams`. El `id` va en el preset (renombrarlo rompe sesiones) y el orden
@@ -476,22 +476,34 @@ es el que ve el host (solo se añade al final).
 | `efxPhaserRate` / `efxPhaserDepth` | float | 0–1 | 0,4 / 0,8 |
 
 Los int se muestran como 1–15. `masterTune` y `currentPatch` **no** son parámetros (trampa 10): viajan como
-propiedades de la raíz `<RdPiano>` del árbol APVTS.
+propiedades de la raíz `<RdPiano>` del árbol APVTS, que escribe y lee saneadas
+[PluginState.h](../rdpiano_juce/Source/PluginState.h) (parche fuera de rango → 0, afinación recortada al int16).
 
 | `PluginProcessor` | |
 |---|---|
 | `processBlock` | Sincroniza parámetros, pasa el MIDI y llama a `render()`. La entrada no se lee nunca. |
-| `setCurrentProgram` | Sale si el parche no cambia; si no, `requestPatch()` + espejo + `sendChangeMessage()`. 16 programas. |
-| `timerCallback` a 10 Hz | Recoge el parche que cambió un program change MIDI (`engine->patch()`) para panel, preset y host. |
+| `setCurrentProgram` | Sale si el parche ya es el pedido al motor (`patch()`); si no, `requestPatch()` + `sendChangeMessage()`. 16 programas. Parche y afinación se leen siempre del motor: no hay espejos. |
+| `parameterChanged` | Solo marca un atómico: con automatización corre en el hilo de audio. |
+| `timerCallback` a 10 Hz | Avisa al panel de los parámetros marcados y, si el motor cambió de parche por un program change MIDI, también al host (`updateHostDisplay()`). |
+| `setParamValue` | Cambio desde el panel como gesto completo (begin, valor, end) para touch/latch. |
 | Buses | Entrada estéreo (nunca leída) + salida estéreo. Trampa 12. |
 | Latencia / cola | `latencySamples()` (peor caso, 20 kHz) / `tailLengthSeconds()` = 3 s. |
 
-**`PluginEditor` + `Lcd`** — foto del panel, tamaño fijo (CLAUDE.md, *Plugin*), guiado por `ButtonSpec`×17
-y `ModeSpec`×8. El dial alfa es modal como en la máquina: su efecto depende del modo, y los botones
-"params" ciclan entre `kModePatch`, `kModeTune`, `kModeChorusRate/Depth`, `kModeTremoloRate/Depth`,
-`kModePhaserRate/Depth`. Parche y afinación aplican **al soltar** el dial. `Lcd` guarda bytes, no
-`juce::String` (el `0xff` de la barra salía en UTF-8 de dos bytes). UI ↔ procesador por
-`ChangeBroadcaster` + el temporizador.
+**Panel** — foto del panel, tamaño fijo (CLAUDE.md, *Plugin*).
+
+| Pieza | Qué hace |
+|---|---|
+| `PluginEditor` | Tabla `ButtonSpec`×17 y los bucles que la recorren: colocar, pulsar, encender testigos. UI ↔ procesador por `ChangeBroadcaster` + el temporizador; el fader, por `SliderParameterAttachment`. |
+| `PanelLayout.h` | Toda coordenada del arte, en px del fondo (6140×1503), y `toUi()`. |
+| `PanelDisplay` | Funciones puras: las dos filas del display y la posición del dial para un modo (`panel::modeSpecs`×8), y los mapeos dial ↔ parche, afinación y paso. Probadas en `test_panel_display.cpp`. |
+| `PanelButton` | Recorte de interactable.png, hundido al pulsar, testigo rojo. |
+| `PanelLookAndFeel` | `AlphaDialLookAndFeel` (sprite girando) y `FaderLookAndFeel` (tirador). |
+| `Lcd` | 2×17 caracteres de 5×7 a una imagen cacheada. Guarda bytes, no `juce::String`: el marcador `0xff` de la barra se codificaría en UTF-8. |
+
+El dial alfa es modal como en la máquina: su efecto depende del modo, y los botones "params" ciclan entre
+`kModePatch`, `kModeTune`, `kModeChorusRate/Depth`, `kModeTremoloRate/Depth`, `kModePhaserRate/Depth`. Parche
+y afinación aplican **al soltar** el dial; en los seis modos de parámetro, los 15 pasos se reparten el
+recorrido por igual.
 
 ## 7. Concurrencia
 
@@ -562,10 +574,10 @@ Después la muestra sigue la cadena de §5.2.
 |---|---|---|
 | `rdpiano_tests` | Unitaria, `librdpiano/test/unit/` | 61 suites, 576 comprobaciones, ~10 s |
 | `rdpiano_e2e` | Harness bit-exacto contra `golden.txt` | 16 parches, ~3 s |
-| `rdpiano_plugin_tests` | Presets, programas, buses, latencia, cola y MIDI | 11 suites, 124 comprobaciones |
+| `rdpiano_plugin_tests` | Presets, programas, buses, latencia, cola, MIDI, gestos y texto del display | 18 suites, 255 comprobaciones |
 
 `sh scripts/verificar.sh` corre en local lo mismo que la CI. Qué fija cada suite, la red de transitorios de
-`test_engine_*.cpp` (con el hash `engine_golden`) y la regla sobre golden y vectores: CLAUDE.md, *Verificar cambios*. Ninguna prueba juzga el **timbre** ni la UI.
+`test_engine_*.cpp` (con el hash `engine_golden`) y la regla sobre golden y vectores: CLAUDE.md, *Verificar cambios*. Ninguna prueba juzga el **timbre** ni el dibujo del panel.
 
 ## 10. Plataforma, build y CI
 

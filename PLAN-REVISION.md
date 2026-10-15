@@ -23,7 +23,7 @@ este archivo se borra: este plan es temporal, aquel es la fuente única de lo pe
 | # | Pasada | Por qué en este orden | Riesgo de audio |
 |---|---|---|---|
 | 1 | Pruebas y scripts — **hecha** (2026-10-14; lo que quedó, en REVISION-CODIGO.md §3.3 y §3.4) | Pone la red que necesitan las demás: hash del motor (`engine_golden`), suite de `Mcu` (`test_mcu.cpp`), `board_select_patch_page`. | Ninguno |
-| 2 | [Plugin](#pasada-2--plugin-rdpiano_jucesource) | Independiente del núcleo; tiene fallos reales y locales. | Ninguno (sí de comportamiento ante el host: gestos) |
+| 2 | Plugin — **hecha** (2026-10-14; lo que quedó, en REVISION-CODIGO.md §4) | Independiente del núcleo; tiene fallos reales y locales. | Ninguno (sí de comportamiento ante el host: gestos) |
 | 3 | [Motor](#pasada-3--motor-rd_engine-patchesh) | El refactor grande (partir `RdPianoEngine`); exige el hash `engine_golden` de la pasada 1. | Bajo, con `engine_golden` |
 | 4 | [Emulador](#pasada-4--emulador-mcu-rd_board-command_port-sound_chip-sa_-rom_loader) | La de más riesgo tímbrico; va la última, con todo lo demás estable. | **Alto** en los lotes marcados |
 
@@ -49,112 +49,6 @@ al final de cada uno y verificar.sh completo al final de la pasada. Lo marcado A
 no lo apliques: avísame. No hagas commit. Al terminar, mueve lo pendiente a docs/REVISION-CODIGO.md,
 borra la sección de la pasada de este archivo y dime qué tocaste, lote por lote.
 ```
-
----
-
-## Pasada 2 — Plugin (`rdpiano_juce/Source`)
-
-**Alcance:** `PluginProcessor.*`, `PluginEditor.*`, `PluginParams.*`, `lcd/*`, `rdpiano_juce/CMakeLists.txt`.
-**Restricciones:** no `setResizable` (tamaño fijo), no tocar el bus de entrada (trampa 12), `masterTune` y
-`currentPatch` no automatizables (trampa 10), los atributos del preset no se renombran.
-
-### Fallos
-
-| Dónde | Problema | Arreglo |
-|---|---|---|
-| `PluginProcessor.cpp:58` | **Comprobado.** `parameterChanged()` llama a `sendChangeMessage()`; con automatización del host corre en el **hilo de audio**: recorre la `ListenerList` sin cerrojo y `triggerAsyncUpdate()` puede tomar un `CriticalSection`. | `paramsDirty.store(true)` ahí; el timer de 10 Hz que ya existe hace `if (paramsDirty.exchange(false)) sendChangeMessage();`. |
-| `PluginProcessor.cpp:126` | **Comprobado.** La salida temprana `index == currentPatch` compara con el **espejo**, no con el motor: tras un program change MIDI y antes del timer, pulsar el parche anterior se descarta y se pierde. Igual desde `setStateInformation` (:303). | Comparar con `engine->patch()`, o quitar la salida temprana (`requestPatch` ya colapsa repeticiones). |
-| `PluginProcessor.h:95-96` | `currentPatch`/`masterTune` son `int` no atómicos escritos desde el hilo de mensajes y desde `setStateInformation` (algunos hosts lo llaman en un hilo de carga) y leídos desde cualquiera. | Quitar los espejos y leer `engine->patch()`/`masterTune()` (ya atómicos, "intención"); el timer guarda un `lastNotifiedPatch` privado. |
-| `PluginProcessor.cpp:141` | **Comprobado.** `getProgramName` no rechaza índices negativos: lee `patchNames[-1]`. | `index < 0 \|\| index >= getNumPrograms()`. |
-| `PluginProcessor.cpp:298` | `(int16_t)(int)state.getProperty("masterTune")` desborda en silencio con un preset corrupto. | `juce::jlimit(-32768, 32767, …)` y el caso en la suite de preset corrupto. |
-| `PluginEditor.cpp:200,208,271,323` | El editor cambia parámetros con `setValueNotifyingHost` sin `beginChangeGesture`/`endChangeGesture`: la automatización en modo touch/latch de Logic y Live no graba bien fader ni dial. | `SliderParameterAttachment` para el volumen; `ParameterAttachment::setValueAsCompleteGesture` en los conmutadores; `begin/endGesture` en `sliderDragStarted/Ended` del dial en modo parámetro. **Riesgo medio**: probar en Logic. |
-| `lcd/lcd_font.h:10` | **Comprobado.** `uint8_t lcd_font[240][10]` es una definición global mutable en una cabecera: un segundo `#include` viola la ODR. | `inline constexpr`, leer por `const uint8_t *`, `kFirstGlyph = 16` (`Lcd.cpp:92`). |
-
-### Cohesión y acoplamiento
-
-- **Procesador** (`PluginProcessor.h:20-23`: `AudioProcessor` + `ChangeBroadcaster` + `Timer` + `Listener`):
-  - `engine`, `currentPatch` y `masterTune` públicos (`.h:94-98`), leídos por el editor (`PluginEditor.cpp:204,
-    360, 408`) → privados, con `currentPatch()`, `masterTune()` y `const RdPianoEngine &engine() const` para
-    las pruebas.
-  - Serialización a `PluginState.{h,cpp}`: `writeState(apvts, patch, tune)` / `readState(xml) → {patch, tune}`,
-    probables sin procesador.
-  - Código muerto: `engine ? … : kTailSeconds` (:114, `engine` nunca es nulo) y el bucle de plantilla que limpia
-    canales sobrantes (:217-218, nunca corre con 2+2). `engine` podría ser miembro directo.
-  - `CMakeLists.txt:115`: **comprobado**, `juce::juce_dsp` se enlaza y nada lo usa → quitarlo y comprobar con
-    `build-osx.sh ALL`.
-- **Editor** (`PluginEditor.h/.cpp`: layout, arte, modelo del display, dial, ruteo de botones) → extraer:
-
-  | Pieza | Qué se lleva |
-  |---|---|
-  | `PanelLayout.h` | Toda coordenada en px del fondo como `constexpr juce::Rectangle`: `kLcdArea{2044, 322, 1278, 233}` (hoy `(1984+60)…(4+309-40*2)`, :158), `kDialArea` (≈ 4027, 474, 770.55, 770.55; hoy en unidades de un SVG de 311,92 en :167-168 y el `770.55` duplicado en `KnobLF`), `kFaderTrack`/`kFaderCapArt` (`1188/660/100/656/131/1179` repetidos en :169 y :179-180), y `toUi(rect)`. |
-  | `PanelButton.{h,cpp}` | `MksButton`: `juce::Rectangle<int> artArea` privado, `setArt(area, scale)`, `setLit(bool)` que repinta solo si cambia (hoy la comparación está en el editor, :387-391); `enabled` choca con `Component::isEnabled()`; `kPressShift` y `kLampArea` en `paintButton` (`.h:91-99`). |
-  | `AlphaDialLookAndFeel` | `KnobLF`: `MathConstants<float>::pi * 1.5f` en vez de `3.14/2 + 3.14` (mueve el ángulo ~0,2°), `kSpriteSize = 244`, `kSpriteInset = 30`. |
-  | `FaderLookAndFeel` | El tirador del fader lo pinta hoy `paint()` del editor sobre un `Slider` invisible (:138, :172-181, :434-440): con `drawLinearSlider` desaparecen `paintedVolume` y el `repaint(bounds)` manual. |
-  | `PanelDisplay.{h,cpp}` | Función pura `(mode, patch, tune, step) → uint8_t[34]` + posición del dial, **probable** en `rdpiano_plugin_tests` (hoy la UI no tiene ninguna prueba). |
-
-- `Lcd` depende del factor 5 del editor (`0.445 / (scale / 5)`, `PluginEditor.cpp:155-158`, `Lcd.cpp:73,95`) →
-  que saque el tamaño de celda de sus límites (`getWidth() / (kColumns * 34)`); desaparece `setScale`.
-  Comparar el display a ojo.
-- `displayPatchNames` (`PluginEditor.cpp:87-95`) copia a mano los 16 nombres de `patches.h:29` en otro formato,
-  y el Doxygen de `patches.h:28` ("tal como lo enseña el display") contradice al editor → modelo y nombre por
-  separado en `patches.h`, relleno a 17 columnas en el editor.
-
-### Refactorizaciones
-
-- `sfC` (:155, :174) → `artScale()` privado con `getWidth()`; `scaleFactor` de :15 tapado por
-  `MksButton::scaleFactor` (`.h:70`).
-- `8` y `16` como "dos bancos de ocho" (:26, 204, 285, 371, 375, 402) → `kPatchesPerBank = NUM_PATCHES / 2`.
-- Dial en modo parámetro (:321): `floor(x * (kParamSteps - 1))` deja el último paso solo en el tope y es
-  asimétrico con `paramStep()` (:240, redondea) → `jlimit(0, kParamSteps - 1, (int)(x * kParamSteps))`. Cambia
-  el tacto: probarlo.
-- `buttonSpecs` (:23-72) y `ModeSpec` (:77-78): `kVolume`/`kModePatch` de relleno y `kVolume` como centinela
-  "sin parámetro" → inicializadores designados con valores por defecto; `juce::Rectangle<int>` en vez de
-  `int[4]`.
-- `buttonClicked` (:183-225) recorre los 17 botones → `onClick = [this, i] { pressButton(i); }` y quitar
-  `Button::Listener`.
-- `dialPreview` con centinela `0x7fffffff` (`.h:162-172`) → `std::optional<int>`.
-- `updateValues()` y `DisplayMode` (`.h:41, 48-60`) públicos sin uso externo → `private`.
-- `Lcd`: `LCD_FontRenderStandard`/`LCD_Data` (`Lcd.h:51,54`) → `drawGlyph`/`chars`.
-
-### Doxygen
-
-- Repetido en el `.cpp`: `PluginEditor.cpp:227-235`, `:243-248` (copian `PluginEditor.h:183-196`);
-  `PluginProcessor.cpp:60-65` (override; dejar un bloque breve en la cabecera porque el motivo no se deduce);
-  `PluginProcessor.cpp:166-171` documenta un privado → a `PluginProcessor.h:107`.
-- Narra historia: `PluginProcessor.cpp:107-108`, `PluginEditor.h:158-161`, `:141-142`, `lcd/Lcd.h:29-31`
-  (además un `///` para tres constantes), `PluginProcessor.cpp:259-263` (dejar la regla vigente en la
-  cabecera: la etiqueta raíz `RdPiano` y los atributos `currentPatch`/`masterTune` no se renombran).
-- Falta o está mal: `PluginProcessor.h:94-96` (un `///` para dos campos), `:98` `engine`;
-  `PluginEditor.h:69-71, 80` (`MksButton`), `:50` (`//` en vez de `///<`, resto de `DisplayMode`);
-  `PluginParams.h:50-53`; sobran los `@param id` de `PluginProcessor.h:75, 82, 89`.
-- `lcd/Lcd.h:1-9`, `lcd/Lcd.cpp:1-9`: cabecera de plantilla del Projucer delante del `@file`.
-
-### Comentarios interlineados
-
-- `PluginProcessor.cpp`: desfasados :151-152 ("con el cerrojo tomado") y :123-125 ("en cada evento de
-  arrastre"; ahora aplica al soltar); historia :129-132; inexacto :230-232 (en `MidiBuffer` un mensaje corto no
-  vive en el montículo); obvios o plantilla :37-38, :78-79, :220-221, :307. **Se quedan** :27-29 (trampa 12),
-  :190-193 (trampa 8), :158-160 (trampa 4).
-- `PluginEditor.cpp`: borrar :282-284, :287-289, :305-307, :430-433, :178, :193-194, :213-214. **Se quedan**
-  :406-407 (442 Hz y ±3,85 Hz del firmware) y :262-263.
-- `Lcd.cpp`: borrar :27-28, :88-89; :48-52 al doc de `cache` (`Lcd.h:57`).
-- `rdpiano_juce/CMakeLists.txt:12-25, 42-44, 121-126, 133-138`: narran la migración desde Projucer y JUCE 8;
-  dejar la regla vigente.
-
-### Lotes
-
-1. Fallos locales: `parameterChanged`, salida temprana, espejos atómicos o fuera, `getProgramName`,
-   `jlimit` del preset, `lcd_font`. La pasada 1 dejó cubiertos el MIDI por `processBlock`, el program change
-   que recoge el timer y la trampa 10; antes de cada arreglo, su caso en `test_plugin_state.cpp` (salida
-   temprana tras un program change MIDI, `getProgramName(-1)`, `masterTune` desbordado en el preset).
-2. Encapsular el procesador (privados + getters) y `PluginState`; quitar código muerto y `juce_dsp`.
-3. `PanelLayout.h` + constantes con nombre (cero cambio visual: mismos valores exactos).
-4. Extraer `PanelButton`, `AlphaDialLookAndFeel`, `FaderLookAndFeel`; `Lcd` sin `setScale`. Comparar
-   capturas del panel antes y después.
-5. `PanelDisplay` puro + su suite.
-6. Gestos de automatización (attachments). **Probar en Logic** (touch/latch) antes de darlo por bueno.
-7. Doxygen y comentarios.
-8. Instalar (`build-osx.sh AU install`) y probar en Logic: carga, presets, dial, display, automatización.
 
 ---
 

@@ -4,9 +4,26 @@ Cambios de cada versión publicada de RdPiano. La más nueva, arriba.
 
 ## Sin publicar
 
-El sonido y el manejo del plugin no cambian respecto a la 1.0.2.
+El sonido no cambia respecto a la 1.0.2.
+
+### Manejo
+
+- Al grabar automatización en el DAW con el modo *touch* o *latch*, ahora quedan
+  grabados los movimientos del fader de volumen, de los botones de efectos y del
+  dial al ajustar un efecto.
+- El dial reparte por igual los quince pasos de cada ajuste de efecto: el último
+  ya no exige llevarlo hasta el tope, y cada posición vuelve a dar siempre el
+  mismo paso.
+- Si se pulsa un sonido justo después de cambiar a otro desde el teclado o desde
+  una pista, la pulsación ya no se pierde.
+- El DAW también se entera cuando el sonido se cambia desde el panel.
+- Un proyecto guardado con una afinación dañada ya no se abre con el
+  instrumento muy desafinado hacia el lado contrario.
 
 ### Por dentro
+
+- El panel está reorganizado por piezas y su pantalla tiene pruebas
+  automáticas propias. Se ve igual que antes.
 
 - Más pruebas automáticas: ahora comprueban también que la cadena de sonido
   completa —efectos, cambios de sonido y de afinación incluidos— sigue dando

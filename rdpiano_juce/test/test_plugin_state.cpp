@@ -3,13 +3,14 @@
  * @brief El plugin visto por el anfitrión: parámetros, presets, programas, MIDI, latencia, cola y buses.
  *
  * Habla con el `AudioProcessor` por su API de JUCE —`getParameters()` por id,
- * `getStateInformation`/`setStateInformation`, `setCurrentProgram`, `processBlock`—. Algunas suites
- * leen aún los miembros públicos `engine` y `masterTune` para confirmar que el cambio llegó al motor.
+ * `getStateInformation`/`setStateInformation`, `setCurrentProgram`, `processBlock`—; `engine()` y
+ * `masterTune()` confirman que el cambio llegó al motor.
  */
 
 #include <JuceHeader.h>
 
 #include "PluginProcessor.h"
+#include "PluginState.h"
 #include "patches.h"
 #include "unit_test.h"
 
@@ -53,7 +54,7 @@ namespace
             s.values[i] = param ? param->getValue() : -1.0f;
         }
         s.patch = p.getCurrentProgram();
-        s.tune = p.masterTune;
+        s.tune = p.masterTune();
         return s;
     }
 
@@ -159,8 +160,8 @@ TEST_SUITE(plugin_state_roundtrip)
 
     // El parche restaurado tiene que haber llegado al motor, no sólo al espejo
     // que lee el editor.
-    CHECK_EQ(restored.engine->patch(), 11);
-    CHECK_EQ(restored.engine->masterTune(), 4321);
+    CHECK_EQ(restored.engine().patch(), 11);
+    CHECK_EQ(restored.engine().masterTune(), 4321);
 }
 
 /**
@@ -218,7 +219,51 @@ TEST_SUITE(plugin_state_garbage)
     juce::MemoryBlock state = legacyState(99);
     p.setStateInformation(state.getData(), (int)state.getSize());
     CHECK(p.getCurrentProgram() >= 0 && p.getCurrentProgram() < NUM_PATCHES);
-    CHECK_EQ(p.engine->patch(), p.getCurrentProgram());
+    CHECK_EQ(p.engine().patch(), p.getCurrentProgram());
+
+    // Una afinación fuera del rango de un int16 se recorta al extremo; sin recortar, 40000 daba la vuelta a
+    // una afinación negativa.
+    const int tunes[][2] = {{40000, 32767}, {-40000, -32768}, {32767, 32767}, {-32768, -32768}};
+    for (const auto &t : tunes)
+    {
+        juce::XmlElement xml("RdPiano");
+        xml.setAttribute("masterTune", t[0]);
+        juce::MemoryBlock block;
+        juce::AudioProcessor::copyXmlToBinary(xml, block);
+        p.setStateInformation(block.getData(), (int)block.getSize());
+        checks.add(check_fmt("afinación %d en el preset", t[0]), p.engine().masterTune() == t[1],
+                   check_fmt("motor %d, esperado %d", (int)p.engine().masterTune(), t[1]));
+    }
+}
+
+/**
+ * @brief Parche y afinación en el árbol del preset, sin procesador: nombres de los atributos, ida y vuelta y
+ *        saneado de lo que traiga un preset corrupto o antiguo.
+ */
+TEST_SUITE(plugin_state_extras)
+{
+    const juce::ValueTree written = writeRdState(juce::ValueTree("RdPiano"), {13, -1234});
+    CHECK_EQ((int)written.getProperty("currentPatch", -1), 13);
+    CHECK_EQ((int)written.getProperty("masterTune", -1), -1234);
+
+    const RdPresetExtras back = readRdState(written);
+    CHECK_EQ(back.patch, 13);
+    CHECK_EQ(back.tune, -1234);
+
+    const RdPresetExtras empty = readRdState(juce::ValueTree("RdPiano"));
+    CHECK_EQ(empty.patch, 0);
+    CHECK_EQ(empty.tune, 0);
+
+    juce::ValueTree bad("RdPiano");
+    bad.setProperty("currentPatch", NUM_PATCHES, nullptr);
+    bad.setProperty("masterTune", 70000, nullptr);
+    CHECK_EQ(readRdState(bad).patch, 0);
+    CHECK_EQ(readRdState(bad).tune, 32767);
+
+    bad.setProperty("currentPatch", -3, nullptr);
+    bad.setProperty("masterTune", "abc", nullptr);
+    CHECK_EQ(readRdState(bad).patch, 0);
+    CHECK_EQ(readRdState(bad).tune, 0);
 }
 
 /**
@@ -237,8 +282,8 @@ TEST_SUITE(plugin_programs)
     for (int i = 0; i < NUM_PATCHES; i++)
     {
         p.setCurrentProgram(i);
-        checks.add(check_fmt("el motor sigue al programa %d", i), p.engine->patch() == i,
-                   check_fmt("motor %d, plugin %d", p.engine->patch(), p.getCurrentProgram()));
+        checks.add(check_fmt("el motor sigue al programa %d", i), p.engine().patch() == i,
+                   check_fmt("motor %d, plugin %d", p.engine().patch(), p.getCurrentProgram()));
     }
 
     // Fuera de rango: se ignora, no se recorta a un parche cualquiera.
@@ -247,6 +292,10 @@ TEST_SUITE(plugin_programs)
     CHECK_EQ(p.getCurrentProgram(), 5);
     p.setCurrentProgram(NUM_PATCHES);
     CHECK_EQ(p.getCurrentProgram(), 5);
+
+    // Y el nombre de un programa que no existe es vacío, sin leer fuera de la tabla.
+    CHECK(p.getProgramName(-1).isEmpty());
+    CHECK(p.getProgramName(NUM_PATCHES).isEmpty());
 }
 
 /**
@@ -260,7 +309,7 @@ TEST_SUITE(plugin_latency)
     p.prepareToPlay(48000.0, 512);
 
     CHECK(p.getLatencySamples() > 0);
-    CHECK_EQ(p.getLatencySamples(), p.engine->latencySamples());
+    CHECK_EQ(p.getLatencySamples(), p.engine().latencySamples());
 
     // Y no se renegocia al cambiar de sonido: declarar latencia nueva en mitad
     // de una sesión es justo lo que a los anfitriones no les gusta.
@@ -281,7 +330,7 @@ TEST_SUITE(plugin_tail_length)
     RdPiano_juceAudioProcessor p;
 
     CHECK(p.getTailLengthSeconds() > 0.0);
-    CHECK_EQ(p.getTailLengthSeconds(), p.engine->tailLengthSeconds());
+    CHECK_EQ(p.getTailLengthSeconds(), p.engine().tailLengthSeconds());
 
     // Y sigue siendo la misma con el plugin preparado y con otro sonido puesto:
     // renegociarla en mitad de una sesión es justo lo que no se puede hacer.
@@ -395,6 +444,30 @@ TEST_SUITE(plugin_midi_program_change)
 }
 
 /**
+ * @brief Volver al parche anterior justo después de un program change MIDI, antes de que pase el temporizador:
+ *        la petición llega al motor y no se descarta por creer que ese parche ya está puesto.
+ */
+TEST_SUITE(plugin_program_after_midi_change)
+{
+    RdPiano_juceAudioProcessor p;
+    const int block = 512;
+    p.prepareToPlay(48000.0, block);
+
+    juce::AudioBuffer<float> buffer(2, block);
+    juce::MidiBuffer midi;
+    midi.addEvent(juce::MidiMessage::programChange(1, 9), 0);
+    p.processBlock(buffer, midi);
+    CHECK_EQ(p.engine().patch(), 9);
+
+    // Sin timerCallback() de por medio: es la ventana en la que el panel aún enseña el parche 0.
+    p.setCurrentProgram(0);
+    CHECK_EQ(p.engine().patch(), 0);
+    CHECK_EQ(p.getCurrentProgram(), 0);
+
+    p.releaseResources();
+}
+
+/**
  * @brief Trampa 10: el parche y la afinación viajan en el preset como propiedades, no como parámetros
  *        automatizables.
  */
@@ -425,4 +498,55 @@ TEST_SUITE(plugin_patch_and_tune_not_parameters)
         CHECK_EQ(xml->getIntAttribute("currentPatch", -1), 7);
         CHECK_EQ(xml->getIntAttribute("masterTune", -1), 1000);
     }
+}
+
+namespace
+{
+    // Lo que ve el anfitrión de un parámetro: gestos abiertos, cerrados y cambios de valor.
+    struct GestureLog : juce::AudioProcessorListener
+    {
+        int begins = 0, ends = 0, changes = 0;
+        bool changedOutsideGesture = false;
+        int open = 0;
+
+        void audioProcessorParameterChanged(juce::AudioProcessor *, int, float) override
+        {
+            changes++;
+            changedOutsideGesture |= open == 0;
+        }
+        void audioProcessorChanged(juce::AudioProcessor *, const ChangeDetails &) override {}
+        void audioProcessorParameterChangeGestureBegin(juce::AudioProcessor *, int) override
+        {
+            begins++;
+            open++;
+        }
+        void audioProcessorParameterChangeGestureEnd(juce::AudioProcessor *, int) override
+        {
+            ends++;
+            open--;
+        }
+    };
+} // namespace
+
+/**
+ * @brief Un cambio desde el panel llega al anfitrión dentro de un gesto completo: sin begin/end, la
+ *        automatización en modo touch o latch no lo graba. Repetir el valor no le manda nada.
+ */
+TEST_SUITE(plugin_param_gesture)
+{
+    RdPiano_juceAudioProcessor p;
+    GestureLog log;
+    p.addListener(&log);
+
+    p.setParamValue(kChorusEnabled, p.paramValue(kChorusEnabled) >= 0.5f ? 0.0f : 1.0f);
+    CHECK_EQ(log.begins, 1);
+    CHECK_EQ(log.ends, 1);
+    CHECK_EQ(log.changes, 1);
+    CHECK(!log.changedOutsideGesture);
+
+    p.setParamValue(kChorusEnabled, p.paramValue(kChorusEnabled));
+    CHECK_EQ(log.begins, 1);
+    CHECK_EQ(log.changes, 1);
+
+    p.removeListener(&log);
 }
