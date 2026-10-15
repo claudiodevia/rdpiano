@@ -5,16 +5,20 @@
 # `build/juce` (esto), `build/plugin` (el build de la raíz, con los artefactos
 # del plugin) y `build/core`, `build/core-asan` (los del núcleo suelto). Así
 # `rm -rf build` deja el árbol como recién clonado, y borrar sólo los binary
-# dirs (`rm -rf build/plugin build/core*`) no obliga a volver a bajar 162 MB.
+# dirs (`rm -rf build/plugin build/core*`) no obliga a volver a bajar JUCE
+# (55 MB de zip, 162 MB descomprimido).
 #
 # Y por eso mismo no se baja dos veces: si `build/juce` ya es la versión que
 # toca, el script no hace nada. `--forzar` lo baja igualmente (árbol a medias,
 # tocado a mano...).
 #
-# Desde la fase 3 el plugin se construye con la API CMake de JUCE
-# (juce_add_plugin), asi que lo que hace falta del zip es el arbol de fuentes
-# completo: juce/CMakeLists.txt, juce/modules y juce/extras/Build, de donde sale
-# juceaide. El Projucer que trae el zip ya no se usa.
+# El plugin se construye con la API CMake de JUCE (juce_add_plugin), así que
+# lo que hace falta del zip es el árbol de fuentes completo: juce/CMakeLists.txt,
+# juce/modules y juce/extras/Build, de donde sale juceaide. El Projucer que trae
+# el zip no se usa.
+#
+# El zip se comprueba contra SHA256, el resumen que GitHub publica para ese
+# asset: al cambiar VERSION hay que cambiarlo también.
 #
 # La salida de curl y unzip va a logs/download-juce-<fecha>-<hora>.log; por
 # pantalla sólo pasan las etiquetas de cada paso. El andamiaje (colores, log,
@@ -22,6 +26,7 @@
 set -e
 
 VERSION=9.0.1
+SHA256=dda2aefd73796f9b8d37b8f84d7154a7881706bf8aa5a3467334277629001875
 ROOT=$(cd "$(dirname "$0")/.."; pwd)
 . "$ROOT/scripts/common.sh"
 
@@ -62,13 +67,17 @@ limpiar()
 log_abrir download-juce
 titulo "JUCE $VERSION (osx)"
 
-paso "Descargando el zip (162 MB)"
+paso "Descargando el zip (55 MB)"
 cmd curl -fL --silent --show-error --retry 3 --retry-delay 2 \
     "https://github.com/juce-framework/JUCE/releases/download/$VERSION/juce-$VERSION-osx.zip" \
     -o "$ZIP"
 
-# El zip tiene JUCE/ como raiz. Se descomprime aparte y se mueve, en vez de
-# renombrar en sitio: en un volumen sensible a mayusculas `JUCE` y `juce` no
+paso "Comprobando el SHA-256"
+echo "$SHA256  $ZIP" | cmd shasum -a 256 -c ||
+    fatal "el zip descargado no tiene el SHA-256 esperado de JUCE $VERSION"
+
+# El zip tiene JUCE/ como raíz. Se descomprime aparte y se mueve, en vez de
+# renombrar en sitio: en un volumen sensible a mayúsculas `JUCE` y `juce` no
 # son el mismo directorio.
 paso "Descomprimiendo en $JUCE_DIR"
 rm -rf "$JUCE_DIR" "$TMP"
@@ -79,4 +88,4 @@ juce_ya_esta || fatal "el zip descomprimido no es JUCE $VERSION"
 
 fin "Listo en $(transcurrido)s." "JUCE descargado"
 ruta "JUCE en   " "$JUCE_DIR"
-ruta "Modulos en" "$JUCE_DIR/modules"
+ruta "Módulos en" "$JUCE_DIR/modules"

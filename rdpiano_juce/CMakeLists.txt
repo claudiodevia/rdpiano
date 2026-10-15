@@ -1,30 +1,17 @@
-# El plugin, con la API CMake de JUCE (REFACTORIZACION §16.3, fase 3).
+# El plugin, con la API CMake de JUCE.
 #
-# Sustituye a `rdpiano_juce.jucer` + Projucer. Los valores de aquí son los que
-# tenía el `.jucer`, uno a uno: el `.vst3`, el `.component`, el `.app` y el
-# `.appex` que salen de este fichero llevan el mismo nombre, el mismo bundle id
-# (`com.GiulioZausa.rdpiano`) y los mismos códigos de fabricante y de plugin, de
-# forma que un host que ya tenga sesiones guardadas los siga reconociendo.
+# El bundle id (`com.GiulioZausa.rdpiano`) y los códigos de fabricante y de
+# plugin no cambian: con ellos reconoce el anfitrión las sesiones guardadas
+# (trampa 11 de CLAUDE.md).
 #
-# Lo que cambia es de dónde sale el núcleo: el `.jucer` listaba las fuentes de
-# `librdpiano/src/` una por una y las recompilaba; aquí se enlaza el target
-# `librdpiano` que construye `librdpiano/CMakeLists.txt`. Añadir un `.cpp` al
-# núcleo ya no obliga a tocar nada de este directorio.
+# El núcleo no se recompila aquí: se enlaza el target `librdpiano` que construye
+# `librdpiano/CMakeLists.txt`. Añadir un `.cpp` al núcleo no obliga a tocar nada
+# de este directorio.
 
-# Objetivo de despliegue: macOS 11 (Big Sur).
-#
-# Hasta JUCE 8.0.1 estaba clavado en 10.13 —el que ponía el Projucer— y no era
-# cosmético: aquel JUCE llamaba a `CGWindowListCreateImage` sin más, y el SDK
-# de macOS 15+ lo marca como no disponible, así que con el objetivo del
-# anfitrión `juce_gui_basics` ni compilaba. JUCE 9 lo arregla: usa
-# ScreenCaptureKit cuando el objetivo es >= 14.4 y, por debajo, envuelve la
-# llamada vieja en `JUCE_BEGIN_IGNORE_DEPRECATION_WARNINGS`
-# (`juce_Windowing_mac.mm`). Ya no hay nada que forzar hacia abajo.
-#
-# 11.0 es el suelo del binario universal: la primera versión que corre en
-# Apple Silicon, y por encima del mínimo que declara JUCE 9 (10.11). Subir a
-# 14.4 o más metería ScreenCaptureKit en el bundle y dejaría fuera a medio
-# mundo, que en un plugin de audio no compensa.
+# Objetivo de despliegue: macOS 11 (Big Sur), el suelo del binario universal
+# (la primera versión que corre en Apple Silicon) y por encima del mínimo de
+# JUCE 9 (10.11). Desde 14.4 JUCE capturaría ventanas con ScreenCaptureKit y el
+# bundle dejaría fuera los macOS anteriores.
 if(NOT CMAKE_OSX_DEPLOYMENT_TARGET)
   set(CMAKE_OSX_DEPLOYMENT_TARGET "11.0" CACHE STRING "" FORCE)
 endif()
@@ -41,9 +28,7 @@ set(ENV{MACOSX_DEPLOYMENT_TARGET} "${CMAKE_OSX_DEPLOYMENT_TARGET}")
 add_subdirectory(${RDPIANO_JUCE_DIR} juce EXCLUDE_FROM_ALL)
 
 juce_add_plugin(rdpiano_juce
-  # El binario se llama rdpiano_juce (era `targetName` en el .jucer) y el
-  # plugin se anuncia como RdPiano (era `pluginName`). No son lo mismo y el
-  # .jucer también los distinguía.
+  # El binario se llama rdpiano_juce y el plugin se anuncia como RdPiano.
   PRODUCT_NAME              "rdpiano_juce"
   PLUGIN_NAME               "RdPiano"
   # Versión oficial del plugin, y la única que hay: de aquí salen
@@ -51,7 +36,7 @@ juce_add_plugin(rdpiano_juce
   # versiones del .ttl del LV2 y las macros JucePlugin_Version*. Explícita a
   # propósito: si se omite, JUCE la hereda del `project()` que toque en ese
   # momento (hoy el de la raíz), y cambiaría sin que nadie lo pidiera.
-  VERSION                   "1.0.2"
+  VERSION                   "1.0.3"
   DESCRIPTION               "RdPiano"
   COMPANY_NAME              "Giulio Zausa"
   BUNDLE_ID                 "com.GiulioZausa.rdpiano"
@@ -94,9 +79,13 @@ juce_add_binary_data(rdpiano_resources
 juce_generate_juce_header(rdpiano_juce)
 
 target_sources(rdpiano_juce PRIVATE
+  Source/PanelButton.cpp
+  Source/PanelDisplay.cpp
+  Source/PanelLookAndFeel.cpp
   Source/PluginProcessor.cpp
   Source/PluginEditor.cpp
   Source/PluginParams.cpp
+  Source/PluginState.cpp
   Source/lcd/Lcd.cpp)
 
 target_compile_definitions(rdpiano_juce PUBLIC
@@ -114,37 +103,34 @@ target_link_libraries(rdpiano_juce
     librdpiano
     juce::juce_audio_utils
     juce::juce_audio_devices
-    juce::juce_dsp
     juce::juce_gui_extra
     juce::juce_recommended_config_flags)
 
 target_compile_features(rdpiano_juce PRIVATE cxx_std_23)
 
-# Dead-stripping en el enlazado de los cinco formatos. El Projucer lo ponía
-# (`DEAD_CODE_STRIPPING = YES`) y ni Xcode ni CMake lo activan por su cuenta:
-# sin él, el bundle se lleva entero el código de los módulos JUCE que nadie
-# llama —el ejecutable pasa de 15 MB a 30 MB, con __text triplicado y cuatro
-# veces más símbolos—. Los puntos de entrada de cada formato son símbolos
-# exportados, que el enlazador trata como raíces, así que no se los lleva.
+# Dead-stripping en el enlazado de los cinco formatos: ni Xcode ni CMake lo
+# activan por su cuenta, y sin él el bundle se lleva entero el código de los
+# módulos JUCE que nadie llama (el ejecutable pasa de 15 MB a 30 MB). Los puntos
+# de entrada de cada formato son símbolos exportados, que el enlazador trata
+# como raíces, así que no se los lleva.
 foreach(fmt IN ITEMS AU AUv3 LV2 Standalone VST3)
   if(TARGET rdpiano_juce_${fmt})
     target_link_options(rdpiano_juce_${fmt} PRIVATE -Wl,-dead_strip)
   endif()
 endforeach()
 
-# Ida y vuelta de presets sin abrir un DAW (REFACTORIZACION §17.7). Es una app
-# de consola que enlaza el mismo código compartido que los cinco formatos:
-# instancia el AudioProcessor de verdad y le pide getStateInformation /
-# setStateInformation. Sólo es posible desde que el plugin se construye con
-# CMake — con el Projucer no había forma de compilar el procesador sin envolverlo
-# en un formato de plugin.
+# Las pruebas del plugin sin abrir un DAW: una app de consola que enlaza el
+# mismo código compartido que los cinco formatos e instancia el AudioProcessor
+# de verdad.
 juce_add_console_app(rdpiano_plugin_tests
   PRODUCT_NAME "rdpiano_plugin_tests")
 
 juce_generate_juce_header(rdpiano_plugin_tests)
 
 target_sources(rdpiano_plugin_tests PRIVATE
+  ../librdpiano/test/test_runner.cpp
   test/main.cpp
+  test/test_panel_display.cpp
   test/test_plugin_state.cpp)
 
 target_include_directories(rdpiano_plugin_tests PRIVATE
@@ -154,4 +140,4 @@ target_link_libraries(rdpiano_plugin_tests PRIVATE rdpiano_juce)
 
 target_compile_features(rdpiano_plugin_tests PRIVATE cxx_std_23)
 
-add_test(NAME plugin_state COMMAND rdpiano_plugin_tests)
+add_test(NAME plugin COMMAND rdpiano_plugin_tests)

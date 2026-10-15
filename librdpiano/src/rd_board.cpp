@@ -38,12 +38,8 @@ void RdBoard::selectPatch(size_t from_addr) { decode_params_page(params_rom, par
 
 void RdBoard::selectPatchPage(const u8 *page, size_t from_addr)
 {
-    memcpy(params_rom + 0x8000, page, PARAMS_PAGE_BYTES);
-
-    const size_t target = params_patch_target(from_addr);
-    params_rom[0x00] = 0x01;
-    params_rom[0x01] = (target >> 8) & 0xff;
-    params_rom[0x02] = target & 0xff;
+    memcpy(params_rom + PARAMS_PAGE_OFFSET, page, PARAMS_PAGE_BYTES);
+    write_params_header(params_rom, from_addr);
 }
 
 void RdBoard::reset()

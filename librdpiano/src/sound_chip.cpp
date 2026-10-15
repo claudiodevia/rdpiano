@@ -1,10 +1,7 @@
 #include "../include/sound_chip.h"
 
 #include "../include/rd_trace.h"
-#include "../include/sa_blocks.h"
 #include "../include/rom_loader.h"
-
-#include <cmath>
 
 /**
  * @file sound_chip.cpp
@@ -100,7 +97,7 @@ s32 SoundChip::update()
         {
             SA_Part &part = m_parts[voiceI][partI];
 
-            // hack for performance
+            // HACK (trampa 3): atajo de rendimiento; la parte apagada ni avanza ni puede disparar IRQ.
             if (part.env_value == 0 && part.env_dest == 0)
             {
                 part.sub_phase = 0;
@@ -113,7 +110,7 @@ s32 SoundChip::update()
             const s32 exp_val = tick_ic8(part, ic19, ic9, wave.exp & WAVE_SAMPLE, (wave.exp & WAVE_SIGN) != 0,
                                          wave.delta & WAVE_SAMPLE, (wave.delta & WAVE_SIGN) != 0, tables);
 
-            // hack to prevent voices ringing when env value is 0, investigate
+            // HACK (trampa 3, «investigate»): sin esto suenan voces con la envolvente a 0; falta saber por qué.
             if (part.env_value != 0)
                 result += exp_val;
 
@@ -151,7 +148,7 @@ void SoundChip::decode_samples(unsigned slot, const u8 *temp_ic5, const u8 *temp
     // costaría descifrar las tres ROM enteras primero.
     WaveTables &out = wave_slots[slot];
 
-    for (size_t i = 0; i < 0x20000; i++)
+    for (size_t i = 0; i < WAVE_ROM_BYTES; i++)
     {
         size_t descrambled_i =
             (((i >> 0) & 1) << 0 | ((~i >> 1) & 1) << 1 | ((i >> 2) & 1) << 2 | ((~i >> 3) & 1) << 3 |

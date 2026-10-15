@@ -27,46 +27,24 @@
 #include "mcu.h"
 #include "patches.h"
 #include "rd_engine.h"
+#include "rom_files.h"
 
 // ---------------------------------------------------------------- ROMs
-//
-// Los nombres de fichero, los tamaños y la tabla de juegos viven en patches.h:
-// son los mismos que empotra el plugin.
 
-static std::vector<u8> load_rom(const std::string &dir, const char *name, size_t len)
-{
-    std::string path = dir + "/" + name;
-    std::vector<u8> data(len, 0);
-
-    FILE *f = fopen(path.c_str(), "rb");
-    if (f == NULL)
-    {
-        fprintf(stderr, "ERROR: no se puede abrir %s\n", path.c_str());
-        exit(2);
-    }
-    size_t read = fread(data.data(), 1, len, f);
-    fclose(f);
-
-    if (read != len)
-    {
-        fprintf(stderr, "ERROR: %s tiene %zu bytes, se esperaban %zu\n", path.c_str(), read, len);
-        exit(2);
-    }
-
-    return data;
-}
-
+/** @brief Las ROM del harness: sin una no hay nada que medir, así que faltar es salir con error. */
 struct RomBank
 {
-    std::map<std::string, std::vector<u8>> cache;
-    std::string dir;
+    RomCache cache;
 
     const u8 *get(const char *name, size_t len)
     {
-        auto it = cache.find(name);
-        if (it == cache.end())
-            it = cache.emplace(name, load_rom(dir, name, len)).first;
-        return it->second.data();
+        const u8 *data = cache.get(name, len);
+        if (data == nullptr)
+        {
+            fprintf(stderr, "ERROR: no se puede leer %s/%s (%zu bytes)\n", cache.dir.c_str(), name, len);
+            exit(2);
+        }
+        return data;
     }
 };
 
@@ -77,7 +55,7 @@ struct Accum
     double sumSquares = 0;
     size_t count = 0;
     s32 peak = 0;
-    u64 hash = 0xcbf29ce484222325ull; // FNV-1a 64
+    Fnv1a hash;
 
     void add(s32 sample)
     {
@@ -86,13 +64,7 @@ struct Accum
         s32 mag = sample < 0 ? -sample : sample;
         if (mag > peak)
             peak = mag;
-
-        u32 bits = (u32)sample;
-        for (int b = 0; b < 4; b++)
-        {
-            hash ^= (bits >> (b * 8)) & 0xff;
-            hash *= 0x100000001b3ull;
-        }
+        hash.i32(sample);
     }
 
     double rms() const { return count ? sqrt(sumSquares / count) : 0.0; }
@@ -193,7 +165,7 @@ static PatchResult run_patch(int patch, RomBank &roms, std::vector<float> *wav)
     const u8 *ic5 = roms.get(set[ROM_IC5], WAVE_ROM_SIZE);
     const u8 *ic6 = roms.get(set[ROM_IC6], WAVE_ROM_SIZE);
     const u8 *ic7 = roms.get(set[ROM_IC7], WAVE_ROM_SIZE);
-    const u8 *ic18 = roms.get(set[ROM_IC18], WAVE_ROM_SIZE);
+    const u8 *ic18 = roms.get(set[ROM_IC18], PARAMS_ROM_SIZE);
     const u8 *prog = roms.get(PROG_ROM_FILE, PROG_ROM_SIZE);
 
     const int rate = patchSampleRates[patch];
@@ -271,7 +243,7 @@ static PatchResult run_patch(int patch, RomBank &roms, std::vector<float> *wav)
     }
 
     r.peak = total.peak;
-    r.hash = total.hash;
+    r.hash = total.hash.h;
     r.emulatedSecs = (double)total.count / rate;
 
     return r;
@@ -280,7 +252,8 @@ static PatchResult run_patch(int patch, RomBank &roms, std::vector<float> *wav)
 // ---------------------------------------------------------------- umbrales
 
 /**
- * @brief Calibrados sobre el comportamiento actual del emulador; ver README del test.
+ * @brief Umbrales de cordura, calibrados sobre el comportamiento del emulador; el hash es lo que congela el
+ *        audio.
  */
 static const double MIN_NOTE_RMS = 200.0;   // una nota tiene que sonar
 static const double MAX_SILENCE_RMS = 50.0; // antes de tocar, casi nada
@@ -289,23 +262,23 @@ static const s32 MAX_PEAK = 1 << 24;        // cordura de rango
 
 static void check_patch(const PatchResult &r, CheckRun &checks)
 {
-    checks.add("boot-silence", r.silenceRms < MAX_SILENCE_RMS,
-               check_fmt("silence rms %.1f < %.1f", r.silenceRms, MAX_SILENCE_RMS));
+    checks.add("arranque-en-silencio", r.silenceRms < MAX_SILENCE_RMS,
+               check_fmt("rms en silencio %.1f < %.1f", r.silenceRms, MAX_SILENCE_RMS));
 
-    checks.add("note-sounds", r.noteRms > MIN_NOTE_RMS, check_fmt("note rms %.1f > %.1f", r.noteRms, MIN_NOTE_RMS));
+    checks.add("nota-suena", r.noteRms > MIN_NOTE_RMS, check_fmt("rms de la nota %.1f > %.1f", r.noteRms, MIN_NOTE_RMS));
 
-    checks.add("chord-sounds", r.chordRms > r.noteRms / 2,
-               check_fmt("chord rms %.1f > note rms/2 %.1f", r.chordRms, r.noteRms / 2));
+    checks.add("acorde-suena", r.chordRms > r.noteRms / 2,
+               check_fmt("rms del acorde %.1f > rms de la nota/2 %.1f", r.chordRms, r.noteRms / 2));
 
-    checks.add("release-decays", r.releaseTailRms < MAX_TAIL_RMS,
-               check_fmt("release tail rms %.1f < %.1f", r.releaseTailRms, MAX_TAIL_RMS));
+    checks.add("cola-se-extingue", r.releaseTailRms < MAX_TAIL_RMS,
+               check_fmt("rms al final de la cola %.1f < %.1f", r.releaseTailRms, MAX_TAIL_RMS));
 
-    checks.add("poly-sounds", r.polyRms > MIN_NOTE_RMS, check_fmt("poly rms %.1f > %.1f", r.polyRms, MIN_NOTE_RMS));
+    checks.add("polifonia-suena", r.polyRms > MIN_NOTE_RMS, check_fmt("rms de 16 voces %.1f > %.1f", r.polyRms, MIN_NOTE_RMS));
 
-    checks.add("poly-decays", r.polyTailRms < MAX_TAIL_RMS,
-               check_fmt("poly tail rms %.1f < %.1f", r.polyTailRms, MAX_TAIL_RMS));
+    checks.add("polifonia-se-extingue", r.polyTailRms < MAX_TAIL_RMS,
+               check_fmt("rms al final de la cola de 16 voces %.1f < %.1f", r.polyTailRms, MAX_TAIL_RMS));
 
-    checks.add("peak-sane", r.peak > 0 && r.peak < MAX_PEAK, check_fmt("peak %d < %d", r.peak, MAX_PEAK));
+    checks.add("pico-en-rango", r.peak > 0 && r.peak < MAX_PEAK, check_fmt("pico %d < %d", r.peak, MAX_PEAK));
 }
 
 // ---------------------------------------------------------------- golden
@@ -406,7 +379,7 @@ static int run_headroom(RomBank &roms)
         sets[s].ic5 = roms.get(romSetFiles[s][ROM_IC5], WAVE_ROM_SIZE);
         sets[s].ic6 = roms.get(romSetFiles[s][ROM_IC6], WAVE_ROM_SIZE);
         sets[s].ic7 = roms.get(romSetFiles[s][ROM_IC7], WAVE_ROM_SIZE);
-        sets[s].ic18 = roms.get(romSetFiles[s][ROM_IC18], WAVE_ROM_SIZE);
+        sets[s].ic18 = roms.get(romSetFiles[s][ROM_IC18], PARAMS_ROM_SIZE);
     }
     const u8 *prog = roms.get(PROG_ROM_FILE, PROG_ROM_SIZE);
 
@@ -471,7 +444,16 @@ int main(int argc, char **argv)
         else if (arg == "--write-golden" && next)
             writeGoldenPath = argv[++i];
         else if (arg == "--patch" && next)
-            onlyPatch = atoi(argv[++i]);
+        {
+            char *end = NULL;
+            long value = strtol(argv[++i], &end, 10);
+            if (*argv[i] == '\0' || *end != '\0' || value < 0 || value >= NUM_PATCHES)
+            {
+                fprintf(stderr, "ERROR: parche \"%s\" fuera de rango (0..%d)\n", argv[i], NUM_PATCHES - 1);
+                return 2;
+            }
+            onlyPatch = (int)value;
+        }
         else if (arg == "--headroom")
             headroom = true;
         else
@@ -484,25 +466,21 @@ int main(int argc, char **argv)
         }
     }
 
-    if (onlyPatch >= NUM_PATCHES)
-    {
-        fprintf(stderr, "ERROR: parche %d fuera de rango (0..%d)\n", onlyPatch, NUM_PATCHES - 1);
-        return 2;
-    }
-
     RomBank roms;
-    roms.dir = romsDir;
+    roms.cache.dir = romsDir;
 
     if (headroom)
         return run_headroom(roms);
 
+    const bool compareGolden = !goldenPath.empty();
     std::map<int, u64> golden;
-    if (!goldenPath.empty())
+    if (compareGolden)
         golden = read_golden(goldenPath);
 
     std::map<int, PatchResult> results;
     int failed = 0;
     int hashMismatches = 0;
+    int goldenMissing = 0;
 
     printf("%-3s %-22s %6s %8s %8s %8s %8s %8s %9s %-16s\n", "#", "parche", "kHz", "silen", "nota", "acorde", "cola",
            "poly", "peak", "hash");
@@ -525,12 +503,13 @@ int main(int argc, char **argv)
         checks.print_failures();
         failed += checks.failed();
 
-        if (!golden.empty())
+        if (compareGolden)
         {
             auto it = golden.find(patch);
             if (it == golden.end())
             {
-                printf("    WARN sin golden para el parche %d\n", patch);
+                printf("    FAIL golden-hash sin entrada para el parche %d en %s\n", patch, goldenPath.c_str());
+                goldenMissing++;
             }
             else if (it->second != r.hash)
             {
@@ -554,7 +533,7 @@ int main(int argc, char **argv)
     if (!writeGoldenPath.empty())
         write_golden(writeGoldenPath, results);
 
-    printf("\n%zu parche(s), %d comprobacion(es) fallida(s), %d hash(es) "
+    printf("\n%zu parche(s), %d comprobación(es) fallida(s), %d hash(es) "
            "distinto(s) del golden\n",
            results.size(), failed, hashMismatches);
 
@@ -562,5 +541,8 @@ int main(int argc, char **argv)
         printf("El audio cambió respecto al golden. Si el cambio es intencionado, "
                "escucha los WAV y regenera con --write-golden.\n");
 
-    return (failed || hashMismatches) ? 1 : 0;
+    if (goldenMissing)
+        printf("Al golden le faltan %d parche(s): sin su hash no se compara nada.\n", goldenMissing);
+
+    return (failed || hashMismatches || goldenMissing) ? 1 : 0;
 }

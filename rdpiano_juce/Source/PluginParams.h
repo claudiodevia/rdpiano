@@ -45,12 +45,12 @@ struct RdParamSpec
         Bool
     };
 
-    const char *id;   ///< El que va en el preset: renombrarlo rompe las sesiones.
-    const char *name; ///< El que ve el usuario en el host.
-    Kind kind;
-    float minValue;
-    float maxValue;
-    float defaultValue;
+    const char *id;     ///< El que va en el preset: renombrarlo rompe las sesiones.
+    const char *name;   ///< El que ve el usuario en el host.
+    Kind kind;          ///< Bool, Int o Float.
+    float minValue;     ///< Sin normalizar, como lo ve el usuario.
+    float maxValue;     ///< Sin normalizar.
+    float defaultValue; ///< El de RdEngineParams.
 };
 
 /** @brief Los valores de fábrica son los del motor, literalmente. */

@@ -2,12 +2,16 @@
  * @file standalone.cpp
  * @brief Ejecutable de escucha: el emulador con audio por SDL y MIDI por portmidi.
  *
- * No entra en ctest; es la verificación auditiva de la que habla CLAUDE.md.
+ * No entra en ctest; es la verificación auditiva de la que habla CLAUDE.md. Arranca el parche 0 a 20 kHz
+ * con el mismo boot() que el plugin y abre una entrada MIDI virtual llamada "RdPiano".
+ *
+ * Uso: rdpiano_standalone [--roms DIR]
  */
 
-#include <stdlib.h>
+#include <stdio.h>
 
 #include <memory>
+#include <string>
 
 #define SDL_MAIN_HANDLED
 #include "SDL.h"
@@ -15,16 +19,15 @@
 
 #include "mame_utils.h"
 #include "mcu.h"
-#include "sound_chip.h"
+#include "patches.h"
+#include "rom_files.h"
 
 static int audio_buffer_size;
 static int audio_page_size;
 
 static SDL_AudioDeviceID sdl_audio;
 
-// Global porque el callback de audio de SDL sólo recibe un puntero de usuario y
-// el resto del archivo es el original: lo que cambia es que ya no se puede
-// escapar sin liberarlo por uno de los `return 2` de abajo.
+/// Global porque el callback de audio de SDL solo recibe un puntero de usuario.
 std::unique_ptr<Mcu> mcu;
 
 void audio_callback(void * /*userdata*/, Uint8 *stream, int len)
@@ -36,7 +39,7 @@ void audio_callback(void * /*userdata*/, Uint8 *stream, int len)
         // generate_next_sample() devuelve s32 y se sale de ±32767 con un acorde
         // de tres notas: truncar a s16 da wraparound (chasquidos duros) en vez
         // de recorte. El plugin escala en coma flotante; aquí basta con acotar.
-        s32 sample = mcu->generate_next_sample();
+        s32 sample = mcu->generate_next_sample(false);
         if (sample > 32767)
             sample = 32767;
         else if (sample < -32768)
@@ -80,12 +83,11 @@ int MCU_OpenAudio(int deviceIndex, int pageSize, int pageNum)
     SDL_AudioSpec spec = {};
     SDL_AudioSpec spec_actual = {};
 
-    audio_page_size = (pageSize / 2) * 2; // must be even
+    audio_page_size = (pageSize / 2) * 2; // tiene que ser par
     audio_buffer_size = audio_page_size * pageNum;
 
     spec.format = AUDIO_S16SYS;
-    spec.freq = 20000;
-    // spec.freq = 32000;
+    spec.freq = patchSampleRates[0];
     spec.channels = 2;
     spec.callback = audio_callback;
     spec.samples = audio_page_size / 4;
@@ -93,18 +95,18 @@ int MCU_OpenAudio(int deviceIndex, int pageSize, int pageNum)
     int num = SDL_GetNumAudioDevices(0);
     if (num == 0)
     {
-        printf("No audio output device found.\n");
+        printf("No hay ningún dispositivo de salida de audio.\n");
         return 0;
     }
 
     if (deviceIndex < -1 || deviceIndex >= num)
     {
-        printf("Out of range audio device index is requested. Default audio output "
-               "device is selected.\n");
+        printf("Índice de dispositivo de audio fuera de rango: se usa el de por defecto.\n");
         deviceIndex = -1;
     }
 
-    const char *audioDevicename = deviceIndex == -1 ? "Default device" : SDL_GetAudioDeviceName(deviceIndex, 0);
+    const char *audioDevicename =
+        deviceIndex == -1 ? "Dispositivo por defecto" : SDL_GetAudioDeviceName(deviceIndex, 0);
 
     sdl_audio = SDL_OpenAudioDevice(deviceIndex == -1 ? NULL : audioDevicename, 0, &spec, &spec_actual, 0);
     if (!sdl_audio)
@@ -112,12 +114,12 @@ int MCU_OpenAudio(int deviceIndex, int pageSize, int pageNum)
         return 0;
     }
 
-    printf("Audio device: %s\n", audioDevicename);
+    printf("Dispositivo de audio: %s\n", audioDevicename);
 
-    printf("Audio Requested: F=%s, C=%d, R=%d, B=%d\n", audio_format_to_str(spec.format), spec.channels, spec.freq,
+    printf("Audio pedido: F=%s, C=%d, R=%d, B=%d\n", audio_format_to_str(spec.format), spec.channels, spec.freq,
            spec.samples);
 
-    printf("Audio Actual: F=%s, C=%d, R=%d, B=%d\n", audio_format_to_str(spec_actual.format), spec_actual.channels,
+    printf("Audio obtenido: F=%s, C=%d, R=%d, B=%d\n", audio_format_to_str(spec_actual.format), spec_actual.channels,
            spec_actual.freq, spec_actual.samples);
     fflush(stdout);
 
@@ -126,9 +128,8 @@ int MCU_OpenAudio(int deviceIndex, int pageSize, int pageNum)
     return 1;
 }
 
-// SDL_CloseAudio() es la API antigua y NO cierra un dispositivo abierto con
-// SDL_OpenAudioDevice: el callback seguía vivo mientras se destruía el `mcu` del
-// final (use-after-free).
+/// Cierra con SDL_CloseAudioDevice(): SDL_CloseAudio() no cierra un dispositivo abierto con
+/// SDL_OpenAudioDevice() y el callback seguiría vivo al destruir `mcu`.
 void MCU_CloseAudio(void)
 {
     if (sdl_audio)
@@ -149,7 +150,6 @@ int MIDI_Init()
     if (in_id < 0)
         return 0;
 
-    // Sin comprobar esto, midiInStream se queda nulo y MIDI_Update() lo usa.
     if (Pm_OpenInput(&midiInStream, in_id, NULL, 0, NULL, NULL) != pmNoError || midiInStream == NULL)
     {
         midiInStream = NULL;
@@ -158,7 +158,7 @@ int MIDI_Init()
 
     Pm_SetFilter(midiInStream, PM_FILT_ACTIVE | PM_FILT_CLOCK | PM_FILT_SYSEX);
 
-    // Empty the buffer, just in case anything got through
+    // Vacía lo que hubiera entrado antes de abrir.
     PmEvent receiveBuffer[1];
     while (Pm_Poll(midiInStream) > 0)
     {
@@ -185,13 +185,11 @@ void MIDI_Update()
         return;
 
     PmEvent event;
-    // `> 0`: Pm_Read devuelve negativo en error, y un negativo es cierto -> el
-    // bucle no terminaba nunca ante un fallo del dispositivo.
+    // Pm_Read devuelve negativo en error.
     while (Pm_Read(midiInStream, &event, 1) > 0)
     {
-        // sendMidiCmd() empuja en la misma cola que consume el callback de
-        // audio desde otro hilo. Bloquear el dispositivo es lo que ofrece SDL
-        // para serializarlo; el plugin usa el cerrojo del motor.
+        // sendMidiCmd() empuja en la cola que consume el callback de audio desde
+        // otro hilo: bloquear el dispositivo es como SDL lo serializa.
         SDL_LockAudioDevice(sdl_audio);
         mcu->sendMidiCmd(Pm_MessageStatus(event.message), Pm_MessageData1(event.message),
                          Pm_MessageData2(event.message));
@@ -202,69 +200,59 @@ void MIDI_Update()
     }
 }
 
-void load_rom(u8 *data, size_t len, const char *filename)
+int main(int argc, char **argv)
 {
-    FILE *f = fopen(filename, "rb");
-    if (f == NULL)
+    std::string romsDir = "roms";
+    for (int i = 1; i < argc; i++)
     {
-        printf("Error opening %s\n", filename);
-        exit(2);
+        const std::string arg = argv[i];
+        if (arg == "--roms" && i + 1 < argc)
+            romsDir = argv[++i];
+        else
+        {
+            fprintf(stderr, "uso: %s [--roms DIR]\n", argv[0]);
+            return 2;
+        }
     }
-    size_t read = fread(data, 1, len, f);
-    fclose(f);
 
-    if (read != len)
+    // Las ROM tienen que sobrevivir al Mcu: viven en la caché hasta el final de main().
+    RomCache roms;
+    roms.dir = romsDir;
+    RdRomSet set;
+    const u8 *prog = roms.get(PROG_ROM_FILE, PROG_ROM_SIZE);
+    if (!roms.romSet(patchToRomSetId[0], set) || prog == nullptr)
     {
-        printf("Error reading %s: %zu de %zu bytes\n", filename, read, len);
-        exit(2);
+        fprintf(stderr, "ERROR: faltan ROM en %s (mira patches.h para los nombres)\n", romsDir.c_str());
+        return 2;
     }
-}
 
-int main()
-{
-    // Medio mega de ROM: estático, no en la pila del hilo principal.
-    static u8 temp_ic5[0x20000];
-    static u8 temp_ic6[0x20000];
-    static u8 temp_ic7[0x20000];
-    static u8 temp_progrom[0x2000];
-    static u8 temp_paramsrom[0x20000];
-
-    load_rom(temp_ic5, sizeof temp_ic5, "mks20_15179738.BIN");
-    load_rom(temp_ic6, sizeof temp_ic6, "mks20_15179737.BIN");
-    load_rom(temp_ic7, sizeof temp_ic7, "mks20_15179736.BIN");
-    load_rom(temp_progrom, sizeof temp_progrom, "RD200_B.bin");
-    load_rom(temp_paramsrom, sizeof temp_paramsrom, "mks20_15179757.BIN");
-
-    // It's important to send a program change after boot to init the parameters
-    mcu = std::make_unique<Mcu>(temp_ic5, temp_ic6, temp_ic7, temp_progrom, temp_paramsrom);
-    mcu->sendMidiCmd(0xC0, 0, 0); // program change a parche 0: emite el mismo 0x30
+    mcu = std::make_unique<Mcu>(set.ic5, set.ic6, set.ic7, prog, set.ic18);
+    mcu->boot(0, false);
 
     if (SDL_Init(SDL_INIT_AUDIO | SDL_INIT_VIDEO | SDL_INIT_TIMER) < 0)
     {
-        fprintf(stderr, "FATAL ERROR: Failed to initialize the SDL2: %s.\n", SDL_GetError());
+        fprintf(stderr, "ERROR: no se pudo iniciar SDL2: %s.\n", SDL_GetError());
         fflush(stderr);
         return 2;
     }
 
     if (!MCU_OpenAudio(-1, 512, 32))
     {
-        fprintf(stderr, "FATAL ERROR: Failed to open the audio stream.\n");
+        fprintf(stderr, "ERROR: no se pudo abrir la salida de audio.\n");
         fflush(stderr);
         return 2;
     }
 
     if (!MIDI_Init())
     {
-        fprintf(stderr, "ERROR: Failed to initialize the MIDI Input.\nWARNING: "
-                        "Continuing without MIDI Input...\n");
+        fprintf(stderr, "AVISO: no se pudo abrir la entrada MIDI; se sigue sin ella.\n");
         fflush(stderr);
     }
 
     bool quit_requested = false;
     while (!quit_requested)
     {
-        // Sin esperar, el bucle gira al 100 % de un núcleo y le quita CPU al
-        // hilo de audio.
+        // Sin espera, el bucle ocupa un núcleo entero y le quita CPU al hilo de audio.
         SDL_Delay(1);
 
         MIDI_Update();

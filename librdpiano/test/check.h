@@ -39,6 +39,14 @@ struct Fnv1a
 
     void i32(int v) { bytes(&v, 4); }
 
+    /** @brief Hash de un bloque de memoria entero. */
+    static unsigned long long of(const void *data, size_t n)
+    {
+        Fnv1a h;
+        h.bytes(data, n);
+        return h.h;
+    }
+
     /// Los float se hashean por su patrón de bits: dos streams iguales dan el
     /// mismo hash y cualquier bit distinto lo mueve.
     void f32(float v) { bytes(&v, 4); }

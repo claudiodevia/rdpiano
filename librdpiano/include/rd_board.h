@@ -35,6 +35,11 @@ enum
     M6801_LINE_MAX
 };
 
+inline constexpr u16 kPort1Ddr = 0x00;     ///< Dirección de los bits del puerto 1; sin emular.
+inline constexpr u16 kPort2Ddr = 0x01;     ///< Dirección de los bits del puerto 2; sin emular.
+inline constexpr u16 kPort1Data = 0x02;    ///< Puerto 1: datos del bus de comandos.
+inline constexpr u16 kPort2Control = 0x03; ///< Puerto 2: control del bus de comandos; escribirlo baja TIN.
+
 /**
  * @brief Lo que la placa necesita de la CPU que cuelga de ella.
  *
@@ -79,8 +84,8 @@ class RdBoard
     RdBoard(const u8 *temp_ic5, const u8 *temp_ic6, const u8 *temp_ic7, const u8 *temp_progrom,
             const u8 *temp_paramsrom);
 
-    /// Igual que Mcu y SoundChip: casi 800 KB de estado, copiarlo por accidente
-    /// daría una placa divergente en silencio.
+    /// Igual que Mcu y SoundChip: ~150 KB de estado, copiarlo por accidente daría
+    /// una placa divergente en silencio.
     RdBoard(const RdBoard &) = delete;
     RdBoard &operator=(const RdBoard &) = delete;
     RdBoard(RdBoard &&) = delete;
@@ -111,10 +116,10 @@ class RdBoard
     void write(u16 addr, u8 data);
 
     /**
-     * @brief Carga un juego de ROM entero y mapea la página de un parche.
+     * @brief Descifra un juego de ROM en la ranura 0 y lo activa; no mapea ninguna página.
      *
      * Las ROM tienen que sobrevivir a la placa: se guarda el puntero de la
-     * params para poder remapear la página.
+     * params para que selectPatch() pueda mapear la página.
      *
      * @param temp_ic5 ROM de onda IC5.
      * @param temp_ic6 ROM de onda IC6.
@@ -130,7 +135,7 @@ class RdBoard
     void selectPatch(size_t from_addr);
 
     /**
-     * @brief Descifra un juego de ROM en una ranura que el emulador no lee (~2,9 ms).
+     * @brief Descifra un juego de ROM de onda en una ranura, sin activarla (~2,9 ms).
      * @param slot Ranura de destino, < SoundChip::NUM_WAVE_SLOTS.
      * @param temp_ic5 ROM de onda IC5.
      * @param temp_ic6 ROM de onda IC6.
@@ -166,6 +171,7 @@ class RdBoard
     void reset();
 
     CommandPort &commandPort() { return command_port; }
+    const CommandPort &commandPort() const { return command_port; }
     SoundChip &soundChip() { return sound_chip; }
 
     /** @brief Sólo para las pruebas del mapa: el latch de banco no tiene otro lector. */
@@ -187,7 +193,7 @@ class RdBoard
 // El mapa, byte a byte. El orden de las ramas y cada máscara son los del
 // hardware: el golden del harness mide exactamente esto.
 //
-//   0x0000-0x001F  registros del MCU (puerto1=0x02 datos, puerto2=0x03 control)
+//   0x0000-0x001F  registros del MCU (kPort1Data, kPort2Control)
 //   0x0000-0x0FFF  RAM
 //   0x1000-0x1FFF  SoundChip
 //   0x2000-0x3FFF  latch de banco (2 bits)
@@ -199,8 +205,7 @@ inline u8 RdBoard::read(u16 addr)
     if (addr >= 0xc000)
         return program_rom[(addr - 0xc000) & 0x1fff];
 
-    // port 1 DATA
-    else if (addr == 0x0002)
+    else if (addr == kPort1Data)
     {
         u8 data_comm_bus = 0xff;
 
@@ -217,8 +222,7 @@ inline u8 RdBoard::read(u16 addr)
         return data_comm_bus;
     }
 
-    // port 2 CONTROL
-    else if (addr == 0x0003)
+    else if (addr == kPort2Control)
     {
         RD_TRACE("%04x: read port2\n", cpu->programCounter());
 
@@ -246,19 +250,16 @@ inline u8 RdBoard::read(u16 addr)
 
 inline void RdBoard::write(u16 addr, u8 data)
 {
-    // 0x0000/0x0001: dirección de los puertos, sin emular
-    if (addr == 0x0000 || addr == 0x0001)
+    if (addr == kPort1Ddr || addr == kPort2Ddr)
     {
     }
 
-    // port 1 DATA
-    else if (addr == 0x0002)
+    else if (addr == kPort1Data)
     {
         RD_TRACE("%04x: port1 write %04x=%02x\n", cpu->programCounter(), addr, data);
     }
 
-    // port 2 CONTROL
-    else if (addr == 0x0003)
+    else if (addr == kPort2Control)
     {
         RD_TRACE("%04x: port2 write %04x=%02x\n", cpu->programCounter(), addr, data);
 
@@ -284,10 +285,10 @@ inline void RdBoard::write(u16 addr, u8 data)
         sound_chip.write(addr - 0x1000, data);
         RD_TRACE("%04x: SA write %04x=%02x\n", cpu->programCounter(), addr, data);
 
-        if (sound_chip.m_irq_triggered)
+        if (sound_chip.irqPending())
         {
-            sound_chip.m_irq_triggered = false;
-            cpu->setInputLine(0, CLEAR_LINE);
+            sound_chip.acknowledgeIrq();
+            cpu->setInputLine(M6800_IRQ_LINE, CLEAR_LINE);
         }
     }
 

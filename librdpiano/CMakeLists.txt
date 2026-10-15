@@ -42,12 +42,15 @@ include_directories("include")
 # library target
 #
 # Ademas del emulador, aqui viven los efectos (lsp/) y el resampler
-# (resample/): son C/C++ puro sin nada de JUCE, y desde la fase 2 el motor de
-# audio los usa (REFACTORIZACION §1). El plugin los compila desde aqui.
+# (resample/): son C/C++ puro sin nada de JUCE, y el motor de audio los usa.
+# El plugin los compila desde aqui.
 add_library(librdpiano src/mcu.cpp src/rd_board.cpp src/sound_chip.cpp src/sa_tables.cpp
     src/rom_loader.cpp src/command_port.cpp src/rd_trace.cpp
     src/lsp/spaced.cpp src/lsp/phaser.cpp
     src/rd_engine.cpp
+    src/engine/change_scheduler.cpp src/engine/effects_chain.cpp src/engine/held_notes.cpp
+    src/engine/output_stage.cpp src/engine/patch_bank.cpp src/engine/rate_converter.cpp
+    src/engine/rd_biquad.cpp src/engine/retrigger_meter.cpp
     src/resample/resample.c src/resample/filterkit.c src/resample/resamplesubs.c)
 # `include/` es PUBLIC: quien enlaza librdpiano —el plugin desde
 # `rdpiano_juce/`, sin ir más lejos— no tiene por qué saber dónde vive el
@@ -66,21 +69,32 @@ add_executable(rdpiano_e2e test/e2e.cpp)
 target_link_libraries(rdpiano_e2e librdpiano)
 target_include_directories(rdpiano_e2e PRIVATE test)
 
-# suite unitaria: sin emular audio, tiene que terminar en menos de un segundo.
-# Lista explicita de fuentes, sin glob (REFACTORIZACION §17.2).
+# suite unitaria. Lista explicita de fuentes, sin glob.
 add_executable(rdpiano_tests
+    test/test_runner.cpp
     test/unit/main.cpp
     test/unit/test_board.cpp
     test/unit/test_command_port.cpp
-    test/unit/test_engine.cpp
+    test/unit/alloc_counter.cpp
+    test/unit/test_biquad.cpp
+    test/unit/engine_fixture.cpp
+    test/unit/test_engine_effects.cpp
+    test/unit/test_engine_golden.cpp
+    test/unit/test_engine_host.cpp
+    test/unit/test_engine_midi.cpp
+    test/unit/test_engine_patch.cpp
     test/unit/test_lsp.cpp
+    test/unit/test_mcu.cpp
     test/unit/test_patches.cpp
     test/unit/test_resampler.cpp
     test/unit/test_rom_loader.cpp
     test/unit/test_sa_tables.cpp
     test/unit/test_sound_chip_blocks.cpp)
 target_link_libraries(rdpiano_tests librdpiano)
-target_include_directories(rdpiano_tests PRIVATE test test/unit)
+# patches_plugin_resources lee el CMakeLists del plugin.
+target_compile_definitions(rdpiano_tests PRIVATE RDPIANO_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/..")
+# `src` por las piezas internas del motor (`engine/`), que se prueban sueltas.
+target_include_directories(rdpiano_tests PRIVATE test test/unit src)
 
 enable_testing()
 add_test(NAME unit COMMAND rdpiano_tests --roms ${CMAKE_CURRENT_SOURCE_DIR}/../roms

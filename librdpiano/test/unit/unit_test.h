@@ -6,9 +6,9 @@
  * @brief Registro de suites de rdpiano_tests.
  *
  * Cada test_*.cpp escribe `TEST_SUITE(nombre) { CHECK(algo); }` y la suite se
- * registra sola; main.cpp las recorre y `--filter SUBCADENA` selecciona un
- * subconjunto. A diferencia del harness e2e, estas pruebas no emulan audio: la
- * suite entera tiene que terminar en menos de un segundo.
+ * registra sola; run_suites() (test_runner.h) las recorre y `--filter SUBCADENA`
+ * selecciona un subconjunto. Las del motor y el chip sí emulan audio, pero en
+ * trozos cortos: la suite entera dura unos segundos.
  */
 
 #include <string>
@@ -45,5 +45,17 @@ extern std::string g_roms_dir;
 
 /// Directorio pasado con --vectors: los casos capturados de test/vectors/.
 extern std::string g_vectors_dir;
+
+/// Sin ROM la suite no puede comprobar nada: falla y sale. Que existan y midan lo que deben lo detalla
+/// patches_rom_files.
+#define ROMS_OR_FAIL(ok)                                                                            \
+    do                                                                                              \
+    {                                                                                               \
+        if (!(ok))                                                                                  \
+        {                                                                                           \
+            checks.add("ROMs disponibles", false, check_fmt("sin ROMs en %s", g_roms_dir.c_str())); \
+            return;                                                                                 \
+        }                                                                                           \
+    } while (0)
 
 #endif

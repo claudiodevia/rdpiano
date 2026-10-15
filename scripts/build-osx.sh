@@ -1,7 +1,6 @@
 #!/bin/sh
-# Compila el plugin desde el CMakeLists de la raíz. Desde la fase 3 no hay
-# Projucer ni .jucer: el mismo sistema de build construye el núcleo, sus
-# pruebas y el plugin (REFACTORIZACION §16.3).
+# Compila el plugin desde el CMakeLists de la raíz, el mismo sistema de build
+# que construye el núcleo y sus pruebas (no hay Projucer ni .jucer).
 #
 # Recibe el formato a compilar como primer argumento —AU, AUv3, LV2, Standalone,
 # VST3 o ALL—, porque compilar los cinco es caro y casi nunca hace falta:
@@ -12,18 +11,13 @@
 # Sin argumento no hace nada: no hay defecto a propósito, para que nadie se
 # coma los cinco formatos por descuido.
 #
-# Siempre se compila universal (arm64 y x86_64) en build/plugin. Hubo un modo
-# `nativo`, que compilaba sólo la arquitectura de esta máquina: ahorraba tiempo
-# de compilación y ninguno en ejecución —macOS carga una sola rebanada del
-# universal, y es el mismo código con los mismos flags—, mientras que a cambio
-# partía el binary dir en dos y daba un producto que no carga en un host bajo
-# Rosetta. Se quitó; `universal` se sigue aceptando, y no hace nada, porque es
-# lo único que hay.
+# Siempre se compila universal (arm64 y x86_64) en build/plugin; `universal` se
+# acepta y no hace nada.
 #
 #   sh scripts/build-osx.sh AU install
 #
 # Generador Xcode a propósito: la API CMake de JUCE sólo crea el objetivo AUv3
-# con ese generador, y el .jucer sí producía un .appex.
+# con ese generador.
 #
 # Con `install`, al terminar bien, los bundles se copian a los directorios del
 # sistema (/Library/Audio/Plug-Ins/… y /Applications) reemplazando lo que
@@ -71,11 +65,6 @@ USAGE
 
 [ $# -ge 1 ] && [ $# -le 3 ] || uso
 
-minusculas()
-{
-    echo "$1" | tr '[:upper:]' '[:lower:]'
-}
-
 # Un solo sitio donde traducir el argumento al objetivo de CMake: los que crea
 # juce_add_plugin son rdpiano_juce_<FORMATO> más el agregado rdpiano_juce_All.
 case $(minusculas "$1") in
@@ -114,8 +103,7 @@ ARTEFACTS="$BUILD/rdpiano_juce/rdpiano_juce_artefacts/Release"
 log_abrir build-osx
 titulo "Formato: $FORMAT ($ARCHS)"
 
-[ -f "$ROOT/build/juce/CMakeLists.txt" ] ||
-    fatal "JUCE no está en build/juce. Ejecuta scripts/download-juce.sh"
+exigir_juce
 
 # Se borra el producto anterior antes de compilar: Xcode actualiza el bundle in
 # situ y no limpia lo que sobra dentro, así que un .component/.vst3/.app viejo a
@@ -130,14 +118,20 @@ if [ -e "$PRODUCTOS" ]; then
     rm -rf "$PRODUCTOS"
 fi
 
-# Configurar cuesta (JUCE compila juceaide) y CMake ya regenera el proyecto
-# Xcode él solo cuando cambia un CMakeLists, así que sólo se hace si la caché
-# que hay no sirve: no existe, es de otro generador, es de otras arquitecturas
-# o se configuró sin JUCE y por tanto sin plugin.
+# Configurar cuesta (JUCE compila juceaide), así que sólo se hace si la caché
+# que hay no sirve: no existe, es de otro generador, es de otras arquitecturas,
+# se configuró sin JUCE y por tanto sin plugin, o hay un CMakeLists más nuevo.
+# Esto último CMake lo regenera al compilar, pero xcodebuild ya ha cargado el
+# proyecto viejo y no ve un fuente recién añadido.
 CACHE="$BUILD/CMakeCache.txt"
+cmakelists_nuevos()
+{
+    find "$ROOT/CMakeLists.txt" "$ROOT/librdpiano/CMakeLists.txt" "$ROOT/rdpiano_juce/CMakeLists.txt" \
+         -newer "$CACHE" 2>/dev/null | grep -q .
+}
 if [ -f "$CACHE" ] && [ -d "$BUILD/rdpiano_juce" ] &&
    grep -qx 'CMAKE_GENERATOR:INTERNAL=Xcode' "$CACHE" &&
-   grep -qx "CMAKE_OSX_ARCHITECTURES:STRING=$ARCHS" "$CACHE"; then
+   grep -qx "CMAKE_OSX_ARCHITECTURES:STRING=$ARCHS" "$CACHE" && ! cmakelists_nuevos; then
     paso "CMake ya configurado en $BUILD"
 else
     paso "Configurando CMake (Xcode, $ARCHS)"

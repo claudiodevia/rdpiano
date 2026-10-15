@@ -2,6 +2,7 @@
 #define SOUND_CHIP_H
 
 #include "mame_utils.h"
+#include "rom_loader.h"
 #include "sa_blocks.h"
 #include "sa_tables.h"
 
@@ -20,7 +21,7 @@ class SoundChip
 {
   public:
     /// Ranuras de tablas de onda descifradas: una por juego de ROM, para que
-    /// cambiar de juego sea activar una ranura y no descifrar 768 KB.
+    /// cambiar de juego sea activar una ranura y no descifrar 512 KB.
     static constexpr unsigned NUM_WAVE_SLOTS = 3;
 
     SoundChip(const u8 *temp_ic5, const u8 *temp_ic6, const u8 *temp_ic7);
@@ -55,8 +56,7 @@ class SoundChip
     /**
      * @brief Estado de síntesis a cero: las 160 SA_Part y la IRQ pendiente.
      *
-     * No toca las tablas de onda —son la ROM descifrada, no estado— ni el juego
-     * de reserva que espera publicación.
+     * No toca las tablas de onda: son la ROM descifrada, no estado.
      */
     void reset();
 
@@ -79,20 +79,16 @@ class SoundChip
      */
     void select_samples(unsigned slot);
 
-    /**
-     * @brief Descifra el juego en la ranura 0 y la activa.
-     *
-     * El camino de siempre para quien solo usa un juego de ROM.
-     *
-     * @param temp_ic5 ROM de onda IC5.
-     * @param temp_ic6 ROM de onda IC6.
-     * @param temp_ic7 ROM de onda IC7.
-     */
-    void load_samples(const u8 *temp_ic5, const u8 *temp_ic6, const u8 *temp_ic7);
+    /** @brief ¿Ha acabado un segmento de envolvente sin que la CPU lo haya atendido? */
+    bool irqPending() const { return m_irq_triggered; }
 
-    bool m_irq_triggered = false; ///< Hay una IRQ esperando a que la CPU la atienda.
+    /** @brief La CPU ha atendido la IRQ: la siguiente que dispare update() vuelve a contar. */
+    void acknowledgeIrq() { m_irq_triggered = false; }
 
   private:
+    /** @brief Descifra el juego en la ranura 0 y la activa: lo que hace el constructor. */
+    void load_samples(const u8 *temp_ic5, const u8 *temp_ic6, const u8 *temp_ic7);
+
     static constexpr unsigned NUM_VOICES = 16;
     static constexpr unsigned PARTS_PER_VOICE = 10;
     static constexpr unsigned PARTS_PER_VOICE_MEM = 16;
@@ -114,7 +110,7 @@ class SoundChip
     /** @brief Las tablas de un juego de ROM. En el montón y no en el objeto: 512 KB por ranura. */
     struct WaveTables
     {
-        WaveEntry entries[0x20000];
+        WaveEntry entries[WAVE_ROM_BYTES];
     };
 
     WaveTables *wave_slots = nullptr;
@@ -123,7 +119,8 @@ class SoundChip
     const SaTables &tables; ///< LUT deterministas, compartidas por todas las instancias.
 
     SA_Part m_parts[NUM_VOICES][PARTS_PER_VOICE_MEM];
-    uint8_t m_irq_id = 0; ///< Voz/parte que disparó la IRQ.
+    uint8_t m_irq_id = 0;         ///< Voz/parte que disparó la IRQ.
+    bool m_irq_triggered = false; ///< Hay una IRQ esperando a que la CPU la atienda.
 };
 
 #endif

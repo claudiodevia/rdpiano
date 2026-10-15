@@ -164,6 +164,10 @@ namespace
 
 } // namespace
 
+/**
+ * @brief IC19, IC9 e IC8 reproducen cada vector capturado, bloque a bloque; el silenciado `investigate` se
+ *        reimplementa aquí y no se ejercita el de update() (trampa 3).
+ */
 TEST_SUITE(sound_chip_blocks_vectors)
 {
     std::string error;

@@ -13,18 +13,8 @@
 #include <string>
 
 #include "patches.h"
+#include "rom_files.h"
 #include "unit_test.h"
-
-static long file_size(const std::string &path)
-{
-    FILE *f = fopen(path.c_str(), "rb");
-    if (!f)
-        return -1;
-    fseek(f, 0, SEEK_END);
-    long len = ftell(f);
-    fclose(f);
-    return len;
-}
 
 /**
  * @brief Las 4 ROMs de cada juego + el firmware, con su tamaño exacto.
@@ -36,16 +26,17 @@ TEST_SUITE(patches_rom_files)
         for (int chip = 0; chip < ROM_CHIP_COUNT; chip++)
         {
             const char *name = romSetFiles[set][chip];
-            long len = file_size(g_roms_dir + "/" + name);
+            long len = rom_file_size(g_roms_dir, name);
 
             checks.add(std::string("existe ") + name, len >= 0, check_fmt("no se encuentra en %s", g_roms_dir.c_str()));
+            const size_t expected = chip == ROM_IC18 ? PARAMS_ROM_SIZE : WAVE_ROM_SIZE;
             if (len >= 0)
-                checks.add(std::string("tamaño ") + name, (size_t)len == WAVE_ROM_SIZE,
-                           check_fmt("%ld bytes, esperados %zu", len, WAVE_ROM_SIZE));
+                checks.add(std::string("tamaño ") + name, (size_t)len == expected,
+                           check_fmt("%ld bytes, esperados %zu", len, expected));
         }
     }
 
-    long prog = file_size(g_roms_dir + "/" + PROG_ROM_FILE);
+    long prog = rom_file_size(g_roms_dir, PROG_ROM_FILE);
     checks.add(std::string("existe ") + PROG_ROM_FILE, prog >= 0,
                check_fmt("no se encuentra en %s", g_roms_dir.c_str()));
     if (prog >= 0)
@@ -79,13 +70,11 @@ TEST_SUITE(patches_table)
  */
 TEST_SUITE(patches_plugin_resources)
 {
-    std::string cmakePath = g_roms_dir + "/../rdpiano_juce/CMakeLists.txt";
+    const std::string cmakePath = std::string(RDPIANO_SOURCE_DIR) + "/rdpiano_juce/CMakeLists.txt";
     FILE *f = fopen(cmakePath.c_str(), "rb");
+    checks.add("CMakeLists del plugin legible", f != nullptr, cmakePath);
     if (!f)
-    {
-        printf("    (nota: %s no encontrado, se omite)\n", cmakePath.c_str());
         return;
-    }
 
     std::string cmakeText;
     char buf[4096];

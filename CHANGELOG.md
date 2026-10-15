@@ -2,6 +2,51 @@
 
 Cambios de cada versión publicada de RdPiano. La más nueva, arriba.
 
+## 1.0.3 — 15 de octubre de 2026
+
+El sonido no cambia respecto a la 1.0.2.
+
+### Manejo
+
+- Al grabar automatización en el DAW con el modo *touch* o *latch*, ahora quedan
+  grabados los movimientos del fader de volumen, de los botones de efectos y del
+  dial al ajustar un efecto.
+- El dial reparte por igual los quince pasos de cada ajuste de efecto: el último
+  ya no exige llevarlo hasta el tope, y cada posición vuelve a dar siempre el
+  mismo paso.
+- Si se pulsa un sonido justo después de cambiar a otro desde el teclado o desde
+  una pista, la pulsación ya no se pierde.
+- El DAW también se entera cuando el sonido se cambia desde el panel.
+- Un proyecto guardado con una afinación dañada ya no se abre con el
+  instrumento muy desafinado hacia el lado contrario.
+- Una nota que se suelta justo cuando el DAW pide un trozo de audio diminuto ya
+  no se queda pulsada por dentro, y no vuelve a sonar al cambiar de sonido.
+- Con el DAW a frecuencias de muestreo bajas y trozos de audio muy grandes, el
+  clave, los dos clavis, el E-Piano 2 y el Contemporary ya no salen mudos.
+
+### Por dentro
+
+- El panel está reorganizado por piezas y su pantalla tiene pruebas
+  automáticas propias. Se ve igual que antes.
+- El motor de sonido está reorganizado por piezas, cada una con una sola tarea,
+  y suena exactamente igual que antes. Abrir el instrumento es algo más rápido.
+- El emulador del piano original está ordenado y mejor explicado por dentro, y
+  suena exactamente igual que antes.
+- El ecualizador de la salida y la afinación tienen pruebas automáticas
+  propias; la de la afinación comprueba uno por uno todos sus valores posibles.
+- Más pruebas automáticas: ahora comprueban también que la cadena de sonido
+  completa —efectos, cambios de sonido y de afinación incluidos— sigue dando
+  exactamente el mismo resultado, así que un cambio futuro no puede alterar el
+  sonido sin que se note.
+- La herramienta para escuchar el emulador sin plugin arranca como el plugin
+  y suena como él.
+- La descarga de lo necesario para compilar se comprueba, para que no se cuele
+  un archivo dañado o alterado.
+
+### Documentación
+
+- La documentación técnica está reorganizada y es más breve.
+
 ## 1.0.2 — 12 de septiembre de 2026
 
 ### Sonido
